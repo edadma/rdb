@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 object Main extends App {
   val db = new MemoryDB("test")
-  val t = db.create("t", TableMeta(Seq(ColumnMeta("a", IntType))))
+  val t = db.create("t", RowMeta(Seq(ColumnMeta("a", IntType))))
 
   t.bulkInsert(Seq("a"),
                Seq(

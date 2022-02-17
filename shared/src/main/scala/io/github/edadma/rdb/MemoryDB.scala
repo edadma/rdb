@@ -12,7 +12,7 @@ class MemoryDB(val name: String) extends DB:
 
   def table(name: String): Option[Table] = tables get name
 
-  def create(name: String, meta: TableMeta): Table =
+  def create(name: String, meta: RowMeta): Table =
     if (tables contains name) sys.error(s"table '$name' already exists")
     else
       val res = new MemoryTable(name, meta)
@@ -22,13 +22,13 @@ class MemoryDB(val name: String) extends DB:
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
-class MemoryTable(val name: String, val meta: TableMeta) extends Table:
+class MemoryTable(val name: String, val meta: RowMeta) extends Table:
 
   private val data = new ArrayBuffer[Array[Value]]
 
   def size: Int = data.length
 
-  def row(idx: Int): Seq[Value] = data(idx).toIndexedSeq
+  def row(idx: Int): Row = Row(data(idx).toIndexedSeq, meta)
 
   def insert(row: Map[String, Value]): Map[String, Value] =
     val arr = new Array[Value](meta.cols)
@@ -37,7 +37,7 @@ class MemoryTable(val name: String, val meta: TableMeta) extends Table:
     data += arr
     Map.empty
 
-  def bulkInsert(header: Seq[String], rows: Seq[Row]): Unit =
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Unit =
     val mapping = header map meta.columnIndices
 
     for (r <- rows)

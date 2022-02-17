@@ -10,17 +10,17 @@ abstract class DB:
 
   def table(name: String): Option[Table]
 
-  def create(name: String, meta: TableMeta): Table
+  def create(name: String, meta: RowMeta): Table
 
 abstract class Table:
 
   def name: String
-  def meta: TableMeta
+  def meta: RowMeta
 
   def size: Int
 
-  def row(idx: Int): Seq[Value]
+  def row(idx: Int): Row
 
   def insert(row: Map[String, Value]): Map[String, Value]
 
-  def bulkInsert(header: Seq[String], rows: Seq[Row]): Unit
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Unit
