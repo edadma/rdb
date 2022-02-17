@@ -1,12 +1,12 @@
 ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
 ThisBuild / versionScheme := Some("semver-spec")
 
-lazy val cross_template = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
-    name := "-cross-template",
+    name := "rdb",
     version := "0.1.0",
-    scalaVersion := "3.1.1",
+    scalaVersion := "3.1.1", //2.13.8",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -15,20 +15,20 @@ lazy val cross_template = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         "-language:postfixOps",
         "-language:implicitConversions",
         "-language:existentials",
-        "-language:dynamics",
-        "-Xasync"
+        "-language:dynamics"
       ),
     organization := "io.github.edadma",
     githubOwner := "edadma",
     githubRepository := name.value,
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
-//    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.10" % "test",
-//    libraryDependencies ++= Seq(
-//      "io.github.edadma" %%% "cross-platform" % "0.1.1"
-//    ),
+//    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.11" % "test",
+    libraryDependencies ++= Seq(
+      "io.github.edadma" %%% "cross-platform" % "0.1.3"
+    ),
     libraryDependencies ++= Seq(
       "com.github.scopt" %%% "scopt" % "4.0.1",
-//      "com.lihaoyi" %%% "pprint" % "0.7.0" % "test",
+      //"com.lihaoyi" %% "fastparse" % "2.3.3", // waiting for Scala 3 support
+      //"com.lihaoyi" %%% "pprint" % "0.7.1" % "test"
     ),
     publishMavenStyle := true,
     Test / publishArtifact := false,
