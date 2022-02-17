@@ -9,5 +9,5 @@ object Main extends App {
                  Seq(IntValue(3))
                ))
 
-  println(t)
+  println(CollectStep(ScanStep(t)).value)
 }

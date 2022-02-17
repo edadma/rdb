@@ -4,7 +4,7 @@ import scala.collection.mutable.ArrayBuffer
 
 trait Step
 
-class ScanStep(tab: Table) extends Step with RowIterable:
+case class ScanStep(tab: Table) extends Step with RowIterable:
   def meta: RowMeta = tab.meta
 
   def iterator: RowIterator =
@@ -19,5 +19,10 @@ class ScanStep(tab: Table) extends Step with RowIterable:
         idx += 1
         res
 
-class CollectStep(rows: RowIterable) extends Step:
-  def value = TableValue(rows.toSeq, rows.meta)
+case class CollectStep(rows: RowIterable) extends Step with RowIterable:
+  val data: Seq[Row] = rows.toSeq
+  val meta: RowMeta = rows.meta
+
+  def iterator: RowIterator = data.iterator
+
+  def value: TableValue = TableValue(rows.toSeq, rows.meta)
