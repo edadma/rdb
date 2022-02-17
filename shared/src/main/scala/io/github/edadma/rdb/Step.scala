@@ -19,10 +19,15 @@ case class ScanStep(tab: Table) extends Step with RowIterable:
         idx += 1
         res
 
-case class CollectStep(rows: RowIterable) extends Step with RowIterable:
-  val data: Seq[Row] = rows.toSeq
-  val meta: RowMeta = rows.meta
+case class CollectStep(input: RowIterable) extends Step with RowIterable:
+  val data: Seq[Row] = input.toSeq
+  val meta: RowMeta = input.meta
 
   def iterator: RowIterator = data.iterator
 
-  def value: TableValue = TableValue(rows.toSeq, rows.meta)
+  def value: TableValue = TableValue(input.toSeq, input.meta)
+
+case class FilterStep(input: RowIterable, cond: Expr) extends Step with RowIterable:
+  val meta: RowMeta = input.meta
+
+  def iterator: RowIterator = input.iterator.filter(cond)
