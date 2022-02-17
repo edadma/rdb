@@ -7,7 +7,8 @@ case class Ident(s: String, pos: Pos)
 trait Expr
 
 case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
-case class StringExpr(s: String) extends Expr
+case class StringExpr(s: String, pos: Pos) extends Expr
+case class IntExpr(n: Int, pos: Pos) extends Expr
 
 case object StarExpr extends Expr
 case class TableStarExpr(table: Ident) extends Expr

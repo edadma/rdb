@@ -30,4 +30,4 @@ case class CollectStep(input: RowIterable) extends Step with RowIterable:
 case class FilterStep(input: RowIterable, cond: Expr) extends Step with RowIterable:
   val meta: RowMeta = input.meta
 
-  def iterator: RowIterator = input.iterator.filter(cond)
+  def iterator: RowIterator = input.iterator.filter(row => beval(cond, row :: Nil))
