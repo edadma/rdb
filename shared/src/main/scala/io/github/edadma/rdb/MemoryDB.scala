@@ -23,12 +23,10 @@ class MemoryTable(val name: String, val meta: TableMeta) extends Table:
 
   def row(idx: Int): Seq[Value] = data(idx).toIndexedSeq
 
-  def insert(row: Map[String, Value]): Map[String, Value] =
+  def insert(rowdata: Map[String, Value]): Map[String, Value] =
     val arr = new Array[Value](meta.cols)
 
-    row.foreach {
-      case (k, v) => arr(meta.columnIndices(k)) = v
-    }
+    rowdata foreach ((k, v) => arr(meta.columnIndices(k)) = v)
 
     data += arr
     Map.empty

@@ -1,5 +1,23 @@
 package io.github.edadma.rdb
 
-trait Step {}
+import scala.collection.mutable.ArrayBuffer
 
-case class ScanStep(tab: Table) extends Step
+trait Step
+
+class ScanStep(tab: Table) extends Step with RowIterable:
+  def meta: TableMeta = tab.meta
+
+  def iterator: RowIterator =
+    new RowIterator:
+      var idx = 0
+
+      def hasNext: Boolean = idx < tab.rows
+
+      def next(): Row =
+        val res = tab row idx
+
+        idx += 1
+        res
+
+class CollectStep(rows: RowIterable) extends Step:
+  def value = TableValue(rows.toSeq, rows.meta)
