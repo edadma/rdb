@@ -13,7 +13,7 @@ case class ScanStep(tab: Table) extends Step with RowIterable:
 
       def hasNext: Boolean = idx < tab.size
 
-      def next(): Row =
+      def next: Row =
         val res = tab row idx
 
         idx += 1
@@ -27,7 +27,7 @@ case class CollectStep(input: RowIterable) extends Step with RowIterable:
 
   def value: TableValue = TableValue(input.toSeq, input.meta)
 
-case class FilterStep(input: RowIterable, cond: Expr) extends Step with RowIterable:
+case class FilterStep(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Step with RowIterable:
   val meta: RowMeta = input.meta
 
-  def iterator: RowIterator = input.iterator.filter(row => beval(cond, row :: Nil))
+  def iterator: RowIterator = input.iterator.filter(row => beval(cond, row, ctx()))
