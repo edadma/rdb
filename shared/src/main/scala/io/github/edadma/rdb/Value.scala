@@ -9,6 +9,8 @@ trait Value(val typ: Type):
 
 case class IntValue(n: Int) extends Value(IntType)
 
+case class StringValue(s: String) extends Value(StringType)
+
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 
 //case class StringValue(s: String) extends Value
