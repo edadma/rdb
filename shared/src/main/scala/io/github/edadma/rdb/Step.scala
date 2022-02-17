@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 trait Step
 
 case class ScanStep(tab: Table) extends Step with RowIterable:
-  def meta: RowMeta = tab.meta
+  val meta: RowMeta = tab.meta
 
   def iterator: RowIterator =
     new RowIterator:
