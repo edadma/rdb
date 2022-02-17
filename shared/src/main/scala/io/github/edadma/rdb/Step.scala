@@ -11,7 +11,7 @@ class ScanStep(tab: Table) extends Step with RowIterable:
     new RowIterator:
       var idx = 0
 
-      def hasNext: Boolean = idx < tab.rows
+      def hasNext: Boolean = idx < tab.size
 
       def next(): Row =
         val res = tab row idx

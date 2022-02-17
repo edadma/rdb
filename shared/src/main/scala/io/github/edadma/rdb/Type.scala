@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
-abstract class Type {
-  val name: String
-}
+trait Type(val name: String)
 
-case class IntType(name: String) extends Type
+case object IntType extends Type("integer")
+
+case object TableType extends Type("table")
