@@ -1,8 +1,6 @@
 package io.github.edadma.rdb
 
-import scala.collection.mutable.ArrayBuffer
-
-trait Step
+trait Operator
 
 //case class ScanStep(tab: Table) extends Step with RowIterable:
 //  val meta: RowMeta = tab.meta
@@ -19,7 +17,7 @@ trait Step
 //        idx += 1
 //        res
 
-class CollectStep(input: RowIterable) extends Step with RowIterable:
+class CollectOperator(input: RowIterable) extends Operator with RowIterable:
   val data: Seq[Row] = input.toSeq
   val meta: Metadata = input.meta
 
@@ -27,13 +25,23 @@ class CollectStep(input: RowIterable) extends Step with RowIterable:
 
   def value: TableValue = TableValue(input.toSeq, input.meta)
 
-class FilterStep(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Step with RowIterable:
+class FilterOperator(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Operator with RowIterable:
   val meta: Metadata = input.meta
 
   def iterator: RowIterator = input.iterator.filter(row => beval(cond, row, ctx()))
 
-class CrossStep(input1: RowIterable, input2: RowIterable) extends Step with RowIterable:
+class AliasOperator(input: RowIterable, alias: String) extends Operator with RowIterable:
+  require(input.meta.singleTable, s"row data not single table: ${input.meta}")
+
+  val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
+
+  def iterator: RowIterator = input.iterator
+
+class CrossOperator(input1: RowIterable, input2: RowIterable) extends Operator with RowIterable:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator: RowIterator =
-    (for { x <- input1.iterator; y <- input2 } yield (x, y)) map ((row1, row2) => Row(row1.data ++ row2.data, meta))
+    for
+      x <- input1.iterator
+      y <- input2
+    yield Row(x.data ++ y.data, meta)

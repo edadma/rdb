@@ -40,7 +40,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =
     columns += spec
-    _meta = Metadata(columns.toSeq map (s => ColumnMetadata(name, s.name, s.typ)))
+    _meta = Metadata(columns.toSeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
 
   def rows: Int = data.length
 

@@ -6,29 +6,30 @@ import pprint.pprintln
 object Main extends App:
 
   val db = MemoryDB("test")
-  val t = db.create("t", Seq(ColumnSpec("a", NumberType), ColumnSpec("b", StringType)))
+  val t = db.create("t", Seq(ColumnSpec("t_id", NumberType), ColumnSpec("t_text", StringType)))
 
   t.bulkInsert(
-    Seq("a", "b"),
+    Seq("t_id", "t_text"),
     Seq(
-      Seq(NumberValue(3), StringValue("three")),
-      Seq(NumberValue(4), StringValue("four"))
+      Seq(NumberValue(1), StringValue("t1")),
+      Seq(NumberValue(2), StringValue("t2"))
     )
   )
 
-  val u = db.create("u", Seq(ColumnSpec("c", NumberType), ColumnSpec("d", StringType)))
+  val u = db.create("u", Seq(ColumnSpec("u_id", NumberType), ColumnSpec("u_text", StringType)))
 
   u.bulkInsert(
-    Seq("c", "d"),
+    Seq("u_id", "u_text"),
     Seq(
-      Seq(NumberValue(5), StringValue("five")),
-      Seq(NumberValue(6), StringValue("six"))
+      Seq(NumberValue(1), StringValue("u1")),
+      Seq(NumberValue(2), StringValue("u2")),
+      Seq(NumberValue(3), StringValue("u3"))
     )
   )
 
   pprintln(
-    CollectStep(
-      FilterStep(CrossStep(t, u), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
+    CollectOperator(
+      FilterOperator(CrossOperator(t, u), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
     ).value
   )
 
