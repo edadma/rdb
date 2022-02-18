@@ -21,4 +21,4 @@ case class StringValue(s: String) extends Value(StringType)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 
-case class TableValue(data: Seq[Row], meta: RowMeta) extends Value(TableType)
+case class TableValue(data: Seq[Row], meta: Metadata) extends Value(TableType)

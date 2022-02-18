@@ -5,7 +5,7 @@ import reactify._
 object Main extends App:
 
   val db = new MemoryDB("test")
-  val t = db.create("t", RowMeta(Seq(ColumnMeta("a", NumberType), ColumnMeta("b", StringType))))
+  val t = db.create("t", Seq(ColumnSpec("a", NumberType), ColumnSpec("b", StringType)))
 
   t.bulkInsert(
     Seq("a", "b"),
@@ -17,7 +17,7 @@ object Main extends App:
 
   println(
     CollectStep(
-      FilterStep(ScanStep(t), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
+      FilterStep(t, BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
     ).value
   )
 
