@@ -2,13 +2,14 @@ package io.github.edadma.rdb
 
 type Pos = Int
 
-case class Ident(s: String, pos: Pos)
+case class Ident(s: String, pos: Option[Pos] = None)
 
 trait Expr
 
+case class VariableExpr(table: Option[Ident], name: Ident) extends Expr
 case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
-case class StringExpr(s: String, pos: Pos) extends Expr
-case class NumberExpr(n: Number, pos: Pos) extends Expr
+case class StringExpr(s: String, pos: Option[Pos] = None) extends Expr
+case class NumberExpr(n: Number, pos: Option[Pos] = None) extends Expr
 
 case object StarExpr extends Expr
 case class TableStarExpr(table: Ident) extends Expr

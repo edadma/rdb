@@ -5,16 +5,21 @@ import reactify._
 object Main extends App:
 
   val db = new MemoryDB("test")
-  val t = db.create("t", RowMeta(Seq(ColumnMeta("a", NumberType))))
+  val t = db.create("t", RowMeta(Seq(ColumnMeta("a", NumberType), ColumnMeta("b", StringType))))
 
   t.bulkInsert(
-    Seq("a"),
+    Seq("a", "b"),
     Seq(
-      Seq(NumberValue(3))
+      Seq(NumberValue(3), StringValue("three")),
+      Seq(NumberValue(4), StringValue("four"))
     )
   )
 
-  println(CollectStep(ScanStep(t)).value)
+  println(
+    CollectStep(
+      FilterStep(ScanStep(t), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
+    ).value
+  )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings
 //  val myVar = Var[Int](5) // Creates a Var containing the explicit value `5`

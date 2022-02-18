@@ -5,8 +5,8 @@ import io.github.edadma.dal.{IntType => DIntType, TypedNumber, Type => DType}
 trait Value(val vtyp: Type):
   var pos: Option[Pos] = None
 
-  def pos(p: Pos): Value =
-    pos = Some(p)
+  def pos(p: Option[Pos]): Value =
+    pos = p
     this
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber
@@ -21,20 +21,4 @@ case class StringValue(s: String) extends Value(StringType)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 
-//case class StringValue(s: String) extends Value
 case class TableValue(data: Seq[Row], meta: RowMeta) extends Value(TableType)
-
-/*
-
-object SLNumber {
-  def from(n: Int): SLNumber = SLNumber(IntType, n)
-
-  def from(n: (Type, Number)): SLNumber = SLNumber(n._1, n._2)
-}
-
-case class SLNumber(typ: Type, value: Number) extends SLValue with TypedNumber {
-  val clas: SLClass = PrimitiveClass.NumberClass
-
-  override def toString: String = value.toString
-}
- */
