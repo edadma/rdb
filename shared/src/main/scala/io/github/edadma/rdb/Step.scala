@@ -19,7 +19,7 @@ trait Step
 //        idx += 1
 //        res
 
-case class CollectStep(input: RowIterable) extends Step with RowIterable:
+class CollectStep(input: RowIterable) extends Step with RowIterable:
   val data: Seq[Row] = input.toSeq
   val meta: Metadata = input.meta
 
@@ -27,7 +27,13 @@ case class CollectStep(input: RowIterable) extends Step with RowIterable:
 
   def value: TableValue = TableValue(input.toSeq, input.meta)
 
-case class FilterStep(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Step with RowIterable:
+class FilterStep(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Step with RowIterable:
   val meta: Metadata = input.meta
 
   def iterator: RowIterator = input.iterator.filter(row => beval(cond, row, ctx()))
+
+class CrossStep(input1: RowIterable, input2: RowIterable) extends Step with RowIterable:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator: RowIterator =
+    (for { x <- input1.iterator; y <- input2 } yield (x, y)) map ((row1, row2) => Row(row1.data ++ row2.data, meta))

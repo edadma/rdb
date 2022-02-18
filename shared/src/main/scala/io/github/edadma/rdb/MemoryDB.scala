@@ -15,7 +15,7 @@ class MemoryDB(val name: String) extends DB:
   def create(name: String, spec: Seq[Spec]): Table =
     if (tables contains name) sys.error(s"table '$name' already exists")
     else
-      val res = new MemoryTable(name, spec)
+      val res = MemoryTable(name, spec)
 
       tables(name) = res
       res
@@ -35,12 +35,12 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator: RowIterator = data.iterator.map(r => Row(r.toIndexedSeq, meta))
+  def iterator: RowIterator = data.iterator map (r => Row(r.toIndexedSeq, meta))
 
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =
     columns += spec
-    _meta = Metadata(columns.toSeq map (s => ColumnMetadata(s.name, s.typ)))
+    _meta = Metadata(columns.toSeq map (s => ColumnMetadata(name, s.name, s.typ)))
 
   def rows: Int = data.length
 

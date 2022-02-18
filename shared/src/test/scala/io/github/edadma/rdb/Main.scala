@@ -1,10 +1,11 @@
 package io.github.edadma.rdb
 
 import reactify._
+import pprint.pprintln
 
 object Main extends App:
 
-  val db = new MemoryDB("test")
+  val db = MemoryDB("test")
   val t = db.create("t", Seq(ColumnSpec("a", NumberType), ColumnSpec("b", StringType)))
 
   t.bulkInsert(
@@ -15,9 +16,19 @@ object Main extends App:
     )
   )
 
-  println(
+  val u = db.create("u", Seq(ColumnSpec("c", NumberType), ColumnSpec("d", StringType)))
+
+  u.bulkInsert(
+    Seq("c", "d"),
+    Seq(
+      Seq(NumberValue(5), StringValue("five")),
+      Seq(NumberValue(6), StringValue("six"))
+    )
+  )
+
+  pprintln(
     CollectStep(
-      FilterStep(t, BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
+      FilterStep(CrossStep(t, u), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
     ).value
   )
 
