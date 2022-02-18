@@ -8,7 +8,7 @@ trait Expr
 
 case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
 case class StringExpr(s: String, pos: Pos) extends Expr
-case class IntExpr(n: Int, pos: Pos) extends Expr
+case class NumberExpr(n: Number, pos: Pos) extends Expr
 
 case object StarExpr extends Expr
 case class TableStarExpr(table: Ident) extends Expr
