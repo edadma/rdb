@@ -1,5 +1,7 @@
 package io.github.edadma.rdb
 
+import scala.annotation.tailrec
+
 trait Operator:
   def iterator(ctx: Seq[Row]): RowIterator
   def meta: Metadata
@@ -33,6 +35,28 @@ class FilterOperator(input: Operator, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
+
+class ProjectOperator(input: Operator, metactx: Seq[Metadata], fields: IndexedSeq[Expr]) extends Operator:
+  private val ctx = input.meta +: metactx
+
+  @tailrec
+  private def lookup(name: String, ctx: Seq[Metadata]): Option[(Type, Option[String])] =
+    ctx match
+      case Nil => None
+      case hd :: tl =>
+        hd.columnMap get name match
+          case None                => lookup(name, tl)
+          case Some((_, typ, tab)) => Some((typ, tab))
+
+  val meta: Metadata =
+    Metadata(fields map { case VariableExpr(Ident(name, pos)) =>
+      lookup(name, ctx) match
+        case None             => sys.error(s"variable '$name' not found")
+        case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
+    })
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input.iterator(ctx).map(row => Row(fields.map(f => eval(f, row +: ctx)), meta))
 
 class AliasOperator(input: Operator, alias: String) extends Operator:
   require(input.meta.singleTable, s"row data not single table: ${input.meta}")

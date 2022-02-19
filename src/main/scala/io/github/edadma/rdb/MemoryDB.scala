@@ -13,7 +13,7 @@ class MemoryDB(val name: String) extends DB:
   def table(name: String): Option[Table] = tables get name
 
   def create(name: String, spec: Seq[Spec]): Table =
-    if (tables contains name) sys.error(s"table '$name' already exists")
+    if tables contains name then sys.error(s"table '$name' already exists")
     else
       val res = MemoryTable(name, spec)
 
@@ -49,12 +49,12 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def insert(row: Map[String, Value]): Map[String, Value] =
     val arr = new Array[Value](meta.cols)
 
-    row foreach ((k, v) => arr(meta.columnIndices(k)) = v)
+    row foreach ((k, v) => arr(meta.columnMap(k)._1) = v)
     data += arr
     Map.empty
 
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Unit =
-    val mapping = header map meta.columnIndices
+    val mapping = header map (h => meta.columnMap(h)._1)
 
     for (r <- rows)
       val arr = new Array[Value](meta.cols)

@@ -23,4 +23,13 @@ case class StringValue(s: String) extends Value(StringType)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 
-case class TableValue(data: Seq[Row], meta: Metadata) extends Value(TableType)
+trait ArrayLikeValue extends Value:
+  infix def contains(v: Value): Boolean
+
+case class TableValue(data: Seq[Row], meta: Metadata) extends Value(TableType) with ArrayLikeValue:
+  infix def contains(v: Value): Boolean =
+    require(meta.cols == 1, s"contains: expected one column: $meta")
+    data.exists(_.data.head == v)
+
+case class ArrayValue(data: IndexedSeq[Value]) extends Value(TableType) with ArrayLikeValue:
+  infix def contains(v: Value): Boolean = data.contains(v)

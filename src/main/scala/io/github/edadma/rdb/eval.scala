@@ -11,30 +11,24 @@ private val GT = Symbol(">")
 private val LTE = Symbol("<=")
 private val GTE = Symbol(">=")
 
-@tailrec
-def lookup(v: String, ctx: Seq[Row]): Option[Value] =
-  ctx match
-    case Nil => None
-    case hd :: tl =>
-      hd.meta.columnIndices get v match
-        case None      => lookup(v, tl)
-        case Some(res) => Some(hd.data(res))
-
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
     case OperatorExpr(operator)     => TableValue(operator.iterator(ctx).toSeq, operator.meta)
     case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)         => StringValue(s).pos(pos)
-    case VariableExpr(table, name) =>
-      val v =
-        table match
-          case None    => name.s
-          case Some(t) => s"$t.name"
+    case VariableExpr(Ident(name, pos)) =>
+      @tailrec
+      def lookup(name: String, ctx: Seq[Row]): Option[Value] =
+        ctx match
+          case Nil => None
+          case hd :: tl =>
+            hd.meta.columnMap get name match
+              case None              => lookup(name, tl)
+              case Some((idx, _, _)) => Some(hd.data(idx))
 
-      println((v, ctx))
-      lookup(v, ctx) match
-        case None      => sys.error(s"variable '$v' not found")
+      lookup(name, ctx) match
+        case None      => sys.error(s"variable '$name' not found")
         case Some(res) => res
     case BinaryExpr(left, op @ ("+" | "-"), right) =>
       val l = neval(left, ctx)
@@ -43,6 +37,11 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
+    case BinaryExpr(left, "IN", right) =>
+      val v = eval(left, ctx)
+      val a = aleval(right, ctx)
+
+      BooleanValue(a contains v)
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = neval(left, ctx)
       val r = neval(right, ctx)
@@ -67,3 +66,5 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx).asInstanceOf[BooleanValue].b
 
 def neval(expr: Expr, ctx: Seq[Row]): NumberValue = eval(expr, ctx).asInstanceOf[NumberValue]
+
+def aleval(expr: Expr, ctx: Seq[Row]): ArrayLikeValue = eval(expr, ctx).asInstanceOf[ArrayLikeValue]

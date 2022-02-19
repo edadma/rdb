@@ -40,14 +40,13 @@ object Main extends App:
   )
 
   pprintln(
-//    eval(OperatorExpr(e), Nil)
-    eval(
-      OperatorExpr(
-        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), ">", NumberExpr(2)))
-      ),
-      Nil
-    )
-//    QueryExpr(FilterOperator(e, BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3))))
+    eval(OperatorExpr(e), Nil)
+//    eval(
+//      OperatorExpr(
+//        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), "IN", OperatorExpr(e)))
+//      ),
+//      Nil
+//    )
   )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings
