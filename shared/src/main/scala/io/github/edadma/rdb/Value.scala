@@ -17,6 +17,8 @@ object NumberValue {
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
 }
 
+case object NullValue extends Value(NullType)
+
 case class StringValue(s: String) extends Value(StringType)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)

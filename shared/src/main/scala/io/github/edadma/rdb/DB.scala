@@ -12,7 +12,7 @@ abstract class DB:
 
   def create(name: String, spec: Seq[Spec]): Table
 
-abstract class Table extends RowIterable:
+abstract class Table extends Operator:
 
   def name: String
 
