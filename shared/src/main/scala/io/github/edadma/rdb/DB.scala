@@ -16,10 +16,6 @@ abstract class Table extends RowIterable:
 
   def name: String
 
-  def meta: Metadata
-
-  def iterator: RowIterator
-
   def addColumn(spec: ColumnSpec): Unit
 
   def rows: Int

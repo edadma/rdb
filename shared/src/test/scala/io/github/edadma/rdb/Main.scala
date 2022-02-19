@@ -28,9 +28,7 @@ object Main extends App:
   )
 
   pprintln(
-    CollectOperator(
-      FilterOperator(CrossOperator(t, u), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)), () => Nil)
-    ).value
+    FilterOperator(CrossOperator(t, u), BinaryExpr(VariableExpr(None, Ident("a")), ">", NumberExpr(3)))
   )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings

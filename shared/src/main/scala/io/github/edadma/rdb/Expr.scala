@@ -20,5 +20,6 @@ case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[TableExpr], where: Option[E
 
 // relational
 
+case class QueryExpr(operator: Operator) extends Expr
 case class TableExpr(name: Ident, alias: Option[Ident]) extends Expr
 case class SelectExpr(relation: Expr, cond: Expr) extends Expr

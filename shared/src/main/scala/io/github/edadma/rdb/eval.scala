@@ -11,6 +11,7 @@ private val GTE = Symbol(">=")
 
 def eval(expr: Expr, row: Row, ctx: Seq[Row]): Value =
   expr match
+    case QueryExpr(operator)        => TableValue(operator.iterator(ctx).toSeq, operator.meta)
     case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)         => StringValue(s).pos(pos)

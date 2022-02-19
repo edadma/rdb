@@ -1,8 +1,8 @@
 package io.github.edadma.rdb
 
-trait Operator
+trait Operator extends RowIterable
 
-//case class ScanStep(tab: Table) extends Step with RowIterable:
+//case class ScanStep(tab: Table) extends Step:
 //  val meta: RowMeta = tab.meta
 //
 //  def iterator: RowIterator =
@@ -17,31 +17,31 @@ trait Operator
 //        idx += 1
 //        res
 
-class CollectOperator(input: RowIterable) extends Operator with RowIterable:
-  val data: Seq[Row] = input.toSeq
+//class CollectOperator(input: RowIterable) extends Operator:
+//  val data: Seq[Row] = input.iterator(ctx).toSeq
+//  val meta: Metadata = input.meta
+//
+//  def iterator(ctx: Seq[Row]): RowIterator = data.iterator
+//
+//  def value: TableValue = TableValue(input.toSeq, input.meta)
+
+class FilterOperator(input: RowIterable, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
-  def iterator: RowIterator = data.iterator
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row, ctx))
 
-  def value: TableValue = TableValue(input.toSeq, input.meta)
-
-class FilterOperator(input: RowIterable, cond: Expr, ctx: () => Seq[Row]) extends Operator with RowIterable:
-  val meta: Metadata = input.meta
-
-  def iterator: RowIterator = input.iterator.filter(row => beval(cond, row, ctx()))
-
-class AliasOperator(input: RowIterable, alias: String) extends Operator with RowIterable:
+class AliasOperator(input: RowIterable, alias: String) extends Operator:
   require(input.meta.singleTable, s"row data not single table: ${input.meta}")
 
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
 
-  def iterator: RowIterator = input.iterator
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx)
 
-class CrossOperator(input1: RowIterable, input2: RowIterable) extends Operator with RowIterable:
+class CrossOperator(input1: RowIterable, input2: RowIterable) extends Operator:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
-  def iterator: RowIterator =
+  def iterator(ctx: Seq[Row]): RowIterator =
     for
-      x <- input1.iterator
-      y <- input2
+      x <- input1.iterator(ctx)
+      y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)

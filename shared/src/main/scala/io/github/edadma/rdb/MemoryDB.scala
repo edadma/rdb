@@ -35,7 +35,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator: RowIterator = data.iterator map (r => Row(r.toIndexedSeq, meta))
+  def iterator(ctx: Seq[Row]): RowIterator = data.iterator map (r => Row(r.toIndexedSeq, meta))
 
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =
