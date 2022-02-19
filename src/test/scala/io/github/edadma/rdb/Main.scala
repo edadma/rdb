@@ -40,7 +40,7 @@ object Main extends App:
   )
 
   pprintln(
-    eval(OperatorExpr(e), Nil)
+    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
 //    eval(
 //      OperatorExpr(
 //        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), "IN", OperatorExpr(e)))
