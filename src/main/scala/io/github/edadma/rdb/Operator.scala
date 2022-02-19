@@ -35,11 +35,7 @@ type RowIterator = Iterator[Row]
 class FilterOperator(input: Operator, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator =
-    println(("filter meta", meta))
-    println(("filter ctx", ctx))
-    println(("filter cond", cond))
-    input.iterator(ctx).filter(row => beval(cond, row +: ctx))
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
 class ProjectOperator(input: Operator, fields: IndexedSeq[Expr], metactx: Seq[Metadata]) extends Operator:
   private val ctx = input.meta +: metactx

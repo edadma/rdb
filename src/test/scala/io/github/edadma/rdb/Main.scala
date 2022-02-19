@@ -39,14 +39,12 @@ object Main extends App:
     )
   )
 
-  val alias = AliasOperator(e, "outer")
-
   pprintln(
 //    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
     eval(
       OperatorExpr(
         FilterOperator(
-          alias,
+          AliasOperator(e, "outer"),
           UnaryExpr(
             "EXISTS",
             OperatorExpr(
