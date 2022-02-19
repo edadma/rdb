@@ -32,7 +32,7 @@ type RowIterator = Iterator[Row]
 class FilterOperator(input: Operator, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, ctx))
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
 class AliasOperator(input: Operator, alias: String) extends Operator:
   require(input.meta.singleTable, s"row data not single table: ${input.meta}")

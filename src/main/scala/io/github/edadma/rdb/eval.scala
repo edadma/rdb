@@ -32,6 +32,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
           case None    => name.s
           case Some(t) => s"$t.name"
 
+      println((v, ctx))
       lookup(v, ctx) match
         case None      => sys.error(s"variable '$v' not found")
         case Some(res) => res

@@ -1,6 +1,5 @@
 package io.github.edadma.rdb
 
-import reactify._
 import pprint.pprintln
 
 object Main extends App:
@@ -44,7 +43,7 @@ object Main extends App:
 //    eval(OperatorExpr(e), Nil)
     eval(
       OperatorExpr(
-        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), "IN", OperatorExpr(3)))
+        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), ">", NumberExpr(2)))
       ),
       Nil
     )
