@@ -7,6 +7,7 @@ case class Ident(s: String, pos: Option[Pos] = None)
 trait Expr
 
 case class VariableExpr(name: Ident) extends Expr
+case class UnaryExpr(op: String, expr: Expr) extends Expr
 case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
 case class StringExpr(s: String, pos: Option[Pos] = None) extends Expr
 case class NumberExpr(n: Number, pos: Option[Pos] = None) extends Expr

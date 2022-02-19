@@ -39,14 +39,24 @@ object Main extends App:
     )
   )
 
+  val alias = AliasOperator(e, "outer")
+
   pprintln(
-    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
-//    eval(
-//      OperatorExpr(
-//        FilterOperator(AliasOperator(e, "outer"), BinaryExpr(VariableExpr(None, Ident("e_id")), "IN", OperatorExpr(e)))
-//      ),
-//      Nil
-//    )
+//    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
+    eval(
+      OperatorExpr(
+        FilterOperator(
+          alias,
+          UnaryExpr(
+            "EXISTS",
+            OperatorExpr(
+              FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
+            )
+          )
+        )
+      ),
+      Nil
+    )
   )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings

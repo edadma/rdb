@@ -13,6 +13,7 @@ private val GTE = Symbol(">=")
 
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
+    case UnaryExpr("EXISTS", expr)  => BooleanValue(aleval(expr, ctx).nonEmpty)
     case OperatorExpr(operator)     => TableValue(operator.iterator(ctx).toSeq, operator.meta)
     case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
