@@ -28,7 +28,7 @@ trait Operator extends RowIterable
 class FilterOperator(input: RowIterable, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row, ctx))
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, ctx))
 
 class AliasOperator(input: RowIterable, alias: String) extends Operator:
   require(input.meta.singleTable, s"row data not single table: ${input.meta}")
