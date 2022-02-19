@@ -14,7 +14,9 @@ private val GTE = Symbol(">=")
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
     case UnaryExpr("EXISTS", expr)  => BooleanValue(aleval(expr, ctx).nonEmpty)
-    case OperatorExpr(operator)     => TableValue(operator.iterator(ctx).toSeq, operator.meta)
+    case OperatorExpr(operator)     =>
+      println(("OperatorExpr ctx", ctx))
+      TableValue(operator.iterator(ctx).toSeq, operator.meta)
     case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)         => StringValue(s).pos(pos)
@@ -28,6 +30,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
               case None              => lookup(name, tl)
               case Some((idx, _, _)) => Some(hd.data(idx))
 
+      println(("VariableExpr lookup", name))
+      println(("VariableExpr lookup", ctx))
       lookup(name, ctx) match
         case None      => sys.error(s"variable '$name' not found")
         case Some(res) => res

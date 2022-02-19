@@ -1,6 +1,7 @@
 package io.github.edadma.rdb
 
 import scala.annotation.tailrec
+//import pprint.pprintln
 
 trait Operator:
   def iterator(ctx: Seq[Row]): RowIterator
@@ -34,7 +35,11 @@ type RowIterator = Iterator[Row]
 class FilterOperator(input: Operator, cond: Expr) extends Operator:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
+  def iterator(ctx: Seq[Row]): RowIterator =
+    println(("filter meta", meta))
+    println(("filter ctx", ctx))
+    println(("filter cond", cond))
+    input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
 class ProjectOperator(input: Operator, fields: IndexedSeq[Expr], metactx: Seq[Metadata]) extends Operator:
   private val ctx = input.meta +: metactx
@@ -63,7 +68,7 @@ class AliasOperator(input: Operator, alias: String) extends Operator:
 
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx)
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
 
 class CrossOperator(input1: Operator, input2: Operator) extends Operator:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
