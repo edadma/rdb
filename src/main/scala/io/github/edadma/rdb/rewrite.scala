@@ -30,14 +30,16 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         else ProjectOperator(r1, exprs map rewrite)
 
       rewrite(r2)
-    case AliasOperator(rel, Ident(alias, pos)) => OperatorExpr(AliasProcess(procRewrite(rel), alias))
+    case AliasOperator(rel, Ident(alias, pos)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
     case TableOperator(Ident(name, pos)) =>
       db.table(name) match
-        case Some(t) => OperatorExpr(t)
+        case Some(t) => ProcessOperator(t)
         case None    => sys.error(s"table '$name' not found")
-    case ProjectOperator(rel, projs) => OperatorExpr(ProjectProcess(procRewrite(rel), projs.toIndexedSeq map rewrite))
-    case CrossOperator(rel1, rel2)   => OperatorExpr(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
-    case SelectOperator(rel, cond)   => OperatorExpr(FilterProcess(procRewrite(rel), rewrite(cond)))
-    case _                           => expr
+    case ProjectOperator(rel, projs) =>
+      ProcessOperator(ProjectProcess(procRewrite(rel), projs.toIndexedSeq map rewrite))
+    case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
+    case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
+    // case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
+    case _ => expr
 
-def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[OperatorExpr].proc
+def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

@@ -38,7 +38,7 @@ object Main extends App:
   )
 
   val expr =
-    OperatorExpr(
+    ProcessOperator(
       LeftCrossJoinProcess(
         e,
         AliasProcess(e, "m"),
@@ -46,7 +46,6 @@ object Main extends App:
       )
     )
 
-  rewrite(expr)(db)
   pprint.pprintln(
     eval(expr, Nil)
 
