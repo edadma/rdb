@@ -13,7 +13,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}")
 
       BinaryExpr(l, op, r, l.typ)
-    case SQLSelectExpr(exprs, from, where) =>
+    case SelectExpr(exprs, from, where) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -30,6 +30,8 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         else ProjectOperator(r1, exprs map rewrite)
 
       rewrite(r2)
+    case LeftJoinOperator(rel1, rel2, on) =>
+      ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias, pos)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
     case TableOperator(Ident(name, pos)) =>
       db.table(name) match

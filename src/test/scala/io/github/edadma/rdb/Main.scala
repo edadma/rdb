@@ -38,16 +38,28 @@ object Main extends App:
   )
 
   val expr =
-    ProcessOperator(
-      LeftCrossJoinProcess(
-        e,
-        AliasProcess(e, "m"),
-        BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
-      )
+    SelectExpr(
+      Seq(StarExpr),
+      Seq(
+        LeftJoinOperator(
+          TableOperator(Ident("e")),
+          AliasOperator(TableOperator(Ident("e")), Ident("m")),
+          BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+        )
+      ),
+      None
     )
 
+//    ProcessOperator(
+//      LeftCrossJoinProcess(
+//        e,
+//        AliasProcess(e, "m"),
+//        BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+//      )
+//    )
+
   pprint.pprintln(
-    eval(expr, Nil)
+    eval(rewrite(expr)(db), Nil)
 
 //    eval(
 //      OperatorExpr(

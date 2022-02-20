@@ -20,9 +20,7 @@ case class ApplyExpr(func: Ident, args: Seq[Expr]) extends UnknownTypeExpr
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr], typ: Type) extends Expr
 case class AggregateFunctionExpr(f: ScalarFunction, arg: Expr, typ: Type) extends Expr
 
-// SQL
-
-case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[Expr], where: Option[Expr]) extends Operator
+case class SelectExpr(exprs: Seq[Expr], from: Seq[Expr], where: Option[Expr]) extends Operator
 
 case object StarExpr extends UnknownTypeExpr
 case class TableStarExpr(table: Ident) extends UnknownTypeExpr

@@ -8,12 +8,12 @@ trait Process:
 
 type RowIterator = Iterator[Row]
 
-class FilterProcess(input: Process, cond: Expr) extends Process:
+case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
-class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
+case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
   private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
@@ -37,17 +37,17 @@ class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[M
   def iterator(ctx: Seq[Row]): RowIterator =
     input.iterator(ctx).map(row => Row(fields.map(f => eval(f, row +: ctx)), meta))
 
-class AliasProcess(input: Process, alias: String) extends Process:
+case class AliasProcess(input: Process, alias: String) extends Process:
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
 
-class DistinctProcess(input: Process) extends Process:
+case class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
 
-class TakeProcess(input: Process, n: Int) extends Process:
+case class TakeProcess(input: Process, n: Int) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) take n
@@ -57,7 +57,7 @@ class DropProcess(input: Process, n: Int) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) drop n
 
-class CrossProcess(input1: Process, input2: Process) extends Process:
+case class CrossProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =
@@ -66,7 +66,7 @@ class CrossProcess(input1: Process, input2: Process) extends Process:
       y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)
 
-class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
+case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =

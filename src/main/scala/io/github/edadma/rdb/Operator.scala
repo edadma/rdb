@@ -7,5 +7,6 @@ case class ProjectOperator(rel: Expr, projs: Seq[Expr]) extends Operator
 case class TableOperator(table: Ident) extends Operator
 case class SelectOperator(rel: Expr, cond: Expr) extends Operator
 case class CrossOperator(rel1: Expr, rel2: Expr) extends Operator
+case class LeftJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
 
 case class ProcessOperator(proc: Process) extends Operator
