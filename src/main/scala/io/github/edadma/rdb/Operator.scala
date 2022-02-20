@@ -65,6 +65,11 @@ class AliasOperator(input: Operator, alias: String) extends Operator:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
 
+class DistinctOperator(input: Operator) extends Operator:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
+
 class CrossOperator(input1: Operator, input2: Operator) extends Operator:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
@@ -73,3 +78,14 @@ class CrossOperator(input1: Operator, input2: Operator) extends Operator:
       x <- input1.iterator(ctx)
       y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)
+
+//class LeftOuterJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
+//  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+//
+//  def iterator(ctx: Seq[Row]): RowIterator =
+//    input1.iterator(ctx).flatMap{ x =>
+//      val matches = input2.iterator(ctx).filter(row => beval(cond, row +: ctx))
+//
+//      if (matches.isEmpty) Row(x.data ++ y.data, meta)
+//    }
+//    yield

@@ -17,6 +17,8 @@ case class TableStarExpr(table: Ident) extends Expr
 
 case class ApplyExpr(name: Ident, args: Seq[Expr]) extends Expr
 
+case class AliasExpr(expr: Expr, alias: Ident) extends Expr
+
 // SQL
 
 case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[TableExpr], where: Option[Expr])
@@ -24,5 +26,5 @@ case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[TableExpr], where: Option[E
 // relational
 
 case class OperatorExpr(oper: Operator) extends Expr
-case class TableExpr(name: Ident, alias: Option[Ident]) extends Expr
+case class TableExpr(name: Ident) extends Expr
 case class SelectExpr(relation: Expr, cond: Expr) extends Expr
