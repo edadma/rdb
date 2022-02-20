@@ -37,17 +37,18 @@ object Main extends App:
     )
   )
 
-  pprint.pprintln(
-    eval(
-      OperatorExpr(
-        LeftCrossJoinOperator(
-          e,
-          AliasOperator(e, "m"),
-          BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
-        )
-      ),
-      Nil
+  val expr =
+    OperatorExpr(
+      LeftCrossJoinOperator(
+        e,
+        AliasOperator(e, "m"),
+        BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
+      )
     )
+
+  decorate(expr)
+  pprint.pprintln(
+    eval(expr, Nil)
 
 //    eval(
 //      OperatorExpr(

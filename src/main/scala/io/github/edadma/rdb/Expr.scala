@@ -4,7 +4,8 @@ type Pos = Int
 
 case class Ident(s: String, pos: Option[Pos] = None)
 
-trait Expr
+trait Expr:
+  var typ: Type
 
 case class VariableExpr(name: Ident) extends Expr
 case class UnaryExpr(op: String, expr: Expr) extends Expr
