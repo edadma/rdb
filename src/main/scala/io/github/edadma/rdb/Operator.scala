@@ -36,8 +36,8 @@ class FilterOperator(input: Operator, cond: Expr) extends Operator:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
-class ProjectOperator(input: Operator, fields: IndexedSeq[Expr], metactx: Seq[Metadata]) extends Operator:
-  private val ctx = input.meta +: metactx
+class ProjectOperator(input: Operator, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Operator:
+  private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
   private def lookup(name: String, ctx: Seq[Metadata]): Option[(Type, Option[String])] =

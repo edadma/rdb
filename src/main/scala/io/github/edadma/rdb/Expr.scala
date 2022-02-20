@@ -31,7 +31,7 @@ case class TableStarExpr(table: Ident) extends UnknownTypeExpr
 
 trait TableTypeExpr extends Expr { val typ: Type = TableType }
 
-case class AliasExpr(expr: Expr, alias: Ident) extends TableTypeExpr
+case class AliasExpr(rel: Expr, alias: Ident) extends TableTypeExpr
 case class ProjectExpr(rel: Expr, projs: Seq[Expr]) extends TableTypeExpr
 case class TableExpr(table: Ident) extends TableTypeExpr
 case class SelectExpr(rel: Expr, cond: Expr) extends TableTypeExpr
