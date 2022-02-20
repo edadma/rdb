@@ -64,7 +64,7 @@ object Main extends App:
                     Vector(
                       VariableExpr(Ident("name"))
                     ),
-                    Nil
+                    Nil // should be equivalent to Seq(AliasOperator(e, "outer").meta)
                   )
                 )
               )
