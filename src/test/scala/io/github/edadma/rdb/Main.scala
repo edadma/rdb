@@ -42,11 +42,11 @@ object Main extends App:
       LeftCrossJoinOperator(
         e,
         AliasOperator(e, "m"),
-        BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
+        BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
       )
     )
 
-  rewrite(expr)
+  rewrite(expr)(db)
   pprint.pprintln(
     eval(expr, Nil)
 

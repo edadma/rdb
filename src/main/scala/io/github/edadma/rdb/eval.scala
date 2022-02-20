@@ -14,13 +14,13 @@ private val GTE = Symbol(">=")
 
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
-    case ApplyExpr(name, args)      => scalarFunction(name.s, args map (e => eval(e, ctx)))
-    case UnaryExpr("EXISTS", expr)  => BooleanValue(aleval(expr, ctx).nonEmpty)
-    case OperatorExpr(operator)     => TableValue(operator.iterator(ctx) to ArraySeq, operator.meta)
-    case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
-    case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
-    case StringExpr(s, pos)         => StringValue(s).pos(pos)
-    case VariableExpr(Ident(name, pos)) =>
+    case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx)))
+    case UnaryExpr("EXISTS", expr, _)   => BooleanValue(aleval(expr, ctx).nonEmpty)
+    case OperatorExpr(operator)         => TableValue(operator.iterator(ctx) to ArraySeq, operator.meta)
+    case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
+    case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
+    case StringExpr(s, pos)             => StringValue(s).pos(pos)
+    case ColumnExpr(Ident(name, pos), _) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
         ctx match
@@ -33,19 +33,19 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       lookup(name, ctx) match
         case None      => sys.error(s"variable '$name' not found")
         case Some(res) => res
-    case BinaryExpr(left, op @ ("+" | "-"), right) =>
+    case BinaryExpr(left, op @ ("+" | "-"), right, _) =>
       val l = neval(left, ctx)
       val r = neval(right, ctx)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case BinaryExpr(left, "IN", right) =>
+    case BinaryExpr(left, "IN", right, _) =>
       val v = eval(left, ctx)
       val a = aleval(right, ctx)
 
       BooleanValue(a contains v)
-    case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
+    case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right, _) =>
       val l = neval(left, ctx)
       val r = neval(right, ctx)
 
@@ -56,7 +56,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
           case "<=" => BasicDAL.relate(LTE, l, r)
           case ">=" => BasicDAL.relate(GTE, l, r)
       )
-    case BinaryExpr(left, op @ ("=" | "!="), right) =>
+    case BinaryExpr(left, op @ ("=" | "!="), right, _) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)
 

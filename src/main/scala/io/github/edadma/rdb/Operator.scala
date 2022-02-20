@@ -50,11 +50,11 @@ class ProjectOperator(input: Operator, fields: IndexedSeq[Expr], metactx: Seq[Me
 
   val meta: Metadata =
     Metadata(fields.zipWithIndex map {
-      case (VariableExpr(Ident(name, pos)), idx) =>
+      case (ColumnExpr(Ident(name, pos), _), idx) =>
         lookup(name, ctx) match
           case None             => sys.error(s"variable '$name' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
-      case (ApplyExpr(Ident(name, pos), args), idx) => ColumnMetadata(None, s"${idx + 1}", scalarFunctionType(name))
+      case (expr: Expr, idx) => ColumnMetadata(None, s"${idx + 1}", expr.typ)
     })
 
   def iterator(ctx: Seq[Row]): RowIterator =
@@ -69,6 +69,16 @@ class DistinctOperator(input: Operator) extends Operator:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
+
+class TakeOperator(input: Operator, n: Int) extends Operator:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) take n
+
+class DropOperator(input: Operator, n: Int) extends Operator:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) drop n
 
 class CrossOperator(input1: Operator, input2: Operator) extends Operator:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)

@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 import math._
 
-case class ScalarFunction(name: String, apply: PartialFunction[Seq[Value], Value], typ: Type)
+case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
 val scalarFunction: Map[String, ScalarFunction] =
   List(
