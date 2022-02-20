@@ -2,41 +2,18 @@ package io.github.edadma.rdb
 
 import scala.annotation.tailrec
 
-trait Operator:
+trait Process:
   def iterator(ctx: Seq[Row]): RowIterator
   def meta: Metadata
 
 type RowIterator = Iterator[Row]
 
-//case class ScanStep(tab: Table) extends Step:
-//  val meta: RowMeta = tab.meta
-//
-//  def iterator: RowIterator =
-//    new RowIterator:
-//      var idx = 0
-//
-//      def hasNext: Boolean = idx < tab.size
-//
-//      def next: Row =
-//        val res = tab row idx
-//
-//        idx += 1
-//        res
-
-//class CollectOperator(input: Operator) extends Operator:
-//  val data: Seq[Row] = input.iterator(ctx).toSeq
-//  val meta: Metadata = input.meta
-//
-//  def iterator(ctx: Seq[Row]): RowIterator = data.iterator
-//
-//  def value: TableValue = TableValue(input.toSeq, input.meta)
-
-class FilterOperator(input: Operator, cond: Expr) extends Operator:
+class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
-class ProjectOperator(input: Operator, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Operator:
+class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
   private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
@@ -60,27 +37,27 @@ class ProjectOperator(input: Operator, fields: IndexedSeq[Expr] /*, metactx: Seq
   def iterator(ctx: Seq[Row]): RowIterator =
     input.iterator(ctx).map(row => Row(fields.map(f => eval(f, row +: ctx)), meta))
 
-class AliasOperator(input: Operator, alias: String) extends Operator:
+class AliasProcess(input: Process, alias: String) extends Process:
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
 
-class DistinctOperator(input: Operator) extends Operator:
+class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
 
-class TakeOperator(input: Operator, n: Int) extends Operator:
+class TakeProcess(input: Process, n: Int) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) take n
 
-class DropOperator(input: Operator, n: Int) extends Operator:
+class DropProcess(input: Process, n: Int) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) drop n
 
-class CrossOperator(input1: Operator, input2: Operator) extends Operator:
+class CrossProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =
@@ -89,7 +66,7 @@ class CrossOperator(input1: Operator, input2: Operator) extends Operator:
       y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)
 
-class LeftCrossJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
+class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =

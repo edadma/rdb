@@ -39,9 +39,9 @@ object Main extends App:
 
   val expr =
     OperatorExpr(
-      LeftCrossJoinOperator(
+      LeftCrossJoinProcess(
         e,
-        AliasOperator(e, "m"),
+        AliasProcess(e, "m"),
         BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
       )
     )

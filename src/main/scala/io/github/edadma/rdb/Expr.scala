@@ -22,21 +22,21 @@ case class AggregateFunctionExpr(f: ScalarFunction, arg: Expr, typ: Type) extend
 
 // SQL
 
-case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[Expr], where: Option[Expr]) extends TableTypeExpr
+case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[Expr], where: Option[Expr]) extends Operator
 
 case object StarExpr extends UnknownTypeExpr
 case class TableStarExpr(table: Ident) extends UnknownTypeExpr
 
 // relational
 
-trait TableTypeExpr extends Expr { val typ: Type = TableType }
+trait Operator extends Expr { val typ: Type = TableType }
 
-case class AliasExpr(rel: Expr, alias: Ident) extends TableTypeExpr
-case class ProjectExpr(rel: Expr, projs: Seq[Expr]) extends TableTypeExpr
-case class TableExpr(table: Ident) extends TableTypeExpr
-case class SelectExpr(rel: Expr, cond: Expr) extends TableTypeExpr
-case class CrossExpr(rel1: Expr, rel2: Expr) extends TableTypeExpr
+case class AliasOperator(rel: Expr, alias: Ident) extends Operator
+case class ProjectOperator(rel: Expr, projs: Seq[Expr]) extends Operator
+case class TableOperator(table: Ident) extends Operator
+case class SelectOperator(rel: Expr, cond: Expr) extends Operator
+case class CrossOperator(rel1: Expr, rel2: Expr) extends Operator
 
 // operator
 
-case class OperatorExpr(oper: Operator) extends TableTypeExpr
+case class OperatorExpr(proc: Process) extends Operator

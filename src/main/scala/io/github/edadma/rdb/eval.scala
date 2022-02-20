@@ -16,7 +16,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
     case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx)))
     case UnaryExpr("EXISTS", expr, _)   => BooleanValue(aleval(expr, ctx).nonEmpty)
-    case OperatorExpr(operator)         => TableValue(operator.iterator(ctx) to ArraySeq, operator.meta)
+    case OperatorExpr(proc)             => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)             => StringValue(s).pos(pos)

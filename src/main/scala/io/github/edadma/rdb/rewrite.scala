@@ -17,27 +17,27 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
-          case e :: tl => CrossExpr(e, cross(tl))
+          case e :: tl => CrossOperator(e, cross(tl))
 
       val r = cross(from map rewrite)
       val r1 =
         where match
-          case Some(cond) => SelectExpr(r, rewrite(cond))
+          case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
 
       val r2 =
         if (exprs == Seq(StarExpr)) r1
-        else ProjectExpr(r1, exprs map rewrite)
+        else ProjectOperator(r1, exprs map rewrite)
 
       rewrite(r2)
-    case AliasExpr(rel, Ident(alias, pos)) => OperatorExpr(AliasOperator(orewrite(rel), alias))
-    case TableExpr(Ident(name, pos)) =>
+    case AliasOperator(rel, Ident(alias, pos)) => OperatorExpr(AliasProcess(procRewrite(rel), alias))
+    case TableOperator(Ident(name, pos)) =>
       db.table(name) match
         case Some(t) => OperatorExpr(t)
         case None    => sys.error(s"table '$name' not found")
-    case ProjectExpr(rel, projs) => OperatorExpr(ProjectOperator(orewrite(rel), projs.toIndexedSeq map rewrite))
-    case CrossExpr(rel1, rel2)   => OperatorExpr(CrossOperator(orewrite(rel1), orewrite(rel2)))
-    case SelectExpr(rel, cond)   => OperatorExpr(FilterOperator(orewrite(rel), rewrite(cond)))
-    case _                       => expr
+    case ProjectOperator(rel, projs) => OperatorExpr(ProjectProcess(procRewrite(rel), projs.toIndexedSeq map rewrite))
+    case CrossOperator(rel1, rel2)   => OperatorExpr(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
+    case SelectOperator(rel, cond)   => OperatorExpr(FilterProcess(procRewrite(rel), rewrite(cond)))
+    case _                           => expr
 
-def orewrite(expr: Expr)(implicit db: DB): Operator = rewrite(expr).asInstanceOf[OperatorExpr].oper
+def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[OperatorExpr].proc
