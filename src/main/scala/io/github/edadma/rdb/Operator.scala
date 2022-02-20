@@ -79,13 +79,13 @@ class CrossOperator(input1: Operator, input2: Operator) extends Operator:
       y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)
 
-//class LeftOuterJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
-//  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
-//
-//  def iterator(ctx: Seq[Row]): RowIterator =
-//    input1.iterator(ctx).flatMap{ x =>
-//      val matches = input2.iterator(ctx).filter(row => beval(cond, row +: ctx))
-//
-//      if (matches.isEmpty) Row(x.data ++ y.data, meta)
-//    }
-//    yield
+class LeftOuterJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input1.iterator(ctx).flatMap { x =>
+      val matches = input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta)) filter (row => beval(cond, row +: ctx))
+
+      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NullValue), meta))
+      else matches
+    }

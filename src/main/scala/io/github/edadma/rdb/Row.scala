@@ -8,7 +8,7 @@ case class Row(data: IndexedSeq[Value], meta: Metadata):
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 
 case class Metadata(columns: Seq[ColumnMetadata]):
-  val cols: Int = columns.length
+  val width: Int = columns.length
   lazy val columnMap: Map[String, (Int, Type, Option[String])] =
     columns.zipWithIndex.flatMap { case (ColumnMetadata(table, name, typ), idx) =>
       val v = (idx, typ, table)

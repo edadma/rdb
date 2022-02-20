@@ -66,7 +66,9 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
           case "!=" => l != r
       )
 
-def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx).asInstanceOf[BooleanValue].b
+def beval(expr: Expr, ctx: Seq[Row]): Boolean =
+  Main.pprintln(expr)
+  eval(expr, ctx).asInstanceOf[BooleanValue].b
 
 def neval(expr: Expr, ctx: Seq[Row]): NumberValue = eval(expr, ctx).asInstanceOf[NumberValue]
 

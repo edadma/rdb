@@ -1,8 +1,10 @@
 package io.github.edadma.rdb
 
-import pprint.pprintln
+import pprint._
 
 object Main extends App:
+
+  val pprintln = pprint.pprintln
 
   val db = MemoryDB("test")
 //  val t = db.create("t", Seq(ColumnSpec("t_id", NumberType), ColumnSpec("t_text", StringType)))
@@ -40,41 +42,61 @@ object Main extends App:
   )
 
   pprintln(
-//    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
+//    eval(
+//      OperatorExpr(
+//        LeftOuterJoinOperator(
+//          e,
+//          AliasOperator(e, "m"),
+//          BinaryExpr(VariableExpr(Ident("m_id")), "=", VariableExpr(Ident("m.e_id")))
+//        )
+//      ),
+//      Nil
+//    )
+
     eval(
       OperatorExpr(
-        ProjectOperator(
-          FilterOperator(
-            AliasOperator(e, "outer"),
-            UnaryExpr(
-              "EXISTS",
-              OperatorExpr(
-                FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
-              )
-            )
-          ),
-          Vector(
-            VariableExpr(Ident("name")),
-            ApplyExpr(
-              Ident("table"),
-              Seq(
-                OperatorExpr(
-                  ProjectOperator(
-                    FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id")))),
-                    Vector(
-                      VariableExpr(Ident("name"))
-                    ),
-                    Nil // should be equivalent to Seq(AliasOperator(e, "outer").meta)
-                  )
-                )
-              )
-            )
-          ),
-          Nil
+        FilterOperator(
+          CrossOperator(e, AliasOperator(e, "m")),
+          BinaryExpr(VariableExpr(Ident("m_id")), "=", VariableExpr(Ident("m.e_id")))
         )
       ),
       Nil
     )
+
+//    eval(
+//      OperatorExpr(
+//        ProjectOperator(
+//          FilterOperator(
+//            AliasOperator(e, "outer"),
+//            UnaryExpr(
+//              "EXISTS",
+//              OperatorExpr(
+//                FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
+//              )
+//            )
+//          ),
+//          Vector(
+//            VariableExpr(Ident("name")),
+//            ApplyExpr(
+//              Ident("table"),
+//              Seq(
+//                OperatorExpr(
+//                  ProjectOperator(
+//                    FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id")))),
+//                    Vector(
+//                      VariableExpr(Ident("name"))
+//                    ),
+//                    Nil // should be equivalent to Seq(AliasOperator(e, "outer").meta)
+//                  )
+//                )
+//              )
+//            )
+//          ),
+//          Nil
+//        )
+//      ),
+//      Nil
+//    )
   )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings

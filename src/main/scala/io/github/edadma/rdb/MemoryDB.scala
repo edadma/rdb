@@ -47,7 +47,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def row(idx: Int): Row = Row(data(idx).toIndexedSeq, meta)
 
   def insert(row: Map[String, Value]): Map[String, Value] =
-    val arr = new Array[Value](meta.cols)
+    val arr = new Array[Value](meta.width)
 
     row foreach ((k, v) => arr(meta.columnMap(k)._1) = v)
     data += arr
@@ -57,7 +57,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
     val mapping = header map (h => meta.columnMap(h)._1)
 
     for (r <- rows)
-      val arr = new Array[Value](meta.cols)
+      val arr = new Array[Value](meta.width)
 
       for ((i, v) <- mapping zip r)
         arr(i) = v

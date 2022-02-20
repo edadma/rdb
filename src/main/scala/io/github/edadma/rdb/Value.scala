@@ -32,7 +32,7 @@ trait ArrayLikeValue extends Value:
 
 case class TableValue(data: IndexedSeq[Row], meta: Metadata) extends Value(TableType) with ArrayLikeValue:
   infix def contains(v: Value): Boolean =
-    require(meta.cols == 1, s"contains: expected one column: $meta")
+    require(meta.width == 1, s"contains: expected one column: $meta")
     data.exists(_.data.head == v)
   def isEmpty: Boolean = data.isEmpty
 
