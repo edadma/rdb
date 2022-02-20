@@ -43,14 +43,34 @@ object Main extends App:
 //    eval(OperatorExpr(ProjectOperator(e, Vector(VariableExpr(Ident("name"))), Nil)), Nil)
     eval(
       OperatorExpr(
-        FilterOperator(
-          AliasOperator(e, "outer"),
-          UnaryExpr(
-            "EXISTS",
-            OperatorExpr(
-              FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
+        ProjectOperator(
+          FilterOperator(
+            AliasOperator(e, "outer"),
+            UnaryExpr(
+              "EXISTS",
+              OperatorExpr(
+                FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
+              )
             )
-          )
+          ),
+          Vector(
+            VariableExpr(Ident("name")),
+            ApplyExpr(
+              Ident("table"),
+              Seq(
+                OperatorExpr(
+                  ProjectOperator(
+                    FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id")))),
+                    Vector(
+                      VariableExpr(Ident("name"))
+                    ),
+                    Nil
+                  )
+                )
+              )
+            )
+          ),
+          Nil
         )
       ),
       Nil

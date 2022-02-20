@@ -15,6 +15,8 @@ case class NumberExpr(n: Number, pos: Option[Pos] = None) extends Expr
 case object StarExpr extends Expr
 case class TableStarExpr(table: Ident) extends Expr
 
+case class ApplyExpr(name: Ident, args: Seq[Expr]) extends Expr
+
 // SQL
 
 case class SQLSelectExpr(exprs: Seq[Expr], from: Seq[TableExpr], where: Option[Expr])

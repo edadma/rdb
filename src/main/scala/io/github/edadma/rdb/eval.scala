@@ -3,6 +3,7 @@ package io.github.edadma.rdb
 import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as DType}
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
 
 private val PLUS = Symbol("+")
 private val MINUS = Symbol("-")
@@ -13,8 +14,9 @@ private val GTE = Symbol(">=")
 
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
+    case ApplyExpr(name, args)      => scalarFunction(name.s, args map (e => eval(e, ctx)))
     case UnaryExpr("EXISTS", expr)  => BooleanValue(aleval(expr, ctx).nonEmpty)
-    case OperatorExpr(operator)     => TableValue(operator.iterator(ctx).toSeq, operator.meta)
+    case OperatorExpr(operator)     => TableValue(operator.iterator(ctx) to ArraySeq, operator.meta)
     case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)         => StringValue(s).pos(pos)

@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dal.{IntType => DIntType, TypedNumber, Type => DType}
+import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, TypedNumber, Type => DType}
 
 trait Value(val vtyp: Type):
   var pos: Option[Pos] = None
@@ -13,6 +13,8 @@ case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with
 
 object NumberValue {
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
+
+  def apply(n: Double): NumberValue = NumberValue(DDoubleType, n)
 
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
 }
@@ -28,12 +30,12 @@ trait ArrayLikeValue extends Value:
   def isEmpty: Boolean
   def nonEmpty: Boolean = !isEmpty
 
-case class TableValue(data: Seq[Row], meta: Metadata) extends Value(TableType) with ArrayLikeValue:
+case class TableValue(data: IndexedSeq[Row], meta: Metadata) extends Value(TableType) with ArrayLikeValue:
   infix def contains(v: Value): Boolean =
     require(meta.cols == 1, s"contains: expected one column: $meta")
     data.exists(_.data.head == v)
   def isEmpty: Boolean = data.isEmpty
 
-case class ArrayValue(data: IndexedSeq[Value]) extends Value(TableType) with ArrayLikeValue:
+case class ArrayValue(data: IndexedSeq[Value]) extends Value(ArrayType) with ArrayLikeValue:
   infix def contains(v: Value): Boolean = data.contains(v)
   def isEmpty: Boolean = data.isEmpty

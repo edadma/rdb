@@ -1,7 +1,6 @@
 package io.github.edadma.rdb
 
 import scala.annotation.tailrec
-//import pprint.pprintln
 
 trait Operator:
   def iterator(ctx: Seq[Row]): RowIterator
@@ -50,18 +49,18 @@ class ProjectOperator(input: Operator, fields: IndexedSeq[Expr], metactx: Seq[Me
           case Some((_, typ, tab)) => Some((typ, tab))
 
   val meta: Metadata =
-    Metadata(fields map { case VariableExpr(Ident(name, pos)) =>
-      lookup(name, ctx) match
-        case None             => sys.error(s"variable '$name' not found")
-        case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
+    Metadata(fields.zipWithIndex map {
+      case (VariableExpr(Ident(name, pos)), idx) =>
+        lookup(name, ctx) match
+          case None             => sys.error(s"variable '$name' not found")
+          case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
+      case (ApplyExpr(Ident(name, pos), args), idx) => ColumnMetadata(None, s"${idx + 1}", scalarFunctionType(name))
     })
 
   def iterator(ctx: Seq[Row]): RowIterator =
     input.iterator(ctx).map(row => Row(fields.map(f => eval(f, row +: ctx)), meta))
 
 class AliasOperator(input: Operator, alias: String) extends Operator:
-  require(input.meta.singleTable, s"row data not single table: ${input.meta}")
-
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
