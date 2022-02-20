@@ -46,7 +46,7 @@ object Main extends App:
       )
     )
 
-  decorate(expr)
+  rewrite(expr)
   pprint.pprintln(
     eval(expr, Nil)
 
