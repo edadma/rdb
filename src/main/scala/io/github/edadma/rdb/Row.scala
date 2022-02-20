@@ -3,7 +3,7 @@ package io.github.edadma.rdb
 import scala.language.postfixOps
 
 case class Row(data: IndexedSeq[Value], meta: Metadata):
-  var group = false
+  var project = true
 
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 
