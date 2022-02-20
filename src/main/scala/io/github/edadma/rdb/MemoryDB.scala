@@ -26,7 +26,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   private val columns = new ArrayBuffer[ColumnSpec]
   private val data = new ArrayBuffer[Array[Value]]
-  private var _meta: Metadata = Metadata(Nil)
+  private var _meta: Metadata = Metadata(Vector.empty)
 
   spec foreach {
     case s: ColumnSpec => addColumn(s)
@@ -40,7 +40,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =
     columns += spec
-    _meta = Metadata(columns.toSeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
+    _meta = Metadata(columns.toIndexedSeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
 
   def rows: Int = data.length
 

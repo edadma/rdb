@@ -79,7 +79,7 @@ class CrossOperator(input1: Operator, input2: Operator) extends Operator:
       y <- input2.iterator(ctx)
     yield Row(x.data ++ y.data, meta)
 
-class LeftOuterJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
+class LeftCrossJoinOperator(input1: Operator, input2: Operator, cond: Expr) extends Operator:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =

@@ -7,8 +7,8 @@ case class Row(data: IndexedSeq[Value], meta: Metadata):
 
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 
-case class Metadata(columns: Seq[ColumnMetadata]):
-  val width: Int = columns.length
+case class Metadata(columns: IndexedSeq[ColumnMetadata]):
+  lazy val width: Int = columns.length
   lazy val columnMap: Map[String, (Int, Type, Option[String])] =
     val ambiguous = columns groupBy (_.name) map ((k, v) => k -> (v.length > 1))
 

@@ -38,26 +38,26 @@ object Main extends App:
   )
 
   pprint.pprintln(
-//    eval(
-//      OperatorExpr(
-//        LeftOuterJoinOperator(
-//          e,
-//          AliasOperator(e, "m"),
-//          BinaryExpr(VariableExpr(Ident("m_id")), "=", VariableExpr(Ident("m.e_id")))
-//        )
-//      ),
-//      Nil
-//    )
-
     eval(
       OperatorExpr(
-        FilterOperator(
-          CrossOperator(e, AliasOperator(e, "m")),
+        LeftCrossJoinOperator(
+          e,
+          AliasOperator(e, "m"),
           BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
         )
       ),
       Nil
     )
+
+//    eval(
+//      OperatorExpr(
+//        FilterOperator(
+//          CrossOperator(e, AliasOperator(e, "m")),
+//          BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
+//        )
+//      ),
+//      Nil
+//    )
 
 //    eval(
 //      OperatorExpr(
