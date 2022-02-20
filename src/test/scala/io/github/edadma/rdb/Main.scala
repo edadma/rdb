@@ -1,10 +1,6 @@
 package io.github.edadma.rdb
 
-import pprint._
-
 object Main extends App:
-
-  val pprintln = pprint.pprintln
 
   val db = MemoryDB("test")
 //  val t = db.create("t", Seq(ColumnSpec("t_id", NumberType), ColumnSpec("t_text", StringType)))
@@ -41,7 +37,7 @@ object Main extends App:
     )
   )
 
-  pprintln(
+  pprint.pprintln(
 //    eval(
 //      OperatorExpr(
 //        LeftOuterJoinOperator(
@@ -57,7 +53,7 @@ object Main extends App:
       OperatorExpr(
         FilterOperator(
           CrossOperator(e, AliasOperator(e, "m")),
-          BinaryExpr(VariableExpr(Ident("m_id")), "=", VariableExpr(Ident("m.e_id")))
+          BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
         )
       ),
       Nil
