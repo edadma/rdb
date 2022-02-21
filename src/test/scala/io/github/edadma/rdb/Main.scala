@@ -45,6 +45,8 @@ object Main extends App:
       Seq(
         TableOperator(Ident("e"))
       ),
+      None,
+      None,
       None
     )
 

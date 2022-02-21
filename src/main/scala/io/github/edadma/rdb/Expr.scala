@@ -28,7 +28,13 @@ case class ApplyExpr(func: Ident, args: Seq[Expr]) extends UnknownTypeExpr
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr], typ: Type) extends Expr
 case class AggregateFunctionExpr(f: AggregateFunction, arg: Expr, typ: Type) extends Expr
 
-case class SelectExpr(exprs: ArraySeq[Expr], from: Seq[Expr], where: Option[Expr]) extends Operator
+case class SelectExpr(
+    exprs: ArraySeq[Expr],
+    from: Seq[Expr],
+    where: Option[Expr],
+    offset: Option[Int],
+    limit: Option[Int]
+) extends Operator
 
 case object StarExpr extends UnknownTypeExpr
 case class TableStarExpr(table: Ident) extends UnknownTypeExpr
