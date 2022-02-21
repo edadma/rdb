@@ -76,12 +76,16 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case BinaryExpr(left, _, right, _)  => column(left) | column(right)
           case _                              => false
 
-      val rewritten = projs map rewrite
+      val rewritten_projs = projs map rewrite
+      val aggregates = rewritten_projs exists aggregate
+      val columns = rewritten_projs exists column
+      val rewritten_proc = procRewrite(rel)
 
       ProcessOperator(
         ProjectProcess(
-          UngroupedProcess(procRewrite(rel), rewritten exists aggregate, rewritten exists column),
-          rewritten
+          if aggregates then UngroupedProcess(rewritten_proc, columns) else rewritten_proc,
+          rewritten_projs,
+          aggregates
         )
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))

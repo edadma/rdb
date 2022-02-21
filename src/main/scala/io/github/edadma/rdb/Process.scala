@@ -10,30 +10,24 @@ trait Process:
 
 type RowIterator = Iterator[Row]
 
-case class UngroupedProcess(input: Process, aggregate: Boolean, column: Boolean) extends Process:
-  val meta: Metadata = input.meta
-
-  def iterator(ctx: Seq[Row]): RowIterator =
-    val rows = input.iterator(ctx)
-
-    (aggregate, column) match
-      case (false, _) => rows
-      case (true, false) =>
-        val buf = rows to ArrayBuffer // todo: do this without buffering table
-
-        buf(buf.length - 1).copy(mode = AggregateMode.AccumulateReturn)
-        buf.iterator
-      case (true, true) =>
-        val buf = rows to ArrayBuffer // todo: do this without buffering table
-
-        buf.iterator ++ (buf map (_.copy(mode = AggregateMode.Return)) iterator)
-
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
-case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
+case class UngroupedProcess(input: Process, column: Boolean) extends Process:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rows = input.iterator(ctx) to ArrayBuffer // todo: do this without buffering table
+
+    if column then rows.iterator ++ (rows map (_.copy(mode = AggregateMode.Return)) iterator)
+    else
+      rows(rows.length - 1).copy(mode = AggregateMode.AccumulateReturn)
+      rows.iterator
+
+case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates: Boolean /*, metactx: Seq[Metadata]*/ )
+    extends Process:
   private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
@@ -62,9 +56,10 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
           fields
             .map(f => eval(f, row +: ctx, row.mode))
 
-        row.mode match
-          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta))
-          case _                                                     => Iterator.empty
+        (aggregrates, row.mode) match
+          case (true, AggregateMode.Return | AggregateMode.AccumulateReturn) | (false, _) =>
+            Iterator(Row(projected, meta))
+          case (true, _) => Iterator.empty
       )
 
 case class AliasProcess(input: Process, alias: String) extends Process:

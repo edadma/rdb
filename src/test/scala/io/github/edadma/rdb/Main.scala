@@ -40,8 +40,18 @@ object Main extends App:
   )
 
   val sql =
+//    SelectExpr(
+//      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
+//      Seq(
+//        TableOperator(Ident("e"))
+//      ),
+//      None,
+//      None,
+//      None
+//    )
+
     SelectExpr(
-      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
+      ArraySeq(ColumnExpr(Ident("name"))),
       Seq(
         TableOperator(Ident("e"))
       ),
@@ -49,14 +59,6 @@ object Main extends App:
       None,
       None
     )
-
-//    SelectExpr(
-//      ArraySeq(ColumnExpr(Ident("name"))),
-//      Seq(
-//        TableOperator(Ident("e"))
-//      ),
-//      None
-//    )
 
 //    SelectExpr(
 //      Seq(StarExpr),
