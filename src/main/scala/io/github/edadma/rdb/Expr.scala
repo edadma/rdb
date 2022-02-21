@@ -38,5 +38,5 @@ case class SelectExpr(
     limit: Option[Int]
 ) extends Operator
 
-case object StarExpr extends UnknownTypeExpr
+case class StarExpr(pos: Option[Pos] = None) extends UnknownTypeExpr
 case class TableStarExpr(table: Ident) extends UnknownTypeExpr

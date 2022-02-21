@@ -70,16 +70,50 @@ object Main extends App:
 //      None
 //    )
 
+//    SelectExpr(
+//      ArraySeq(StarExpr),
+//      Seq(
+//        LeftJoinOperator(
+//          TableOperator(Ident("e")),
+//          AliasOperator(TableOperator(Ident("e")), Ident("m")),
+//          ComparisonExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+//        )
+//      ),
+//      None,
+//      None,
+//      None
+//    )
+
     SelectExpr(
-      ArraySeq(StarExpr),
-      Seq(
-        LeftJoinOperator(
-          TableOperator(Ident("e")),
-          AliasOperator(TableOperator(Ident("e")), Ident("m")),
-          ComparisonExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+      ArraySeq(
+        ColumnExpr(Ident("name")),
+        ApplyExpr(
+          Ident("table"),
+          Seq(
+            SelectExpr(
+              ArraySeq(ColumnExpr(Ident("name"))),
+              Seq(TableOperator(Ident("e"))),
+              Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
+              None,
+              None
+            )
+          )
         )
       ),
-      None,
+      Seq(
+        AliasOperator(TableOperator(Ident("e")), Ident("outer"))
+      ),
+      Some(
+        ExistsExpr(
+          SelectExpr(
+            ArraySeq(StarExpr()),
+            Seq(TableOperator(Ident("e"))),
+            Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
+            None,
+            None
+          )
+        )
+      ),
       None,
       None
     )

@@ -38,8 +38,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
       val r2 =
-        if exprs == Seq(StarExpr) then r1
-        else ProjectOperator(r1, exprs map rewrite)
+        exprs match
+          case Seq(StarExpr(_)) => r1
+          case _                => ProjectOperator(r1, exprs map rewrite)
       val r3 =
         if offset.isDefined then OffsetOperator(r2, offset.get)
         else r2
