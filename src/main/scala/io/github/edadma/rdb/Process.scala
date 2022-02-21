@@ -16,7 +16,6 @@ case class FilterProcess(input: Process, cond: Expr) extends Process:
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
 case class UngroupedProcess(input: Process, column: Boolean) extends Process:
-  println(("UngroupedProcess", column))
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
@@ -29,7 +28,6 @@ case class UngroupedProcess(input: Process, column: Boolean) extends Process:
 
 case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates: Boolean /*, metactx: Seq[Metadata]*/ )
     extends Process:
-  println(("ProjectProcess", input, aggregrates))
   private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
@@ -58,7 +56,6 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates:
           fields
             .map(f => eval(f, row +: ctx, row.mode))
 
-        println(("ProjectProcess row", row))
         (aggregrates, row.mode) match
           case (false, _) | (true, AggregateMode.Return | AggregateMode.AccumulateReturn) =>
             Iterator(Row(projected, meta))

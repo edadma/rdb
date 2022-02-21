@@ -7,6 +7,8 @@ abstract class AggregateFunction(val name: String, val typ: Type) {
   def acc(v: Value): Value
 
   def result: Value
+
+  def init(): Unit
 }
 
 val aggregateFunction: Map[String, AggregateFunction] =
@@ -18,11 +20,9 @@ val aggregateFunction: Map[String, AggregateFunction] =
         count += 1
         NumberValue(count)
 
-      def result: NumberValue =
-        val res = NumberValue(count)
+      def result: NumberValue = NumberValue(count)
 
-        count = 0
-        res
+      def init(): Unit = count = 0
     },
     new AggregateFunction("sum", NumberType) {
       var sum: NumberValue = NumberValue(0)
@@ -31,10 +31,8 @@ val aggregateFunction: Map[String, AggregateFunction] =
         sum = BasicDAL.compute(PLUS, sum, v.asInstanceOf[NumberValue], NumberValue.from)
         sum
 
-      def result: NumberValue =
-        val res = sum
+      def result: NumberValue = sum
 
-        sum = NumberValue(0)
-        res
+      def init(): Unit = sum = NumberValue(0)
     }
   ) map (f => f.name -> f) toMap

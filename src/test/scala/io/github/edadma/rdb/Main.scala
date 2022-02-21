@@ -51,6 +51,16 @@ object Main extends App:
     )
 
 //    SelectExpr(
+//      ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
+//      Seq(
+//        TableOperator(Ident("e"))
+//      ),
+//      None,
+//      None,
+//      None
+//    )
+
+//    SelectExpr(
 //      ArraySeq(ColumnExpr(Ident("name"))),
 //      Seq(
 //        TableOperator(Ident("e"))
