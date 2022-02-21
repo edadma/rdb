@@ -68,9 +68,22 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case BinaryExpr(left, _, right, _)  => aggregate(left) | aggregate(right)
           case _                              => false
 
+      def column(expr: Expr): Boolean =
+        expr match
+          case _: (ColumnExpr | Operator)     => true
+          case ScalarFunctionExpr(_, args, _) => args exists column
+          case UnaryExpr(_, expr, _)          => column(expr)
+          case BinaryExpr(left, _, right, _)  => column(left) | column(right)
+          case _                              => false
+
       val rewritten = projs map rewrite
 
-      ProcessOperator(ProjectProcess(UngroupedProcess(procRewrite(rel), rewritten exists aggregate), rewritten))
+      ProcessOperator(
+        ProjectProcess(
+          UngroupedProcess(procRewrite(rel), rewritten exists aggregate, rewritten exists column),
+          rewritten
+        )
+      )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     // case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize

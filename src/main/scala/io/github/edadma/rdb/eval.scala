@@ -5,23 +5,26 @@ import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
-private val PLUS = Symbol("+")
-private val MINUS = Symbol("-")
-private val LT = Symbol("<")
-private val GT = Symbol(">")
-private val LTE = Symbol("<=")
-private val GTE = Symbol(">=")
-
-enum AggregateMode:
-  case Result, Accumulate, Disallow
+val PLUS = Symbol("+")
+val MINUS = Symbol("-")
+val LT = Symbol("<")
+val GT = Symbol(">")
+val LTE = Symbol("<=")
+val GTE = Symbol(">=")
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
     case AggregateFunctionExpr(f, arg, _) =>
-      f.acc(eval(arg, ctx, mode))
-
-      if mode == AggregateMode.Result then f.result
-      else NullValue
+      mode match
+        case AggregateMode.Return =>
+          f.result
+        case AggregateMode.Accumulate =>
+          f.acc(eval(arg, ctx, mode))
+          NullValue
+        case AggregateMode.AccumulateReturn =>
+          f.acc(eval(arg, ctx, mode))
+          f.result
+        case AggregateMode.Disallow => sys.error(s"aggregates not allowed here: $expr")
     case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx, mode)))
     case ProcessOperator(proc)          => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)

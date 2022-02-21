@@ -2,8 +2,10 @@ package io.github.edadma.rdb
 
 import scala.language.postfixOps
 
-case class Row(data: IndexedSeq[Value], meta: Metadata):
-  var result = false
+enum AggregateMode:
+  case Return, Accumulate, AccumulateReturn, Disallow
+
+case class Row(data: IndexedSeq[Value], meta: Metadata, mode: AggregateMode = AggregateMode.Accumulate)
 
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 

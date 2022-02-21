@@ -10,16 +10,23 @@ trait Process:
 
 type RowIterator = Iterator[Row]
 
-case class UngroupedProcess(input: Process, aggregate: Boolean) extends Process:
+case class UngroupedProcess(input: Process, aggregate: Boolean, column: Boolean) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val rows = input.iterator(ctx) to ArraySeq // todo: do this without buffering table
+    val rows = input.iterator(ctx)
 
-    if aggregate then rows(rows.length - 1).result = true
-    else rows foreach (r => r.result = true)
+    (aggregate, column) match
+      case (false, _) => rows
+      case (true, false) =>
+        val buf = rows to ArrayBuffer // todo: do this without buffering table
 
-    rows.iterator
+        buf(buf.length - 1).copy(mode = AggregateMode.AccumulateReturn)
+        buf.iterator
+      case (true, true) =>
+        val buf = rows to ArrayBuffer // todo: do this without buffering table
+
+        buf.iterator ++ (buf map (_.copy(mode = AggregateMode.Return)) iterator)
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
@@ -53,10 +60,11 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
       .flatMap(row =>
         val projected =
           fields
-            .map(f => eval(f, row +: ctx, if row.result then AggregateMode.Result else AggregateMode.Accumulate))
+            .map(f => eval(f, row +: ctx, row.mode))
 
-        if row.result then Iterator(Row(projected, meta))
-        else Iterator.empty
+        row.mode match
+          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta))
+          case _                                                     => Iterator.empty
       )
 
 case class AliasProcess(input: Process, alias: String) extends Process:

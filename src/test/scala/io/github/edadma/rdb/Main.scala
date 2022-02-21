@@ -41,7 +41,7 @@ object Main extends App:
 
   val sql =
     SelectExpr(
-      ArraySeq(ApplyExpr(Ident("count"), Seq(NullExpr()))),
+      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
       Seq(
         TableOperator(Ident("e"))
       ),
@@ -79,7 +79,7 @@ object Main extends App:
 //    )
 
   pprint.pprintln(
-    eval(rewrite(sql)(db), Nil, AggregateMode.Result)
+    eval(rewrite(sql)(db), Nil, AggregateMode.Return)
 
 //    eval(
 //      OperatorExpr(
