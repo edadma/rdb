@@ -100,9 +100,7 @@ object Main extends App:
           )
         )
       ),
-      Seq(
-        AliasOperator(TableOperator(Ident("e")), Ident("outer"))
-      ),
+      Seq(AliasOperator(TableOperator(Ident("e")), Ident("outer"))),
       Some(
         ExistsExpr(
           SelectExpr(
