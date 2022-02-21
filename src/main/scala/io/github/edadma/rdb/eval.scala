@@ -58,7 +58,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right, _) =>
+    case ComparisonExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
@@ -69,7 +69,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case "<=" => BasicDAL.relate(LTE, l, r)
           case ">=" => BasicDAL.relate(GTE, l, r)
       )
-    case BinaryExpr(left, op @ ("=" | "!="), right, _) =>
+    case ComparisonExpr(left, op @ ("=" | "!="), right) =>
       val l = eval(left, ctx, mode)
       val r = eval(right, ctx, mode)
 

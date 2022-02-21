@@ -20,6 +20,8 @@ trait BooleanTypeExpr extends Expr { val typ: Type = BooleanType }
 
 case class InExpr(value: Expr, array: Expr) extends BooleanTypeExpr
 case class ExistsExpr(subquery: Expr) extends BooleanTypeExpr
+case class BetweenExpr(value: Expr, lower: Expr, upper: Expr) extends BooleanTypeExpr
+case class ComparisonExpr(left: Expr, op: String, right: Expr) extends BooleanTypeExpr
 
 trait UnknownTypeExpr extends Expr { val typ: Type = UnknownType }
 

@@ -25,6 +25,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}")
 
       BinaryExpr(l, op, r, l.typ)
+    case ComparisonExpr(left, op, right) => ComparisonExpr(rewrite(left), op, rewrite(right))
     case SelectExpr(exprs, from, where, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match

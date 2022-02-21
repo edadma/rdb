@@ -40,15 +40,15 @@ object Main extends App:
   )
 
   val sql =
-    SelectExpr(
-      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
-      Seq(
-        TableOperator(Ident("e"))
-      ),
-      None,
-      None,
-      None
-    )
+//    SelectExpr(
+//      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
+//      Seq(
+//        TableOperator(Ident("e"))
+//      ),
+//      None,
+//      None,
+//      None
+//    )
 
 //    SelectExpr(
 //      ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
@@ -70,25 +70,19 @@ object Main extends App:
 //      None
 //    )
 
-//    SelectExpr(
-//      Seq(StarExpr),
-//      Seq(
-//        LeftJoinOperator(
-//          TableOperator(Ident("e")),
-//          AliasOperator(TableOperator(Ident("e")), Ident("m")),
-//          BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
-//        )
-//      ),
-//      None
-//    )
-
-//    ProcessOperator(
-//      LeftCrossJoinProcess(
-//        e,
-//        AliasProcess(e, "m"),
-//        BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
-//      )
-//    )
+    SelectExpr(
+      ArraySeq(StarExpr),
+      Seq(
+        LeftJoinOperator(
+          TableOperator(Ident("e")),
+          AliasOperator(TableOperator(Ident("e")), Ident("m")),
+          ComparisonExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+        )
+      ),
+      None,
+      None,
+      None
+    )
 
   pprint.pprintln(
     eval(rewrite(sql)(db), Nil, AggregateMode.Return)
