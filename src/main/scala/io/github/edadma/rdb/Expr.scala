@@ -16,6 +16,11 @@ case class StringExpr(s: String, pos: Option[Pos] = None) extends Expr { val typ
 case class NumberExpr(n: Number, pos: Option[Pos] = None) extends Expr { val typ: Type = NumberType }
 case class NullExpr(pos: Option[Pos] = None) extends Expr { val typ: Type = NullType }
 
+trait BooleanTypeExpr extends Expr { val typ: Type = BooleanType }
+
+case class InExpr(value: Expr, array: Expr) extends BooleanTypeExpr
+case class ExistsExpr(subquery: Expr) extends BooleanTypeExpr
+
 trait UnknownTypeExpr extends Expr { val typ: Type = UnknownType }
 
 case class ApplyExpr(func: Ident, args: Seq[Expr]) extends UnknownTypeExpr

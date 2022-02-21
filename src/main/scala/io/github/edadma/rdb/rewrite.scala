@@ -12,7 +12,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
             case Some(f) if args.length != 1 => sys.error("aggregate function take one argument")
             case Some(f)                     => AggregateFunctionExpr(f, rewrite(args.head), f.typ)
         case Some(f) => ScalarFunctionExpr(f, args map rewrite, f.typ)
-    // todo: UnaryExpr
+    // todo: UnaryExpr, InExpr, ExistsExpr
     case BinaryExpr(left, op, right, UnknownType) =>
       val l = rewrite(left)
       val r = rewrite(right)

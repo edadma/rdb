@@ -23,15 +23,11 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       if mode == AggregateMode.Result then f.result
       else NullValue
     case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx, mode)))
-    case UnaryExpr("EXISTS", expr, _) =>
-      BooleanValue(
-        aleval(expr, ctx, mode).nonEmpty
-      ) // todo: should not be considered as a unary operator. should be ExistsExpr()
-    case ProcessOperator(proc)      => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
-    case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
-    case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
-    case StringExpr(s, pos)         => StringValue(s).pos(pos)
-    case NullExpr(pos)              => NullValue
+    case ProcessOperator(proc)          => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
+    case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
+    case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
+    case StringExpr(s, pos)             => StringValue(s).pos(pos)
+    case NullExpr(pos)                  => NullValue
     case ColumnExpr(Ident(name, pos), _) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
@@ -45,6 +41,13 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       lookup(name, ctx) match
         case None      => sys.error(s"variable '$name' not found")
         case Some(res) => res
+    case InExpr(value, array) =>
+      val v = eval(value, ctx, mode)
+      val a = aleval(array, ctx, mode)
+
+      BooleanValue(a contains v)
+    case ExistsExpr(expr)        => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
+    case UnaryExpr("-", expr, _) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
     case BinaryExpr(left, op @ ("+" | "-"), right, _) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
@@ -52,11 +55,6 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case BinaryExpr(left, "IN", right, _) => // todo: should not be considered as a binary operator. should be InExpr()
-      val v = eval(left, ctx, mode)
-      val a = aleval(right, ctx, mode)
-
-      BooleanValue(a contains v)
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right, _) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
