@@ -1,10 +1,16 @@
 package io.github.edadma.rdb
 
+import scala.collection.immutable.ArraySeq
+
 def rewrite(expr: Expr)(implicit db: DB): Expr =
   expr match
     case ApplyExpr(Ident(func, pos), args) =>
       scalarFunction get func match
-        case None    => sys.error(s"unknown function '$func'")
+        case None =>
+          aggregateFunction get func match
+            case None                        => sys.error(s"unknown function '$func'")
+            case Some(f) if args.length != 1 => sys.error("aggregate function take one argument")
+            case Some(f)                     => AggregateFunctionExpr(f, rewrite(args.head), f.typ)
         case Some(f) => ScalarFunctionExpr(f, args map rewrite, f.typ)
     case BinaryExpr(left, op, right, UnknownType) =>
       val l = rewrite(left)
@@ -37,8 +43,11 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       db.table(name) match
         case Some(t) => ProcessOperator(t)
         case None    => sys.error(s"table '$name' not found")
+    // grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))
     case ProjectOperator(rel, projs) =>
-      ProcessOperator(ProjectProcess(procRewrite(rel), projs.toIndexedSeq map rewrite))
+      val rewritten = projs map rewrite
+
+      ProcessOperator(ProjectProcess(UngroupedProcess(procRewrite(rel)), rewritten))
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     // case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize

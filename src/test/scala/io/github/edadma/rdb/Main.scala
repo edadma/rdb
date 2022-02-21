@@ -1,5 +1,7 @@
 package io.github.edadma.rdb
 
+import scala.collection.immutable.ArraySeq
+
 object Main extends App:
 
   val db = MemoryDB("test")
@@ -37,18 +39,34 @@ object Main extends App:
     )
   )
 
-  val expr =
+  val sql =
+//    SelectExpr(
+//      ArraySeq(ApplyExpr(Ident("count"), Seq(NullExpr()))),
+//      Seq(
+//        TableOperator(Ident("e"))
+//      ),
+//      None
+//    )
+
     SelectExpr(
-      Seq(StarExpr),
+      ArraySeq(ColumnExpr(Ident("name"))),
       Seq(
-        LeftJoinOperator(
-          TableOperator(Ident("e")),
-          AliasOperator(TableOperator(Ident("e")), Ident("m")),
-          BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
-        )
+        TableOperator(Ident("e"))
       ),
       None
     )
+
+//    SelectExpr(
+//      Seq(StarExpr),
+//      Seq(
+//        LeftJoinOperator(
+//          TableOperator(Ident("e")),
+//          AliasOperator(TableOperator(Ident("e")), Ident("m")),
+//          BinaryExpr(ColumnExpr(Ident("e.m_id")), "=", ColumnExpr(Ident("m.e_id")))
+//        )
+//      ),
+//      None
+//    )
 
 //    ProcessOperator(
 //      LeftCrossJoinProcess(
@@ -59,7 +77,7 @@ object Main extends App:
 //    )
 
   pprint.pprintln(
-    eval(rewrite(expr)(db), Nil)
+    eval(rewrite(sql)(db), Nil, AggregateMode.Result)
 
 //    eval(
 //      OperatorExpr(

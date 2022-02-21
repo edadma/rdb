@@ -1,5 +1,6 @@
 package io.github.edadma.rdb
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
@@ -35,16 +36,16 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = data.iterator map (r => Row(r.toIndexedSeq, meta))
+  def iterator(ctx: Seq[Row]): RowIterator = data.iterator map (r => Row(r to ArraySeq, meta))
 
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =
     columns += spec
-    _meta = Metadata(columns.toIndexedSeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
+    _meta = Metadata(columns to ArraySeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
 
   def rows: Int = data.length
 
-  def row(idx: Int): Row = Row(data(idx).toIndexedSeq, meta)
+  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta)
 
   def insert(row: Map[String, Value]): Map[String, Value] =
     val arr = new Array[Value](meta.width)

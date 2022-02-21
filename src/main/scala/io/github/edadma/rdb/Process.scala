@@ -1,12 +1,23 @@
 package io.github.edadma.rdb
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
+import scala.collection.mutable.ArrayBuffer
 
 trait Process:
   def iterator(ctx: Seq[Row]): RowIterator
   def meta: Metadata
 
 type RowIterator = Iterator[Row]
+
+case class UngroupedProcess(input: Process) extends Process:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rows = input.iterator(ctx) to ArraySeq // todo: do this without buffering table
+
+    rows(rows.length - 1).result = true
+    rows.iterator
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
@@ -31,11 +42,20 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
         lookup(name, ctx) match
           case None             => sys.error(s"variable '$name' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
-      case (expr: Expr, idx) => ColumnMetadata(None, s"${idx + 1}", expr.typ)
+      case (expr: Expr, idx) => ColumnMetadata(None, s"col_${idx + 1}", expr.typ)
     })
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    input.iterator(ctx).map(row => Row(fields.map(f => eval(f, row +: ctx)), meta))
+    input
+      .iterator(ctx)
+      .flatMap(row =>
+        val projected =
+          fields
+            .map(f => eval(f, row +: ctx, if row.result then AggregateMode.Result else AggregateMode.Accumulate))
+
+        if row.result then Iterator(Row(projected, meta))
+        else Iterator.empty
+      )
 
 case class AliasProcess(input: Process, alias: String) extends Process:
   val meta: Metadata = Metadata(input.meta.columns map (_.copy(table = Some(alias))))

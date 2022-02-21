@@ -12,14 +12,23 @@ private val GT = Symbol(">")
 private val LTE = Symbol("<=")
 private val GTE = Symbol(">=")
 
-def eval(expr: Expr, ctx: Seq[Row]): Value =
+enum AggregateMode:
+  case Result, Accumulate, Disallow
+
+def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
-    case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx)))
-    case UnaryExpr("EXISTS", expr, _)   => BooleanValue(aleval(expr, ctx).nonEmpty)
+    case AggregateFunctionExpr(f, arg, _) =>
+      f.acc(eval(arg, ctx, mode))
+
+      if mode == AggregateMode.Result then f.result
+      else NullValue
+    case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx, mode)))
+    case UnaryExpr("EXISTS", expr, _)   => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case ProcessOperator(proc)          => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
     case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)             => StringValue(s).pos(pos)
+    case NullExpr(pos)                  => NullValue
     case ColumnExpr(Ident(name, pos), _) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
@@ -34,20 +43,20 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case None      => sys.error(s"variable '$name' not found")
         case Some(res) => res
     case BinaryExpr(left, op @ ("+" | "-"), right, _) =>
-      val l = neval(left, ctx)
-      val r = neval(right, ctx)
+      val l = neval(left, ctx, mode)
+      val r = neval(right, ctx, mode)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
     case BinaryExpr(left, "IN", right, _) =>
-      val v = eval(left, ctx)
-      val a = aleval(right, ctx)
+      val v = eval(left, ctx, mode)
+      val a = aleval(right, ctx, mode)
 
       BooleanValue(a contains v)
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right, _) =>
-      val l = neval(left, ctx)
-      val r = neval(right, ctx)
+      val l = neval(left, ctx, mode)
+      val r = neval(right, ctx, mode)
 
       BooleanValue(
         op match
@@ -57,8 +66,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
           case ">=" => BasicDAL.relate(GTE, l, r)
       )
     case BinaryExpr(left, op @ ("=" | "!="), right, _) =>
-      val l = eval(left, ctx)
-      val r = eval(right, ctx)
+      val l = eval(left, ctx, mode)
+      val r = eval(right, ctx, mode)
 
       BooleanValue(
         op match
@@ -68,8 +77,9 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean =
 //  println((expr, eval(expr, ctx).asInstanceOf[BooleanValue].b, ctx))
-  eval(expr, ctx).asInstanceOf[BooleanValue].b
+  eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 
-def neval(expr: Expr, ctx: Seq[Row]): NumberValue = eval(expr, ctx).asInstanceOf[NumberValue]
+def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue = eval(expr, ctx, mode).asInstanceOf[NumberValue]
 
-def aleval(expr: Expr, ctx: Seq[Row]): ArrayLikeValue = eval(expr, ctx).asInstanceOf[ArrayLikeValue]
+def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
+  eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]
