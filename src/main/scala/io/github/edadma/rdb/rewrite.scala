@@ -12,6 +12,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
             case Some(f) if args.length != 1 => sys.error("aggregate function take one argument")
             case Some(f)                     => AggregateFunctionExpr(f, rewrite(args.head), f.typ)
         case Some(f) => ScalarFunctionExpr(f, args map rewrite, f.typ)
+    // todo: UnaryExpr
     case BinaryExpr(left, op, right, UnknownType) =>
       val l = rewrite(left)
       val r = rewrite(right)
@@ -45,9 +46,16 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         case None    => sys.error(s"table '$name' not found")
     // grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))
     case ProjectOperator(rel, projs) =>
+      def aggregate(expr: Expr): Boolean =
+        expr match
+          case _: AggregateFunctionExpr      => true
+          case UnaryExpr(_, expr, _)         => aggregate(expr)
+          case BinaryExpr(left, _, right, _) => aggregate(left) | aggregate(right)
+          case _                             => false
+
       val rewritten = projs map rewrite
 
-      ProcessOperator(ProjectProcess(UngroupedProcess(procRewrite(rel)), rewritten))
+      ProcessOperator(ProjectProcess(UngroupedProcess(procRewrite(rel), rewritten exists aggregate), rewritten))
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     // case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize

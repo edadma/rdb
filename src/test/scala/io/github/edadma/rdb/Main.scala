@@ -40,21 +40,21 @@ object Main extends App:
   )
 
   val sql =
-//    SelectExpr(
-//      ArraySeq(ApplyExpr(Ident("count"), Seq(NullExpr()))),
-//      Seq(
-//        TableOperator(Ident("e"))
-//      ),
-//      None
-//    )
-
     SelectExpr(
-      ArraySeq(ColumnExpr(Ident("name"))),
+      ArraySeq(ApplyExpr(Ident("count"), Seq(NullExpr()))),
       Seq(
         TableOperator(Ident("e"))
       ),
       None
     )
+
+//    SelectExpr(
+//      ArraySeq(ColumnExpr(Ident("name"))),
+//      Seq(
+//        TableOperator(Ident("e"))
+//      ),
+//      None
+//    )
 
 //    SelectExpr(
 //      Seq(StarExpr),

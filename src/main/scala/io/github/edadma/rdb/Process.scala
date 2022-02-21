@@ -10,13 +10,15 @@ trait Process:
 
 type RowIterator = Iterator[Row]
 
-case class UngroupedProcess(input: Process) extends Process:
+case class UngroupedProcess(input: Process, aggregate: Boolean) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
     val rows = input.iterator(ctx) to ArraySeq // todo: do this without buffering table
 
-    rows(rows.length - 1).result = true
+    if aggregate then rows(rows.length - 1).result = true
+    else rows foreach (r => r.result = true)
+
     rows.iterator
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:

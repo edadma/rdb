@@ -23,12 +23,15 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       if mode == AggregateMode.Result then f.result
       else NullValue
     case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx, mode)))
-    case UnaryExpr("EXISTS", expr, _)   => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
-    case ProcessOperator(proc)          => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
-    case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
-    case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
-    case StringExpr(s, pos)             => StringValue(s).pos(pos)
-    case NullExpr(pos)                  => NullValue
+    case UnaryExpr("EXISTS", expr, _) =>
+      BooleanValue(
+        aleval(expr, ctx, mode).nonEmpty
+      ) // todo: should not be considered as a unary operator. should be ExistsExpr()
+    case ProcessOperator(proc)      => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
+    case NumberExpr(n: Int, pos)    => NumberValue(IntType, n).pos(pos)
+    case NumberExpr(n: Double, pos) => NumberValue(DoubleType, n).pos(pos)
+    case StringExpr(s, pos)         => StringValue(s).pos(pos)
+    case NullExpr(pos)              => NullValue
     case ColumnExpr(Ident(name, pos), _) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
@@ -49,7 +52,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case BinaryExpr(left, "IN", right, _) =>
+    case BinaryExpr(left, "IN", right, _) => // todo: should not be considered as a binary operator. should be InExpr()
       val v = eval(left, ctx, mode)
       val a = aleval(right, ctx, mode)
 
