@@ -36,7 +36,7 @@ case class SelectExpr(
     where: Option[Expr],
     offset: Option[Int],
     limit: Option[Int]
-) extends Operator
+) extends Expr { val typ: Type = TableType }
 
 case class StarExpr(pos: Option[Pos] = None) extends UnknownTypeExpr
 case class TableStarExpr(table: Ident) extends UnknownTypeExpr

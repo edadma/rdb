@@ -1,3 +1,42 @@
+ThisBuild / scalaVersion := "3.1.1"
+ThisBuild / scalacOptions ++=
+  Seq(
+    "-deprecation",
+    "-feature",
+    "-unchecked",
+    "-language:postfixOps",
+    "-language:implicitConversions",
+    "-language:existentials",
+    "-language:dynamics"
+  )
+ThisBuild / organization := "io.github.edadma"
+ThisBuild / githubOwner := "edadma"
+ThisBuild / githubRepository := name.value
+ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
+ThisBuild / libraryDependencies ++=
+  Seq(
+    "io.github.edadma" %% "dal" % "0.1.6"
+  )
+ThisBuild / libraryDependencies ++=
+  Seq(
+    "com.github.scopt" %% "scopt" % "4.0.1",
+    // "com.outr" %% "reactify" % "4.0.7",
+    // "com.lihaoyi" %%% "fastparse" % "2.3.3" // waiting for Scala 3 support
+    "com.lihaoyi" %% "pprint" % "0.7.1" % "test"
+  )
+ThisBuild / mainClass := Some(s"${organization.value}.${name.value}.Main")
+
+lazy val shared = project
+
+lazy val core = project
+  .dependsOn(shared)
+  .settings(
+    name := "rdb",
+    version := "0.1.0"
+    //    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.11" % "test",
+  )
+
+/*
 name := "rdb"
 version := "0.1.0"
 scalaVersion := "3.1.1" // 2.13.8"
@@ -28,6 +67,7 @@ libraryDependencies ++= Seq(
 publishMavenStyle := true
 Test / publishArtifact := false
 licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
+ */
 
 /*
 ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")

@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, TypedNumber, Type => DType}
+import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
 trait Value(val vtyp: Type):
   var pos: Option[Pos] = None

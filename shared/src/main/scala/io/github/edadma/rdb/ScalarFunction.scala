@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import math._
+import scala.math.*
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 

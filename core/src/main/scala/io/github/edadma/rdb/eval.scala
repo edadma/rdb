@@ -5,13 +5,6 @@ import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
-val PLUS = Symbol("+")
-val MINUS = Symbol("-")
-val LT = Symbol("<")
-val GT = Symbol(">")
-val LTE = Symbol("<=")
-val GTE = Symbol(">=")
-
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
     case AggregateFunctionExpr(f, arg, _) =>
