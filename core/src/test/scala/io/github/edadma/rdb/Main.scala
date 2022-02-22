@@ -50,15 +50,15 @@ object Main extends App:
 //      None
 //    )
 
-//    SelectExpr(
-//      ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
-//      Seq(
-//        TableOperator(Ident("e"))
-//      ),
-//      None,
-//      None,
-//      None
-//    )
+    SelectExpr(
+      ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
+      Seq(
+        TableOperator(Ident("e"))
+      ),
+      None,
+      None,
+      None
+    )
 
 //    SelectExpr(
 //      ArraySeq(ColumnExpr(Ident("name"))),
@@ -84,40 +84,39 @@ object Main extends App:
 //      None
 //    )
 
-    SelectExpr(
-      ArraySeq(
-        ColumnExpr(Ident("name")),
-        ApplyExpr(
-          Ident("table"),
-          Seq(
-            SelectExpr(
-              ArraySeq(ColumnExpr(Ident("name"))),
-              Seq(TableOperator(Ident("e"))),
-              Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
-              None,
-              None
-            )
-          )
-        )
-      ),
-      Seq(AliasOperator(TableOperator(Ident("e")), Ident("outer"))),
-      Some(
-        ExistsExpr(
-          SelectExpr(
-            ArraySeq(StarExpr()),
-            Seq(TableOperator(Ident("e"))),
-            Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
-            None,
-            None
-          )
-        )
-      ),
-      None,
-      None
-    )
+//    SelectExpr(
+//      ArraySeq(
+//        ColumnExpr(Ident("name")),
+//        ApplyExpr(
+//          Ident("table"),
+//          Seq(
+//            SelectExpr(
+//              ArraySeq(ColumnExpr(Ident("name"))),
+//              Seq(TableOperator(Ident("e"))),
+//              Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
+//              None,
+//              None
+//            )
+//          )
+//        )
+//      ),
+//      Seq(AliasOperator(TableOperator(Ident("e")), Ident("outer"))),
+//      Some(
+//        ExistsExpr(
+//          SelectExpr(
+//            ArraySeq(StarExpr()),
+//            Seq(TableOperator(Ident("e"))),
+//            Some(ComparisonExpr(ColumnExpr(Ident("outer.e_id")), "=", ColumnExpr(Ident("m_id")))),
+//            None,
+//            None
+//          )
+//        )
+//      ),
+//      None,
+//      None
+//    )
 
-  pprint.pprintln(
-    eval(rewrite(sql)(db), Nil, AggregateMode.Return)
+  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
 //    eval(
 //      OperatorExpr(
@@ -163,7 +162,6 @@ object Main extends App:
 //      ),
 //      Nil
 //    )
-  )
 
 //  val myChannel = Channel[String] // Creates a Channel that receives Strings
 //  val myVar = Var[Int](5) // Creates a Var containing the explicit value `5`
