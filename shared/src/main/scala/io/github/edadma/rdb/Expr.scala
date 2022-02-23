@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
 
-type Pos = Int | Null
+type Pos = Int
 
 case class Ident(pos: Pos, name: String)
 
