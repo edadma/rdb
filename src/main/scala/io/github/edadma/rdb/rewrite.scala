@@ -27,7 +27,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       BinaryExpr(lp, l, op, rp, r, l.typ)
     case BinaryExpr(lp, left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), rp, right, _) =>
       BinaryExpr(lp, rewrite(left), op, rp, rewrite(right))
-    case SelectExpr(exprs, from, where, offset, limit) =>
+    case SQLSelectExpr(exprs, from, where, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e

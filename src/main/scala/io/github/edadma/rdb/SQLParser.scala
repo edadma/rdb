@@ -8,42 +8,42 @@ object SQLParser extends RegexParsers with PackratParsers {
 
   lazy val pos: PackratParser[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
-  def kw(s: String): Regex = (s"(?i)$s\\b").r
+  def kw(s: String): Regex = s"(?i)$s\\b".r
 
-  lazy val query: PackratParser[OQLQuery] =
-    entityName ~ not(".") ~ project ~ opt(select) ~ opt(group) ~ opt(order) ~ restrict ^^ {
-      case e ~ _ ~ p ~ s ~ g ~ o ~ Seq(lim, off) => OQLQuery(e, null, null, p, s, g, o, lim, off)
+  lazy val query: PackratParser[SQLSelectExpr] =
+    kw("select") ~ expressions ~ opt(select) ~ opt(group) ~ opt(order) ~ restrict ^^ {
+      case e ~ _ ~ p ~ s ~ g ~ o ~ Seq(lim, off) => SQLSelectExpr(e, null, null, p, s, g, o, lim, off)
     }
 
-  lazy val expressions: PackratParser[List[OQLExpression]] = rep1sep(expression, ",")
+  lazy val expressions: PackratParser[List[Expr]] = rep1sep(expression, ",")
 
-  lazy val booleanExpression: PackratParser[OQLExpression] = orExpression
+  lazy val booleanExpression: PackratParser[Expr] = orExpression
 
-  lazy val orExpression: PackratParser[OQLExpression] =
-    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => InfixOQLExpression(l, "OR", r) } |
+  lazy val orExpression: PackratParser[Expr] =
+    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l.pos, l, "OR", r) } |
       andExpression
 
-  lazy val andExpression: PackratParser[OQLExpression] =
-    andExpression ~ kw("AND") ~ notExpression ^^ { case l ~ _ ~ r => InfixOQLExpression(l, "AND", r) } |
+  lazy val andExpression: PackratParser[Expr] =
+    andExpression ~ kw("AND") ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l.pos, l, "AND", r) } |
       notExpression
 
-  lazy val notExpression: PackratParser[OQLExpression] =
-    kw("NOT") ~> booleanPrimary ^^ (e => PrefixOQLExpression("NOT", e)) | booleanPrimary
+  lazy val notExpression: PackratParser[Expr] =
+    kw("NOT") ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
 
-  lazy val booleanPrimary: PackratParser[OQLExpression] =
-    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => InfixOQLExpression(l, c, r) } |
+  lazy val booleanPrimary: PackratParser[Expr] =
+    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       expression ~ ((kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN") | kw("BETWEEN")) ~ expression ~ kw(
         "AND"
       ) ~ expression ^^ { case e ~ b ~ l ~ _ ~ u =>
-        BetweenOQLExpression(e, b, l, u)
+        BetweenExpr(e, b, l, u)
       } |
-      expression ~ isNull ^^ { case e ~ n => PostfixOQLExpression(e, n) } |
-      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => InArrayOQLExpression(e, i, es) } |
-      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryOQLExpression(e, i, q) } |
-      kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsOQLExpression |
+      expression ~ isNull ^^ { case e ~ n => UnaryExpr(e.pos, n, e) } |
+      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => InExpr(e.pos, e, i, es) } |
+      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
+      kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr |
       booleanLiteral |
       qualifiedAttributeExpression |
-      "(" ~> booleanExpression <~ ")" ^^ GroupedOQLExpression
+      "(" ~> booleanExpression <~ ")" ^^ GroupedExpr
 
   lazy val isNull: PackratParser[String] =
     kw("IS") ~ kw("NULL") ^^^ "IS NULL" | kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
@@ -55,60 +55,59 @@ object SQLParser extends RegexParsers with PackratParsers {
       "NOT"
     ) ~ kw("ILIKE") ^^^ "NOT ILIKE")
 
-  lazy val booleanLiteral: PackratParser[OQLExpression] =
-    (kw("TRUE") | kw("FALSE") | kw("NULL")) ^^ BooleanOQLExpression
+  lazy val booleanLiteral: PackratParser[Expr] =
+    (kw("TRUE") | kw("FALSE") | kw("NULL")) ^^ BooleanExpr
 
-  lazy val expression: PackratParser[OQLExpression] = additive
+  lazy val expression: PackratParser[Expr] = additive
 
-  lazy val additive: PackratParser[OQLExpression] =
+  lazy val additive: PackratParser[Expr] =
     additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
-      InfixOQLExpression(l, o, r)
+      BinaryExpr(l, o, r)
     } |
       multiplicative
 
-  lazy val multiplicative: PackratParser[OQLExpression] =
+  lazy val multiplicative: PackratParser[Expr] =
     multiplicative ~ ("*" | "/") ~ primary ^^ { case l ~ o ~ r =>
-      InfixOQLExpression(l, o, r)
+      BinaryExpr(l, o, r)
     } |
       primary
 
-  lazy val literalExpression: PackratParser[OQLExpression] =
-    float ^^ FloatOQLExpression |
-      integer ^^ IntegerOQLExpression |
+  lazy val literalExpression: PackratParser[Expr] =
+    float ^^ FloatExpr |
+      integer ^^ IntegerExpr |
       stringLiteral |
       booleanLiteral
 
-  lazy val stringLiteral: PackratParser[OQLExpression] =
-    string ^^ (unescape _ andThen StringOQLExpression)
+  lazy val stringLiteral: PackratParser[Expr] =
+    string ^^ (unescape _ andThen StringExpr)
 
-  lazy val pair: PackratParser[(String, OQLExpression)] =
+  lazy val pair: PackratParser[(String, Expr)] =
     doubleQuoteString ~ ":" ~ (arrayExpression | objectExpression | literalExpression) ^^ { case k ~ _ ~ v =>
       (k, v)
     }
 
-  lazy val arrayExpression: PackratParser[OQLExpression] =
-    "[" ~> repsep(arrayExpression | objectExpression | literalExpression, ",") <~ "]" ^^ ArrayOQLExpression
+  lazy val arrayExpression: PackratParser[Expr] =
+    "[" ~> repsep(arrayExpression | objectExpression | literalExpression, ",") <~ "]" ^^ ArrayExpr
 
-  lazy val objectExpression: PackratParser[OQLExpression] =
-    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectOQLExpression
+  lazy val objectExpression: PackratParser[Expr] =
+    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr
 
-  lazy val jsonExpression: PackratParser[OQLExpression] =
-    (arrayExpression | objectExpression) ^^ JSONOQLExpression
+  lazy val jsonExpression: PackratParser[Expr] =
+    (arrayExpression | objectExpression) ^^ JSONExpr
 
-  lazy val primary: PackratParser[OQLExpression] =
+  lazy val primary: PackratParser[Expr] =
     literalExpression |
       jsonExpression |
       starExpression |
       caseExpression |
       applyExpression |
       qualifiedAttributeExpression |
-      "&" ~> identifiers ^^ (ReferenceOQLExpression(_)) |
-      "-" ~> primary ^^ (e => PrefixOQLExpression("-", e)) |
-      "(" ~> query <~ ")" ^^ QueryOQLExpression |
-      "(" ~> expression <~ ")" ^^ GroupedOQLExpression
+      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
+      "(" ~> query <~ ")" ^^ SubqueryExpr |
+      "(" ~> expression <~ ")" ^^ GroupedExpr
 
-  lazy val caseExpression: PackratParser[CaseOQLExpression] =
-    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ { case ws ~ e => CaseOQLExpression(ws, e) }
+  lazy val caseExpression: PackratParser[CaseExpr] =
+    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ { case ws ~ e => CaseExpr(ws, e) }
 
   lazy val when: PackratParser[OQLWhen] =
     kw("WHEN") ~ booleanExpression ~ kw("THEN") ~ expression ^^ { case _ ~ l ~ _ ~ e => OQLWhen(l, e) }
@@ -130,13 +129,13 @@ object SQLParser extends RegexParsers with PackratParsers {
 
   lazy val string: PackratParser[String] = singleQuoteString | doubleQuoteString
 
-  def parseQuery(input: String): OQLQuery =
+  def parseQuery(input: String): SQLSelectExpr =
     parseAll(phrase(query), new PackratReader(new CharSequenceReader(input))) match {
       case Success(result, _)     => result
       case NoSuccess(error, rest) => problem(rest.pos, error, input)
     }
 
-  def parseBooleanExpression(input: String): OQLExpression =
+  def parseBooleanExpression(input: String): Expr =
     parseAll(phrase(booleanExpression), new PackratReader(new CharSequenceReader(input))) match {
       case Success(result, _)     => result
       case NoSuccess(error, rest) => problem(rest.pos, error, input)

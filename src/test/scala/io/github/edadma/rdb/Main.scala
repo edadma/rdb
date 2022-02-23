@@ -50,7 +50,7 @@ object Main extends App:
 //      None
 //    )
 
-    SelectExpr(
+    SQLSelectExpr(
       ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
       Seq(
         TableOperator(Ident("e"))
