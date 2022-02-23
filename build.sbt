@@ -69,7 +69,7 @@ lazy val parser = project
         "com.lihaoyi" %% "sourcecode" % "0.2.8"
       )
   )
-*/
+ */
 
 name := "rdb"
 version := "0.1.0"
@@ -93,9 +93,10 @@ libraryDependencies ++= Seq(
   "io.github.edadma" %% "dal" % "0.1.6"
 )
 libraryDependencies ++= Seq(
+  "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
+)
+libraryDependencies ++= Seq(
   "com.github.scopt" %% "scopt" % "4.0.1",
-  // "com.outr" %% "reactify" % "4.0.7",
-  "org.typelevel" %% "cats-parse" % "0.3.6",
   "com.lihaoyi" %% "pprint" % "0.7.1"
 )
 publishMavenStyle := true

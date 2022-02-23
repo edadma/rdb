@@ -116,61 +116,6 @@ object Main extends App:
 //      None
 //    )
 
-  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
+//  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
-//    eval(
-//      OperatorExpr(
-//        FilterOperator(
-//          CrossOperator(e, AliasOperator(e, "m")),
-//          BinaryExpr(VariableExpr(Ident("e.m_id")), "=", VariableExpr(Ident("m.e_id")))
-//        )
-//      ),
-//      Nil
-//    )
-
-//    eval(
-//      OperatorExpr(
-//        ProjectOperator(
-//          FilterOperator(
-//            AliasOperator(e, "outer"),
-//            UnaryExpr(
-//              "EXISTS",
-//              OperatorExpr(
-//                FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id"))))
-//              )
-//            )
-//          ),
-//          Vector(
-//            VariableExpr(Ident("name")),
-//            ApplyExpr(
-//              Ident("table"),
-//              Seq(
-//                OperatorExpr(
-//                  ProjectOperator(
-//                    FilterOperator(e, BinaryExpr(VariableExpr(Ident("outer.e_id")), "=", VariableExpr(Ident("m_id")))),
-//                    Vector(
-//                      VariableExpr(Ident("name"))
-//                    ),
-//                    Nil // should be equivalent to Seq(AliasOperator(e, "outer").meta)
-//                  )
-//                )
-//              )
-//            )
-//          ),
-//          Nil
-//        )
-//      ),
-//      Nil
-//    )
-
-//  val myChannel = Channel[String] // Creates a Channel that receives Strings
-//  val myVar = Var[Int](5) // Creates a Var containing the explicit value `5`
-//  val myVal = Val[Int](myVar + 5) // Create a Val containing the sum of `myVar` + `5`
-//
-//  myVal.attach { newValue =>
-//    println(s"myVal = $newValue")
-//  }
-//
-//  println(myVal)
-//
-//  myVar := 10
+  val input = "SELECT * FROM table"
