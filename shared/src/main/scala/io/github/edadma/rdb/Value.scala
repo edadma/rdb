@@ -11,13 +11,12 @@ trait Value(val vtyp: Type):
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber
 
-object NumberValue {
+object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
 
   def apply(n: Double): NumberValue = NumberValue(DDoubleType, n)
 
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
-}
 
 case object NullValue extends Value(NullType)
 

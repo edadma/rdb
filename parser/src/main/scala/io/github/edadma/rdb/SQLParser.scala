@@ -56,12 +56,10 @@ object SQLParser {
 
   def comparitive[_: P]: P[Expr] =
     P(
-      (Index ~ range ~ (sym(StringIn("<=", ">=", "!=", "=", "<", ">")).! ~ Index ~ range)
-        .map(Predicate.tupled)
-        .rep)
+      Index ~ or ~ optional(sym(StringIn("<=", ">=", "!=", "=", "<", ">")).! ~ Index ~ or)
         .map {
-          case (_, left, Nil)     => left
-          case (pos, left, right) => CompareExpr(pos, left, right)
+          case (_, left, None)                   => left
+          case (lp, left, Some((op, rp, right))) => BinaryExpr(lp, left, op, rp, right, UnknownType)
         }
     )
 
@@ -121,7 +119,7 @@ object SQLParser {
         kw("null").map(_ => NullExpr) |
         ("'" ~~ (strChars('\'') | escape).repX.! ~~ "'").map(StringExpr) |
         ("\"" ~~ (strChars('"') | escape).repX.! ~~ "\"").map(StringExpr) |
-        "[" ~ expression.rep(sep = ",").map(SeqExpr) ~ "]" |
+//        "[" ~ expression.rep(sep = ",").map(SeqExpr) ~ "]" |
         "(" ~ expression ~ ")"
     )
 
