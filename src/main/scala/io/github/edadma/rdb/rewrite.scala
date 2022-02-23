@@ -4,7 +4,7 @@ import scala.collection.immutable.ArraySeq
 
 def rewrite(expr: Expr)(implicit db: DB): Expr =
   expr match
-    case ApplyExpr(Ident(func, pos), args) =>
+    case ApplyExpr(Ident(pos, func), args) =>
       scalarFunction get func match
         case None =>
           aggregateFunction get func match
@@ -14,18 +14,19 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         case Some(f) => ScalarFunctionExpr(f, args map rewrite, f.typ)
     case InExpr(value, array) => InExpr(rewrite(value), rewrite(array))
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery))
-    case UnaryExpr(op, expr, UnknownType) =>
+    case UnaryExpr(op, pos, expr, UnknownType) =>
       val e = rewrite(expr)
 
-      UnaryExpr(op, e, e.typ)
-    case BinaryExpr(left, op, right, UnknownType) =>
+      UnaryExpr(op, pos, e, e.typ)
+    case BinaryExpr(lp, left, op @ ("+" | "-" | "*" | "/" | "and" | "or"), rp, right, UnknownType) =>
       val l = rewrite(left)
       val r = rewrite(right)
 
       if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}")
 
-      BinaryExpr(l, op, r, l.typ)
-    case ComparisonExpr(left, op, right) => ComparisonExpr(rewrite(left), op, rewrite(right))
+      BinaryExpr(lp, l, op, rp, r, l.typ)
+    case BinaryExpr(lp, left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), rp, right, _) =>
+      BinaryExpr(lp, rewrite(left), op, rp, rewrite(right))
     case SelectExpr(exprs, from, where, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
@@ -55,8 +56,8 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
       ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
-    case AliasOperator(rel, Ident(alias, pos)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
-    case TableOperator(Ident(name, pos)) =>
+    case AliasOperator(rel, Ident(pos, alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
+    case TableOperator(Ident(pos, name)) =>
       db.table(name) match
         case Some(t) => ProcessOperator(t)
         case None    => sys.error(s"table '$name' not found")
@@ -64,19 +65,19 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case ProjectOperator(rel, projs) =>
       def aggregate(expr: Expr): Boolean =
         expr match
-          case _: AggregateFunctionExpr       => true
-          case ScalarFunctionExpr(_, args, _) => args exists aggregate
-          case UnaryExpr(_, expr, _)          => aggregate(expr)
-          case BinaryExpr(left, _, right, _)  => aggregate(left) | aggregate(right)
-          case _                              => false
+          case _: AggregateFunctionExpr            => true
+          case ScalarFunctionExpr(_, args, _)      => args exists aggregate
+          case UnaryExpr(_, _, expr, _)            => aggregate(expr)
+          case BinaryExpr(_, left, _, _, right, _) => aggregate(left) | aggregate(right)
+          case _                                   => false
 
       def column(expr: Expr): Boolean =
         expr match
-          case _: (ColumnExpr | Operator)     => true
-          case ScalarFunctionExpr(_, args, _) => args exists column
-          case UnaryExpr(_, expr, _)          => column(expr)
-          case BinaryExpr(left, _, right, _)  => column(left) | column(right)
-          case _                              => false
+          case _: (ColumnExpr | Operator)          => true
+          case ScalarFunctionExpr(_, args, _)      => args exists column
+          case UnaryExpr(_, _, expr, _)            => column(expr)
+          case BinaryExpr(_, left, _, _, right, _) => column(left) | column(right)
+          case _                                   => false
 
       val rewritten_projs = projs map rewrite
       val aggregates = rewritten_projs exists aggregate

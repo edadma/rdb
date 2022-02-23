@@ -24,7 +24,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
     case StringExpr(s, pos)             => StringValue(s).pos(pos)
     case NullExpr(pos)                  => NullValue
-    case ColumnExpr(Ident(name, pos), _) =>
+    case ColumnExpr(Ident(pos, name), _) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
         ctx match
@@ -42,16 +42,16 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       val a = aleval(array, ctx, mode)
 
       BooleanValue(a contains v)
-    case ExistsExpr(expr)        => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
-    case UnaryExpr("-", expr, _) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
-    case BinaryExpr(left, op @ ("+" | "-"), right, _) =>
+    case ExistsExpr(expr)             => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
+    case UnaryExpr("-", pos, expr, _) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
+    case BinaryExpr(lp, left, op @ ("+" | "-"), rp, right, _) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case ComparisonExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
+    case BinaryExpr(lp, left, op @ ("<" | ">" | "<=" | ">="), rp, right, _) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
@@ -62,7 +62,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case "<=" => BasicDAL.relate(LTE, l, r)
           case ">=" => BasicDAL.relate(GTE, l, r)
       )
-    case ComparisonExpr(left, op @ ("=" | "!="), right) =>
+    case BinaryExpr(lp, left, op @ ("=" | "!="), rp, right, _) =>
       val l = eval(left, ctx, mode)
       val r = eval(right, ctx, mode)
 

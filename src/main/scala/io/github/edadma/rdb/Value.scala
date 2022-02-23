@@ -3,9 +3,9 @@ package io.github.edadma.rdb
 import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
 trait Value(val vtyp: Type):
-  var pos: Option[Pos] = None
+  var pos: Pos
 
-  def pos(p: Option[Pos]): Value =
+  def pos(p: Pos): Value =
     pos = p
     this
 
