@@ -1,3 +1,4 @@
+/*
 ThisBuild / scalaVersion := "3.1.1"
 ThisBuild / scalacOptions ++=
   Seq(
@@ -68,11 +69,11 @@ lazy val parser = project
         "com.lihaoyi" %% "sourcecode" % "0.2.8"
       )
   )
+*/
 
-/*
 name := "rdb"
 version := "0.1.0"
-scalaVersion := "3.1.1" // 2.13.8"
+scalaVersion := "3.1.1"
 scalacOptions ++=
   Seq(
     "-deprecation",
@@ -94,14 +95,12 @@ libraryDependencies ++= Seq(
 libraryDependencies ++= Seq(
   "com.github.scopt" %% "scopt" % "4.0.1",
   // "com.outr" %% "reactify" % "4.0.7",
-  ("com.lihaoyi" %% "fastparse" % "2.3.3").cross(CrossVersion.for3Use2_13),
-  ("com.lihaoyi" %% "sourcecode" % "0.2.8").cross(CrossVersion.for3Use2_13),
-  ("com.lihaoyi" %% "pprint" % "0.7.1").cross(CrossVersion.for3Use2_13)
+  "org.typelevel" %% "cats-parse" % "0.3.6",
+  "com.lihaoyi" %% "pprint" % "0.7.1"
 )
 publishMavenStyle := true
 Test / publishArtifact := false
 licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
- */
 
 /*
 ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")

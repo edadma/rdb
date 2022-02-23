@@ -3,7 +3,7 @@ package io.github.edadma.rdb
 import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
 trait Value(val vtyp: Type):
-  var pos: Pos = -1
+  var pos: Pos = null
 
   def pos(p: Pos): Value =
     pos = p
