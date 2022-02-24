@@ -119,7 +119,7 @@ object Main extends App:
 //      None
 //    )
 
-  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT 3 + 4 * 5\u0004"))(db), Nil, AggregateMode.Return))
+  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT 3 + 4"))(db), Nil, AggregateMode.Return))
 //  pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
 //  val input = "SELECT * FROM table"
