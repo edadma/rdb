@@ -36,7 +36,8 @@ object Main extends App:
       Seq(NumberValue(1), StringValue("emp1"), NumberValue(2)),
       Seq(NumberValue(2), StringValue("mgr1"), NumberValue(3)),
       Seq(NumberValue(3), StringValue("mgr2"), NullValue),
-      Seq(NumberValue(4), StringValue("emp2"), NumberValue(3))
+      Seq(NumberValue(4), StringValue("emp2"), NumberValue(3)),
+      Seq(NumberValue(5), StringValue("emp3"), NumberValue(3))
     )
   )
 
@@ -119,7 +120,7 @@ object Main extends App:
 //      None
 //    )
 
-  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT 3 + 4"))(db), Nil, AggregateMode.Return))
+  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT count(name) FROM e"))(db), Nil, AggregateMode.Return))
 //  pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
 //  val input = "SELECT * FROM table"

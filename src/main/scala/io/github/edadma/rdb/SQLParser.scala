@@ -12,37 +12,53 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   val lexical: StdLexical =
     new StdLexical:
-      delimiters ++= Seq("+", "-", "*", "/", "(", ")")
-      reserved ++= Seq("SELECT")
+      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".")
+      reserved ++= Seq("SELECT", "FROM")
+
+      private def quotedToken: Parser[Token] =
+        '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
 
   type P[+T] = PackratParser[T]
 
-  lazy val pos: PackratParser[Position] = positioned(success(new Positional {})) ^^ (_.pos)
+  lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
-  lazy val query: PackratParser[SQLSelectExpr] =
-    "SELECT" ~ expressions ^^ { case _ ~ p =>
-      SQLSelectExpr(p to ArraySeq, Nil, None, null, None, null, None)
+  lazy val query: P[SQLSelectExpr] =
+    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ^^ { case _ ~ p ~ _ ~ f =>
+      SQLSelectExpr(p to ArraySeq, f, None, null, None, null, None)
     }
 
-  lazy val expressions: PackratParser[List[Expr]] = rep1sep(expression, ",")
+  lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(identifier) ^^ {
+    case s ~ None    => s
+    case s ~ Some(a) => AliasOperator(s, a)
+  }
 
-//  lazy val booleanExpression: PackratParser[Expr] = orExpression
+  lazy val table: P[Expr] = positioned(
+    identifier ^^ TableOperator.apply
+  )
+
+  lazy val identifier: P[Ident] = positioned(
+    ident ^^ Ident.apply
+  )
+
+  lazy val expressions: P[Seq[Expr]] = rep1sep(expression, ",")
+
+//  lazy val booleanExpression: P[Expr] = orExpression
 //
-//  lazy val orExpression: PackratParser[Expr] = positioned(
+//  lazy val orExpression: P[Expr] = positioned(
 //    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
 //      andExpression
 //  )
 //
-//  lazy val andExpression: PackratParser[Expr] = positioned(
+//  lazy val andExpression: P[Expr] = positioned(
 //    andExpression ~ kw("AND") ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "AND", r) } |
 //      notExpression
 //  )
 //
-//  lazy val notExpression: PackratParser[Expr] = positioned(
+//  lazy val notExpression: P[Expr] = positioned(
 //    kw("NOT") ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
 //  )
 //
-//  lazy val booleanPrimary: PackratParser[Expr] = positioned(
+//  lazy val booleanPrimary: P[Expr] = positioned(
 //    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
 //      expression ~ ((kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN") | kw("BETWEEN")) ~ expression ~ kw(
 //        "AND"
@@ -57,30 +73,30 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //      "(" ~> booleanExpression <~ ")"
 //  )
 //
-//  lazy val isNull: PackratParser[String] =
+//  lazy val isNull: P[String] =
 //    kw("IS") ~ kw("NULL") ^^^ "IS NULL" | kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
 //
-//  lazy val in: PackratParser[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
+//  lazy val in: P[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
 //
-//  lazy val comparison: PackratParser[String] =
+//  lazy val comparison: P[String] =
 //    "<=" | ">=" | "<" | ">" | "=" | "!=" | kw("LIKE") | kw("ILIKE") | (kw("NOT") ~ kw("LIKE") ^^^ "NOT LIKE") | (kw(
 //      "NOT"
 //    ) ~ kw("ILIKE") ^^^ "NOT ILIKE")
 //
-//  lazy val booleanLiteral: PackratParser[Expr] = positioned(
+//  lazy val booleanLiteral: P[Expr] = positioned(
 //    (kw("TRUE") | kw("FALSE")) ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE")))
 //  )
 
-  lazy val expression: PackratParser[Expr] = additive
+  lazy val expression: P[Expr] = additive
 
-  lazy val additive: PackratParser[Expr] = positioned(
+  lazy val additive: P[Expr] = positioned(
     additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
       BinaryExpr(l, o, r)
     } |
       multiplicative
   )
 
-  lazy val multiplicative: PackratParser[Expr] = positioned(
+  lazy val multiplicative: P[Expr] = positioned(
     positioned(
       multiplicative ~ ("*" | "/") ~ primary ^^ { case l ~ o ~ r =>
         BinaryExpr(l, o, r)
@@ -89,35 +105,38 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     )
   )
 
-  lazy val literalExpression: PackratParser[Expr] =
-    positioned(
-      numericLit ^^ (n => NumberExpr(n.toInt))
-    )
-
-//  lazy val stringLiteral: PackratParser[Expr] = positioned(
+//  lazy val stringLiteral: P[Expr] = positioned(
 //    string ^^ (unescape _ andThen StringExpr.apply)
 //  )
 
-//  lazy val pair: PackratParser[(String, Expr)] =
+//  lazy val pair: P[(String, Expr)] =
 //    doubleQuoteString ~ ":" ~ (arrayExpression | objectExpression | literalExpression) ^^ { case k ~ _ ~ v =>
 //      Pair(k, v)
 //    }
 //
-//  lazy val arrayExpression: PackratParser[Expr] =
+//  lazy val arrayExpression: P[Expr] =
 //    "[" ~> repsep(arrayExpression | objectExpression | literalExpression, ",") <~ "]" ^^ ArrayExpr
 //
-//  lazy val objectExpression: PackratParser[Expr] =
+//  lazy val objectExpression: P[Expr] =
 //    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr
 //
-//  lazy val jsonExpression: PackratParser[Expr] =
+//  lazy val jsonExpression: P[Expr] =
 //    (arrayExpression | objectExpression) ^^ JSONExpr
 
-//  lazy val applyExpression: PackratParser[Expr] =
+//  lazy val applyExpression: P[Expr] =
 //    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
 
-  lazy val primary: PackratParser[Expr] = positioned(
-    literalExpression |
-//        jsonExpression |
+  lazy val column: P[ColumnExpr] = positioned(
+    identifier ~ opt("." ~> identifier) ^^ {
+      case c ~ None    => ColumnExpr(c)
+      case t ~ Some(c) => ColumnExpr(Ident(s"$t.$c").setPos(t.pos))
+    }
+  )
+
+  lazy val primary: P[Expr] = positioned(
+    numericLit ^^ (n => NumberExpr(n.toInt)) |
+      column |
+//      jsonExpression |
 //      caseExpression |
 //      applyExpression |
 //      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
@@ -125,27 +144,23 @@ object SQLParser extends StdTokenParsers with PackratParsers:
       "(" ~> expression <~ ")"
   )
 
-//  lazy val caseExpression: PackratParser[CaseExpr] =
+//  lazy val caseExpression: P[CaseExpr] =
 //    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ { case ws ~ e => CaseExpr(ws, e) }
 //
-//  lazy val when: PackratParser[OQLWhen] =
+//  lazy val when: P[OQLWhen] =
 //    kw("WHEN") ~ booleanExpression ~ kw("THEN") ~ expression ^^ { case _ ~ l ~ _ ~ e => OQLWhen(l, e) }
 
-//  lazy val float: PackratParser[Number] = """[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?""".r ^^ (_.toDouble.asInstanceOf[Number])
+//  lazy val float: P[Number] = """[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?""".r ^^ (_.toDouble.asInstanceOf[Number])
 //
-//  lazy val integer: PackratParser[Number] = "[0-9]+".r ^^ (_.toInt.asInstanceOf[Number])
+//  lazy val integer: P[Number] = "[0-9]+".r ^^ (_.toInt.asInstanceOf[Number])
 //
-//  lazy val identifier: PackratParser[Ident] = positioned(
-//    """[a-zA-Z_$][a-zA-Z0-9_$]*""".r ^^ Ident.apply
-//  )
-//
-//  lazy val singleQuoteString: PackratParser[String] =
+//  lazy val singleQuoteString: P[String] =
 //    """'(?:[^'\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*'""".r ^^ (s => s.substring(1, s.length - 1))
 //
-//  lazy val doubleQuoteString: PackratParser[String] =
+//  lazy val doubleQuoteString: P[String] =
 //    """"(?:[^"\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*"""".r ^^ (s => s.substring(1, s.length - 1))
 //
-//  lazy val string: PackratParser[String] = singleQuoteString | doubleQuoteString
+//  lazy val string: P[String] = singleQuoteString | doubleQuoteString
 
   def parseQuery(input: String): SQLSelectExpr =
     val tokens = new PackratReader(new lexical.Scanner(input))
