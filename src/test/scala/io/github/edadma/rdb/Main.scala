@@ -120,7 +120,7 @@ object Main extends App:
 //      None
 //    )
 
-  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT count(name) FROM e"))(db), Nil, AggregateMode.Return))
+  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT name FROM e"))(db), Nil, AggregateMode.Return))
 //  pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
 //  val input = "SELECT * FROM table"
