@@ -41,7 +41,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates:
 
   val meta: Metadata =
     Metadata(fields.zipWithIndex map {
-      case (ColumnExpr(Ident(pos, name), _), idx) =>
+      case (ColumnExpr(Ident(name)), idx) =>
         lookup(name, ctx) match
           case None             => sys.error(s"variable '$name' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)

@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
 
-trait Operator extends Expr { val typ: Type = TableType }
+trait Operator extends Expr { typ = TableType }
 
 case class AliasOperator(rel: Expr, alias: Ident) extends Operator
 case class ProjectOperator(rel: Expr, projs: ArraySeq[Expr]) extends Operator

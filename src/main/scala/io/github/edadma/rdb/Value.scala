@@ -2,10 +2,12 @@ package io.github.edadma.rdb
 
 import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
-trait Value(val vtyp: Type):
-  var pos: Pos = null
+import scala.util.parsing.input.Position
 
-  def pos(p: Pos): Value =
+trait Value(val vtyp: Type):
+  var pos: Position = null
+
+  def pos(p: Position): Value =
     pos = p
     this
 

@@ -7,7 +7,7 @@ import scala.collection.immutable.ArraySeq
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
-    case AggregateFunctionExpr(f, arg, _) =>
+    case AggregateFunctionExpr(f, arg) =>
       mode match
         case AggregateMode.Return =>
           f.result
@@ -18,13 +18,13 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           f.acc(eval(arg, ctx, mode))
           f.result
         case AggregateMode.Disallow => sys.error(s"aggregates not allowed here: $expr")
-    case ScalarFunctionExpr(f, args, _) => f.func(args map (e => eval(e, ctx, mode)))
-    case ProcessOperator(proc)          => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
-    case NumberExpr(n: Int, pos)        => NumberValue(IntType, n).pos(pos)
-    case NumberExpr(n: Double, pos)     => NumberValue(DoubleType, n).pos(pos)
-    case StringExpr(s, pos)             => StringValue(s).pos(pos)
-    case NullExpr(pos)                  => NullValue
-    case ColumnExpr(Ident(pos, name), _) =>
+    case ScalarFunctionExpr(f, args) => f.func(args map (e => eval(e, ctx, mode)))
+    case ProcessOperator(proc)       => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
+    case e @ NumberExpr(n: Int)      => NumberValue(IntType, n).pos(e.pos)
+    case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).pos(e.pos)
+    case e @ StringExpr(s)           => StringValue(s).pos(e.pos)
+    case NullExpr()                  => NullValue
+    case ColumnExpr(Ident(name)) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
         ctx match
@@ -42,16 +42,16 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       val a = aleval(array, ctx, mode)
 
       BooleanValue(a contains v)
-    case ExistsExpr(expr)             => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
-    case UnaryExpr("-", pos, expr, _) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
-    case BinaryExpr(lp, left, op @ ("+" | "-"), rp, right, _) =>
+    case ExistsExpr(expr)         => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
+    case e @ UnaryExpr("-", expr) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
+    case e @ BinaryExpr(left, op @ ("+" | "-"), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-    case BinaryExpr(lp, left, op @ ("<" | ">" | "<=" | ">="), rp, right, _) =>
+    case e @ BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
@@ -62,7 +62,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case "<=" => BasicDAL.relate(LTE, l, r)
           case ">=" => BasicDAL.relate(GTE, l, r)
       )
-    case BinaryExpr(lp, left, op @ ("=" | "!="), rp, right, _) =>
+    case e @ BinaryExpr(left, op @ ("=" | "!="), right) =>
       val l = eval(left, ctx, mode)
       val r = eval(right, ctx, mode)
 
