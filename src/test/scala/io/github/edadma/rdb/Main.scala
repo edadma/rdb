@@ -116,6 +116,6 @@ object Main extends App:
 //      None
 //    )
 
-//  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
+  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
-  val input = "SELECT * FROM table"
+//  val input = "SELECT * FROM table"
