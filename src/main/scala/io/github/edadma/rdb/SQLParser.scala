@@ -145,14 +145,16 @@ object SQLParser extends RegexParsers with PackratParsers {
 
   def parseQuery(input: String): SQLSelectExpr =
     parseAll(phrase(query), new PackratReader(new CharSequenceReader(input))) match {
-      case Success(result, _)     => result
-      case NoSuccess(error, rest) => problem(rest.pos, error, input)
+      case Success(result, _)   => result
+      case Failure(error, rest) => problem(rest.pos, error, input)
+      case Error(error, rest)   => problem(rest.pos, error, input)
     }
 
   def parseBooleanExpression(input: String): Expr =
     parseAll(phrase(booleanExpression), new PackratReader(new CharSequenceReader(input))) match {
-      case Success(result, _)     => result
-      case NoSuccess(error, rest) => problem(rest.pos, error, input)
+      case Success(result, _)   => result
+      case Failure(error, rest) => problem(rest.pos, error, input)
+      case Error(error, rest)   => problem(rest.pos, error, input)
     }
 
 }
