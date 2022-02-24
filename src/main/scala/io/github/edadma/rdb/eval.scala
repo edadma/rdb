@@ -24,6 +24,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).pos(e.pos)
     case e @ StringExpr(s)           => StringValue(s).pos(e.pos)
     case NullExpr()                  => NullValue
+    case StarExpr()                  => StarValue
     case ColumnExpr(Ident(name)) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =

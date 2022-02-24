@@ -39,11 +39,15 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     identifier ^^ TableOperator.apply
   )
 
+  lazy val star: P[Expr] = positioned(
+    "*" ^^^ StarExpr()
+  )
+
   lazy val identifier: P[Ident] = positioned(
     ident ^^ Ident.apply
   )
 
-  lazy val expressions: P[Seq[Expr]] = rep1sep(expression, ",")
+  lazy val expressions: P[Seq[Expr]] = rep1sep(expression | star, ",")
 
 //  lazy val booleanExpression: P[Expr] = orExpression
 //
@@ -126,8 +130,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //  lazy val jsonExpression: P[Expr] =
 //    (arrayExpression | objectExpression) ^^ JSONExpr
 
-//  lazy val applyExpression: P[Expr] =
-//    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
+  lazy val application: P[Expr] =
+    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
 
   lazy val column: P[ColumnExpr] = positioned(
     identifier ~ opt("." ~> identifier) ^^ {
@@ -138,10 +142,10 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val primary: P[Expr] = positioned(
     numericLit ^^ (n => NumberExpr(n.toInt)) |
+      application |
       column |
 //      jsonExpression |
 //      caseExpression |
-//      applyExpression |
 //      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "(" ~> expression <~ ")"

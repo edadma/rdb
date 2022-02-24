@@ -22,6 +22,8 @@ object NumberValue:
 
 case object NullValue extends Value(NullType)
 
+case object StarValue extends Value(StarType)
+
 case class StringValue(s: String) extends Value(StringType)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
