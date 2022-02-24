@@ -10,6 +10,11 @@ trait Process:
 
 type RowIterator = Iterator[Row]
 
+case object SingleProcess extends Process:
+  val meta: Metadata = Metadata(Vector.empty)
+
+  def iterator(ctx: Seq[Row]): RowIterator = Iterator(Row(Vector.empty, meta, AggregateMode.AccumulateReturn))
+
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 

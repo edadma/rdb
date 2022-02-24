@@ -28,7 +28,13 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       BinaryExpr(l, op, r)
     case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right))
-    case SQLSelectExpr(exprs, from, where, offset, limit) =>
+    case SQLSelectExpr(exprs, Nil, where, opos, offset, lpos, limit) =>
+      if where.isDefined then problem(where.get, "WHERE clause no allowed here")
+      if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
+      if limit.isDefined then problem(lpos, "LIMIT clause no allowed here")
+
+      ProcessOperator(SingleProcess)
+    case SQLSelectExpr(exprs, from, where, opos, offset, lpos, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -62,7 +68,6 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       db.table(name) match
         case Some(t) => ProcessOperator(t)
         case None    => sys.error(s"table '$name' not found")
-    // grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))
     case ProjectOperator(rel, projs) =>
       def aggregate(expr: Expr): Boolean =
         expr match
@@ -94,7 +99,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
-    // case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
-    case _ => expr
+    case _                         => expr
 
 def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
+
+// todo: case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
+// todo: grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))

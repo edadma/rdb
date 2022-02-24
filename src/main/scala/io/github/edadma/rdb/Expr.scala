@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
-import scala.util.parsing.input.Positional
+import scala.util.parsing.input.{Position, Positional}
 
 case class Ident(name: String) extends Positional
 
@@ -31,7 +31,9 @@ case class SQLSelectExpr(
     exprs: ArraySeq[Expr],
     from: Seq[Expr],
     where: Option[Expr],
+    opos: Position | Null,
     offset: Option[Int],
+    lpos: Position | Null,
     limit: Option[Int]
 ) extends Expr
 

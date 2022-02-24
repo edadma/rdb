@@ -13,7 +13,7 @@ object SQLParser extends RegexParsers with PackratParsers {
 
   lazy val query: PackratParser[SQLSelectExpr] =
     kw("select") ~ expressions ^^ { case _ ~ p =>
-      SQLSelectExpr(p to ArraySeq, Nil, None, None, None)
+      SQLSelectExpr(p to ArraySeq, Nil, None, null, None, null, None)
     }
 
   lazy val expressions: PackratParser[List[Expr]] = rep1sep(expression, ",")
@@ -146,32 +146,15 @@ object SQLParser extends RegexParsers with PackratParsers {
   def parseQuery(input: String): SQLSelectExpr =
     parseAll(phrase(query), new PackratReader(new CharSequenceReader(input))) match {
       case Success(result, _)   => result
-      case Failure(error, rest) => problem(rest.pos, error, input)
-      case Error(error, rest)   => problem(rest.pos, error, input)
+      case Failure(error, rest) => problem(rest.pos, error)
+      case Error(error, rest)   => problem(rest.pos, error)
     }
 
   def parseBooleanExpression(input: String): Expr =
     parseAll(phrase(booleanExpression), new PackratReader(new CharSequenceReader(input))) match {
       case Success(result, _)   => result
-      case Failure(error, rest) => problem(rest.pos, error, input)
-      case Error(error, rest)   => problem(rest.pos, error, input)
+      case Failure(error, rest) => problem(rest.pos, error)
+      case Error(error, rest)   => problem(rest.pos, error)
     }
 
-}
-
-def problem(pos: Position, msg: String, input: String): Nothing = {
-  printError(pos, msg, input)
-  sys.error("error executing query")
-}
-
-def printError(pos: Position, msg: String, input: String): Null = {
-  if (pos eq null)
-    Console.err.println(msg)
-  else if (pos.line == 1)
-    Console.err.println(s"$msg\n${pos.longString}")
-  else
-    Console.err.println(s"${pos.line}: $msg\n${pos.longString}")
-  //      printError(pos.line, pos.col, msg, input)
-
-  null
 }

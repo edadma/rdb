@@ -56,7 +56,9 @@ object Main extends App:
         TableOperator(Ident("e"))
       ),
       None,
+      null,
       None,
+      null,
       None
     )
 
