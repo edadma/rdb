@@ -12,7 +12,7 @@ object SQLParser extends RegexParsers with PackratParsers {
   def kw(s: String): Regex = s"(?i)$s\\b".r
 
   lazy val query: PackratParser[SQLSelectExpr] =
-    kw("select") ~ expressions ^^ { case _ ~ p =>
+    kw("select") ~ expressions ~ "\u0004" ^^ { case _ ~ p ~ _ =>
       SQLSelectExpr(p to ArraySeq, Nil, None, null, None, null, None)
     }
 
@@ -66,7 +66,7 @@ object SQLParser extends RegexParsers with PackratParsers {
   lazy val expression: PackratParser[Expr] = additive
 
   lazy val additive: PackratParser[Expr] = positioned(
-    additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
+    additive ~ ("+" /* | "-"*/ ) ~ multiplicative ^^ { case l ~ o ~ r =>
       BinaryExpr(l, o, r)
     } |
       multiplicative
@@ -81,14 +81,13 @@ object SQLParser extends RegexParsers with PackratParsers {
     )
   )
 
-  lazy val literalExpression: PackratParser[Expr] = positioned(
+  lazy val literalExpression: PackratParser[Expr] =
     positioned(
       float ^^ NumberExpr.apply |
         integer ^^ NumberExpr.apply |
         stringLiteral |
         booleanLiteral
     )
-  )
 
   lazy val stringLiteral: PackratParser[Expr] = positioned(
     string ^^ (unescape _ andThen StringExpr.apply)
@@ -115,9 +114,9 @@ object SQLParser extends RegexParsers with PackratParsers {
     literalExpression |
 //        jsonExpression |
 //      caseExpression |
-      applyExpression |
-      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
-      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
+//      applyExpression |
+//      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
+//      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "(" ~> expression <~ ")"
   )
 

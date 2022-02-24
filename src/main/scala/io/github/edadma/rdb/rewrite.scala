@@ -33,7 +33,10 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
       if limit.isDefined then problem(lpos, "LIMIT clause no allowed here")
 
-      ProcessOperator(SingleProcess)
+      val rewritten_projs = exprs map rewrite
+      val aggregates = rewritten_projs exists aggregate
+
+      ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs, aggregates))
     case SQLSelectExpr(exprs, from, where, opos, offset, lpos, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
@@ -69,22 +72,6 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         case Some(t) => ProcessOperator(t)
         case None    => sys.error(s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
-      def aggregate(expr: Expr): Boolean =
-        expr match
-          case _: AggregateFunctionExpr    => true
-          case ScalarFunctionExpr(_, args) => args exists aggregate
-          case UnaryExpr(_, expr)          => aggregate(expr)
-          case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
-          case _                           => false
-
-      def column(expr: Expr): Boolean =
-        expr match
-          case _: (ColumnExpr | Operator)  => true
-          case ScalarFunctionExpr(_, args) => args exists column
-          case UnaryExpr(_, expr)          => column(expr)
-          case BinaryExpr(left, _, right)  => column(left) | column(right)
-          case _                           => false
-
       val rewritten_projs = projs map rewrite
       val aggregates = rewritten_projs exists aggregate
       val columns = rewritten_projs exists column
@@ -100,6 +87,22 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     case _                         => expr
+
+def aggregate(expr: Expr): Boolean =
+  expr match
+    case _: AggregateFunctionExpr    => true
+    case ScalarFunctionExpr(_, args) => args exists aggregate
+    case UnaryExpr(_, expr)          => aggregate(expr)
+    case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
+    case _                           => false
+
+def column(expr: Expr): Boolean =
+  expr match
+    case _: (ColumnExpr | Operator)  => true
+    case ScalarFunctionExpr(_, args) => args exists column
+    case UnaryExpr(_, expr)          => column(expr)
+    case BinaryExpr(left, _, right)  => column(left) | column(right)
+    case _                           => false
 
 def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
 

@@ -1,6 +1,7 @@
 package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
+import pprint._
 
 object Main extends App:
 
@@ -118,6 +119,7 @@ object Main extends App:
 //      None
 //    )
 
-  pprint.pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
+  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT 3 + 4 * 5\u0004"))(db), Nil, AggregateMode.Return))
+//  pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
 
 //  val input = "SELECT * FROM table"
