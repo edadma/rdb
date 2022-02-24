@@ -100,11 +100,13 @@ object SQLParser extends RegexParsers with PackratParsers {
   lazy val jsonExpression: PackratParser[Expr] =
     (arrayExpression | objectExpression) ^^ JSONExpr
 
+  lazy val applyExpression: PackratParser[Expr] =
+    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
+
   lazy val primary: PackratParser[Expr] =
     positioned(
       literalExpression |
         jsonExpression |
-        starExpression |
 //      caseExpression |
         applyExpression |
         qualifiedAttributeExpression |
