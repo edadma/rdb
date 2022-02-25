@@ -14,23 +14,24 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     new StdLexical:
       delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=")
       reserved ++= Seq(
-        "SELECT",
-        "FROM",
-        "WHERE",
-        "TRUE",
-        "FALSE",
-        "LIKE",
-        "ILIKE",
-        "NOT",
-        "IS",
-        "NULL",
-        "BETWEEN",
         "AND",
+        "AS",
+        "ASC",
+        "BETWEEN",
+        "BY",
+        "DESC",
+        "FALSE",
+        "FROM",
+        "ILIKE",
+        "IS",
+        "LIKE",
+        "NOT",
+        "NULL",
         "OR",
         "ORDER",
-        "BY",
-        "ASC",
-        "DESC"
+        "SELECT",
+        "TRUE",
+        "WHERE"
       )
 
       override def token: Parser[Token] =
@@ -108,7 +109,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //      expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
 //      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => SQLInArrayExpr(e, i, es) } |
 //      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => SQLInQueryExpr(e, i, q) } |
-//      "EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
+      "EXISTS" ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
       booleanLiteral |
       "(" ~> booleanExpression <~ ")"
   )

@@ -96,10 +96,10 @@ object Main extends App:
 //      None,
 //      None
 //    )
-
+// WHERE EXISTS(SELECT * FROM e )
   val input =
     """
-      |SELECT * FROM e WHERE NOT e_id = 2 AND NOT e_id = 4 ORDER BY name
+      |SELECT * FROM e AS outer
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 
