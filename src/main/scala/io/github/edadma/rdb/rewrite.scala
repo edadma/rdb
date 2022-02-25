@@ -77,7 +77,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case TableOperator(id @ Ident(name)) =>
       db.table(name) match
         case Some(t) => ProcessOperator(t)
-        case None    => problem(id.pos, s"table '$name' not found")
+        case None    => problem(id, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
       val aggregates = rewritten_projs exists aggregate

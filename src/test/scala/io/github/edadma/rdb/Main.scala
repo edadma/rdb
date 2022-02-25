@@ -122,7 +122,9 @@ object Main extends App:
 
   val input =
     """
-      |SELECT * FROM e WHERE e_id BETWEEN 2 AND 4
+      |SELECT * FROM e WHERE NOT e_id = 2 AND NOT e_id = 4
       |""".trim.stripMargin
+  val ast = SQLParser.parseQuery(input)
 
-  pprintln(eval(rewrite(SQLParser.parseQuery(input))(db), Nil, AggregateMode.Return))
+  pprintln(ast)
+  pprintln(eval(rewrite(ast)(db), Nil, AggregateMode.Return))

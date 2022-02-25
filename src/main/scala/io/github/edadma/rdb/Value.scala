@@ -2,15 +2,9 @@ package io.github.edadma.rdb
 
 import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, Positional}
 
-trait Value(val vtyp: Type):
-  var pos: Position = null
-
-  def pos(p: Position): Value =
-    pos = p
-    this
-
+trait Value(val vtyp: Type) extends Positional:
   def asText: StringValue = problem(pos, "cannot be converted to text")
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:

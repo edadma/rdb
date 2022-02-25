@@ -33,7 +33,7 @@ val aggregateFunction: Map[String, AggregateFunction] =
         case v: NumberValue =>
           sum = BasicDAL.compute(PLUS, sum, v.asInstanceOf[NumberValue], NumberValue.from)
           sum
-        case v => problem(v.pos, "only numbers can be summed")
+        case v => problem(v, "only numbers can be summed")
 
       def result: NumberValue = sum
 

@@ -13,7 +13,21 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   val lexical: StdLexical =
     new StdLexical:
       delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=")
-      reserved ++= Seq("SELECT", "FROM", "TRUE", "FALSE", "LIKE", "ILIKE", "NOT", "IS", "NULL", "BETWEEN", "AND", "OR")
+      reserved ++= Seq(
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "TRUE",
+        "FALSE",
+        "LIKE",
+        "ILIKE",
+        "NOT",
+        "IS",
+        "NULL",
+        "BETWEEN",
+        "AND",
+        "OR"
+      )
 
       override def token: Parser[Token] =
         quotedToken | stringToken | super.token
@@ -31,8 +45,9 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
   lazy val query: P[SQLSelectExpr] =
-    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ~ opt(booleanExpression) ^^ { case _ ~ p ~ _ ~ f ~ w =>
-      SQLSelectExpr(p to ArraySeq, f, w, null, None, null, None)
+    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ~ "WHERE" ~ opt(booleanExpression) ^^ {
+      case _ ~ p ~ _ ~ f ~ _ ~ w =>
+        SQLSelectExpr(p to ArraySeq, f, w, null, None, null, None)
     }
 
   lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(identifier) ^^ {
@@ -54,21 +69,21 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val expressions: P[Seq[Expr]] = rep1sep(expression | star, ",")
 
-  lazy val booleanExpression: P[Expr] = booleanPrimary
+  lazy val booleanExpression: P[Expr] = orExpression
 
-//  lazy val orExpression: P[Expr] = positioned(
-//    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
-//      andExpression
-//  )
-//
-//  lazy val andExpression: P[Expr] = positioned(
-//    andExpression ~ kw("AND") ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "AND", r) } |
-//      notExpression
-//  )
-//
-//  lazy val notExpression: P[Expr] = positioned(
-//    kw("NOT") ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
-//  )
+  lazy val orExpression: P[Expr] = positioned(
+    orExpression ~ "OR" ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
+      andExpression
+  )
+
+  lazy val andExpression: P[Expr] = positioned(
+    andExpression ~ "AND" ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "AND", r) } |
+      notExpression
+  )
+
+  lazy val notExpression: P[Expr] = positioned(
+    "NOT" ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
+  )
 
   lazy val booleanPrimary: P[Expr] = positioned(
     expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |

@@ -1,8 +1,8 @@
 package io.github.edadma.rdb
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{Position, Positional}
 
-def problem(expr: Expr, msg: String): Nothing = problem(expr.pos, msg)
+def problem(p: Positional, msg: String): Nothing = problem(p.pos, msg)
 
 def problem(pos: Position, msg: String): Nothing =
   printError(pos, msg)
