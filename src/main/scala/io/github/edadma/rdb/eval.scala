@@ -12,7 +12,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         case AggregateMode.Return => f.result
         case AggregateMode.Accumulate =>
           f.acc(eval(arg, ctx, mode))
-          NullValue
+          NullValue()
         case AggregateMode.AccumulateReturn =>
           f.acc(eval(arg, ctx, mode))
           f.result
@@ -22,8 +22,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case e @ NumberExpr(n: Int)      => NumberValue(IntType, n).setPos(e.pos)
     case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).setPos(e.pos)
     case e @ StringExpr(s)           => TextValue(s).setPos(e.pos)
-    case e @ NullExpr()              => NullValue.setPos(e.pos)
-    case e @ StarExpr()              => StarValue.setPos(e.pos)
+    case e @ NullExpr()              => NullValue().setPos(e.pos)
+    case e @ StarExpr()              => StarValue().setPos(e.pos)
     case c @ ColumnExpr(Ident(name)) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =

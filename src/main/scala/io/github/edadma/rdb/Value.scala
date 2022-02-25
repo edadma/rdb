@@ -6,7 +6,9 @@ import scala.util.parsing.input.{Position, Positional}
 
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
   def asText: TextValue = problem(pos, "cannot be converted to text")
-  def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
+  def compare(that: Value): Int =
+    if that.isInstanceOf[NullValue] then -1
+    else problem(pos, s"'$this' can't be compared to '$that''")
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
   override def asText: TextValue = TextValue(value.toString)
@@ -14,7 +16,7 @@ case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with
   override def compare(that: Value): Int =
     that match
       case n: NumberValue => BasicDAL.compare[TypedNumber](this, n)
-      case _              => problem(that, s"'$this' can't be compared to '$that''")
+      case _              => super.compare(that)
 
 object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
@@ -23,12 +25,20 @@ object NumberValue:
 
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
 
-case object NullValue extends Value(NullType)
+case class NullValue() extends Value(NullType):
+  override def asText: TextValue = TextValue("NULL")
 
-case object StarValue extends Value(StarType)
+  override def compare(that: Value): Int = -1
+
+case class StarValue() extends Value(StarType)
 
 case class TextValue(s: String) extends Value(TextType):
   override def asText: TextValue = this
+
+  override def compare(that: Value): Int =
+    that match
+      case TextValue(t) => s compare t
+      case _            => super.compare(that)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 

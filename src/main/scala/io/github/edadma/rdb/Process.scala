@@ -120,6 +120,6 @@ case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
     input1.iterator(ctx).flatMap { x =>
       val matches = input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta)) filter (row => beval(cond, row +: ctx))
 
-      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NullValue), meta))
+      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NullValue()), meta))
       else matches
     }

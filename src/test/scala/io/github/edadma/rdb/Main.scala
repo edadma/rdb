@@ -35,7 +35,7 @@ object Main extends App:
     Seq(
       Seq(NumberValue(1), TextValue("emp1"), NumberValue(2)),
       Seq(NumberValue(2), TextValue("mgr1"), NumberValue(3)),
-      Seq(NumberValue(3), TextValue("mgr2"), NullValue),
+      Seq(NumberValue(3), TextValue("mgr2"), NullValue()),
       Seq(NumberValue(4), TextValue("emp2"), NumberValue(3)),
       Seq(NumberValue(5), TextValue("emp3"), NumberValue(3))
     )
