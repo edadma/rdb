@@ -20,6 +20,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "BETWEEN",
         "BY",
         "DESC",
+        "EXISTS",
         "FALSE",
         "FROM",
         "ILIKE",
@@ -101,7 +102,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   )
 
   lazy val booleanPrimary: P[Expr] = positioned(
-    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
+    "EXISTS" ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
+      expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       expression ~ ("NOT" ~ "BETWEEN" ^^^ "NOT BETWEEN" | "BETWEEN") ~ expression ~ "AND" ~ expression ^^ {
         case e ~ b ~ l ~ _ ~ u =>
           BetweenExpr(e, b, l, u)
@@ -109,7 +111,6 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //      expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
 //      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => SQLInArrayExpr(e, i, es) } |
 //      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => SQLInQueryExpr(e, i, q) } |
-      "EXISTS" ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
       booleanLiteral |
       "(" ~> booleanExpression <~ ")"
   )
