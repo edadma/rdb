@@ -50,13 +50,20 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       val r = teval(right, ctx, mode)
 
       StringValue(l.s ++ r.s)
-    case e @ BinaryExpr(left, op @ ("+" | "-"), right) =>
+    case e @ BinaryExpr(left, op @ ("AND" | "OR"), right) =>
+      val or = op == "OR"
+
+      if or ^ !beval(left, ctx) then BooleanValue(or)
+      else BooleanValue(beval(right, ctx))
+    case e @ BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
         case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
+        case "*" => BasicDAL.compute(TIMES, l, r, NumberValue.from)
+        case "/" => BasicDAL.compute(DIVIDE, l, r, NumberValue.from)
     case e @ BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)

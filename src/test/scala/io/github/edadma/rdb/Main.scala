@@ -122,7 +122,7 @@ object Main extends App:
 
   val input =
     """
-      |SELECT sum(e_id) FROM e WHERE e_id > 2
+      |SELECT * FROM e WHERE e_id BETWEEN 2 AND 4
       |""".trim.stripMargin
 
   pprintln(eval(rewrite(SQLParser.parseQuery(input))(db), Nil, AggregateMode.Return))

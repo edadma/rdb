@@ -13,7 +13,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   val lexical: StdLexical =
     new StdLexical:
       delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=")
-      reserved ++= Seq("SELECT", "FROM", "TRUE", "FALSE", "LIKE", "ILIKE", "NOT", "IS", "NULL")
+      reserved ++= Seq("SELECT", "FROM", "TRUE", "FALSE", "LIKE", "ILIKE", "NOT", "IS", "NULL", "BETWEEN", "AND", "OR")
 
       override def token: Parser[Token] =
         quotedToken | stringToken | super.token

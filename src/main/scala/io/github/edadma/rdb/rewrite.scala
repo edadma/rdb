@@ -28,6 +28,13 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       BinaryExpr(l, op, r)
     case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right))
+    case BetweenExpr(value, op, lower, upper) =>
+      val v = rewrite(value)
+      val l = rewrite(lower)
+      val r = rewrite(upper)
+
+      if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
+      else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
     case SQLSelectExpr(exprs, Nil, where, opos, offset, lpos, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause no allowed here")
       if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
