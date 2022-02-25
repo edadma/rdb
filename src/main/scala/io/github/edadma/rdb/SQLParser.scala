@@ -65,7 +65,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     case e ~ _                    => OrderBy(e, false)
   }
 
-  lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(identifier) ^^ {
+  lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(opt("AS") ~> identifier) ^^ {
     case s ~ None    => s
     case s ~ Some(a) => AliasOperator(s, a)
   }
