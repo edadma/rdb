@@ -35,8 +35,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
-    case SQLSelectExpr(exprs, Nil, where, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, Nil, where, orderBy, opos, offset, lpos, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause no allowed here")
+      if orderBy.isDefined then problem(where.get, "ORDER BY clause no allowed here")
       if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
       if limit.isDefined then problem(lpos, "LIMIT clause no allowed here")
 
@@ -44,7 +45,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val aggregates = rewritten_projs exists aggregate
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs, aggregates))
-    case SQLSelectExpr(exprs, from, where, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, from, where, orderBy, opos, offset, lpos, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -55,10 +56,14 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         where match
           case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
+      val r1a =
+        orderBy match
+          case None     => r1
+          case Some(os) => SortOperator(r1, os map { case OrderBy(f, d) => OrderBy(rewrite(f), d) }, true)
       val r2 =
         exprs match
-          case Seq(StarExpr()) => r1
-          case _               => ProjectOperator(r1, exprs map rewrite)
+          case Seq(StarExpr()) => r1a
+          case _               => ProjectOperator(r1a, exprs map rewrite)
       val r3 =
         if offset.isDefined then OffsetOperator(r2, offset.get)
         else r2
@@ -67,8 +72,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         else r3
 
       rewrite(r4)
-    case OffsetOperator(rel, offset) => ProcessOperator(DropProcess(procRewrite(rel), offset))
-    case LimitOperator(rel, limit)   => ProcessOperator(TakeProcess(procRewrite(rel), limit))
+    case SortOperator(rel, by, nullsFirst) => ProcessOperator(SortProcess(procRewrite(rel), by, nullsFirst))
+    case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
+    case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case InnerJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>

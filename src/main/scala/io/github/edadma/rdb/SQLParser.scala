@@ -26,7 +26,11 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "NULL",
         "BETWEEN",
         "AND",
-        "OR"
+        "OR",
+        "ORDER",
+        "BY",
+        "ASC",
+        "DESC"
       )
 
       override def token: Parser[Token] =
@@ -45,10 +49,20 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
   lazy val query: P[SQLSelectExpr] =
-    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ~ "WHERE" ~ opt(booleanExpression) ^^ {
-      case _ ~ p ~ _ ~ f ~ _ ~ w =>
-        SQLSelectExpr(p to ArraySeq, f, w, null, None, null, None)
+    "SELECT" ~ expressions ~ fromClause ~ whereClause ~ orderByClause ^^ { case _ ~ p ~ f ~ w ~ o =>
+      SQLSelectExpr(p to ArraySeq, f, w, o, null, None, null, None)
     }
+
+  lazy val fromClause: P[Seq[Expr]] = "FROM" ~> repsep(source, ",")
+
+  lazy val whereClause: P[Option[Expr]] = opt("WHERE" ~> booleanExpression)
+
+  lazy val orderByClause: P[Option[Seq[OrderBy]]] = opt("ORDER" ~> "BY" ~> rep1sep(orderBy, ","))
+
+  lazy val orderBy: P[OrderBy] = expression ~ opt("ASC" | "DESC") ^^ {
+    case e ~ (None | Some("ASC")) => OrderBy(e, true)
+    case e ~ _                    => OrderBy(e, false)
+  }
 
   lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(identifier) ^^ {
     case s ~ None    => s

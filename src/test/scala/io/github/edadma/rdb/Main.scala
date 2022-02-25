@@ -41,29 +41,6 @@ object Main extends App:
     )
   )
 
-  val sql =
-//    SelectExpr(
-//      ArraySeq(ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
-//      Seq(
-//        TableOperator(Ident("e"))
-//      ),
-//      None,
-//      None,
-//      None
-//    )
-
-    SQLSelectExpr(
-      ArraySeq(ColumnExpr(Ident("e_id")), ApplyExpr(Ident("sum"), Seq(ColumnExpr(Ident("e_id"))))),
-      Seq(
-        TableOperator(Ident("e"))
-      ),
-      None,
-      null,
-      None,
-      null,
-      None
-    )
-
 //    SelectExpr(
 //      ArraySeq(ColumnExpr(Ident("name"))),
 //      Seq(
@@ -122,7 +99,7 @@ object Main extends App:
 
   val input =
     """
-      |SELECT * FROM e WHERE NOT e_id = 2 AND NOT e_id = 4
+      |SELECT * FROM e WHERE NOT e_id = 2 AND NOT e_id = 4 ORDER BY name
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 

@@ -31,6 +31,7 @@ case class SQLSelectExpr(
     exprs: ArraySeq[Expr],
     from: Seq[Expr],
     where: Option[Expr],
+    orderBy: Option[Seq[OrderBy]],
     opos: Position | Null,
     offset: Option[Int],
     lpos: Position | Null,
