@@ -1,5 +1,7 @@
 package io.github.edadma.rdb
 
+import io.github.edadma.dal.BasicDAL
+
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
@@ -76,6 +78,21 @@ case class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
+
+case class Comparitor(by: Expr, asc: true)
+case class SortProcess(input: Process, by: Seq[Comparitor], nullsFirst: Boolean) extends Process:
+  val lt: PartialFunction[(Value, Value), Boolean] =
+    case (a: NumberValue, b: NumberValue) => BasicDAL.relate(LT, a, b)
+    case (StringValue(a), StringValue(b)) => a < b
+    case (a, b) => problem(a, s"can't compare two values of types '${a.vtyp}' and '${b.vtyp}'")
+
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val data = input.iterator(ctx) to ArraySeq
+    val sorted = data.sortBy
+
+    sorted.iterator
 
 case class TakeProcess(input: Process, n: Int) extends Process:
   val meta: Metadata = input.meta

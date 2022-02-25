@@ -4,7 +4,7 @@ import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as 
 
 import scala.util.parsing.input.{Position, Positional}
 
-trait Value(val vtyp: Type) extends Positional:
+trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
   def asText: StringValue = problem(pos, "cannot be converted to text")
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
