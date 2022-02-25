@@ -4,7 +4,7 @@ import io.github.edadma.dal.BasicDAL
 
 // todo: input type checking
 abstract class AggregateFunction(val name: String, val typ: Type) {
-  def acc(v: Value): Value
+  val acc: PartialFunction[Value, Value]
 
   def result: Value
 
@@ -16,9 +16,11 @@ val aggregateFunction: Map[String, AggregateFunction] =
     new AggregateFunction("count", NumberType) {
       var count: Int = 0
 
-      def acc(v: Value): Value =
-        count += 1
-        NumberValue(count)
+      val acc: PartialFunction[Value, Value] =
+        case v =>
+          if v != NullValue then count += 1
+
+          NumberValue(count)
 
       def result: NumberValue = NumberValue(count)
 
@@ -27,9 +29,11 @@ val aggregateFunction: Map[String, AggregateFunction] =
     new AggregateFunction("sum", NumberType) {
       var sum: NumberValue = NumberValue(0)
 
-      def acc(v: Value): Value =
-        sum = BasicDAL.compute(PLUS, sum, v.asInstanceOf[NumberValue], NumberValue.from)
-        sum
+      val acc: PartialFunction[Value, Value] =
+        case v: NumberValue =>
+          sum = BasicDAL.compute(PLUS, sum, v.asInstanceOf[NumberValue], NumberValue.from)
+          sum
+        case v => problem(v.pos, "only numbers can be summed")
 
       def result: NumberValue = sum
 

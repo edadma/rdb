@@ -120,7 +120,8 @@ object Main extends App:
 //      None
 //    )
 
-  pprintln(eval(rewrite(SQLParser.parseQuery("SELECT * FROM e"))(db), Nil, AggregateMode.Return))
-//  pprintln(eval(rewrite(sql)(db), Nil, AggregateMode.Return))
+  val input =
+    """
+      |SELECT 'asdf' || e_id FROM e""".stripMargin
 
-//  val input = "SELECT * FROM table"
+  pprintln(eval(rewrite(SQLParser.parseQuery(input))(db), Nil, AggregateMode.Return))

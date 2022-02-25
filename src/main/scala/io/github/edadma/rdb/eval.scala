@@ -23,9 +23,9 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case e @ NumberExpr(n: Int)      => NumberValue(IntType, n).pos(e.pos)
     case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).pos(e.pos)
     case e @ StringExpr(s)           => StringValue(s).pos(e.pos)
-    case NullExpr()                  => NullValue
-    case StarExpr()                  => StarValue
-    case ColumnExpr(Ident(name)) =>
+    case e @ NullExpr()              => NullValue.pos(e.pos)
+    case e @ StarExpr()              => StarValue.pos(e.pos)
+    case c @ ColumnExpr(Ident(name)) =>
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
         ctx match
@@ -36,7 +36,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
               case Some((idx, _, _)) => Some(hd.data(idx))
 
       lookup(name, ctx) match
-        case None      => sys.error(s"variable '$name' not found")
+        case None      => problem(c, s"'$name' not found")
         case Some(res) => res
     case InExpr(value, array) =>
       val v = eval(value, ctx, mode)
@@ -45,6 +45,11 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       BooleanValue(a contains v)
     case ExistsExpr(expr)         => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case e @ UnaryExpr("-", expr) => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
+    case e @ BinaryExpr(left, "||", right) =>
+      val l = teval(left, ctx, mode)
+      val r = teval(right, ctx, mode)
+
+      StringValue(l.s ++ r.s)
     case e @ BinaryExpr(left, op @ ("+" | "-"), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
@@ -78,6 +83,8 @@ def beval(expr: Expr, ctx: Seq[Row]): Boolean =
   eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 
 def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue = eval(expr, ctx, mode).asInstanceOf[NumberValue]
+
+def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): StringValue = eval(expr, ctx, mode).asText
 
 def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
   eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]

@@ -12,14 +12,19 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   val lexical: StdLexical =
     new StdLexical:
-      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".")
+      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||")
       reserved ++= Seq("SELECT", "FROM")
 
       override def token: Parser[Token] =
-        quotedToken | super.token
+        quotedToken | stringToken | super.token
 
       private def quotedToken: Parser[Token] =
         '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
+
+      private def stringToken: Parser[Token] =
+        '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
+          StringLit(unescape(l mkString))
+        )
 
   type P[+T] = PackratParser[T]
 
@@ -94,7 +99,14 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //    (kw("TRUE") | kw("FALSE")) ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE")))
 //  )
 
-  lazy val expression: P[Expr] = additive
+  lazy val expression: P[Expr] = concatenation
+
+  lazy val concatenation: P[Expr] = positioned(
+    concatenation ~ "||" ~ additive ^^ { case l ~ o ~ r =>
+      BinaryExpr(l, o, r)
+    } |
+      additive
+  )
 
   lazy val additive: P[Expr] = positioned(
     additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
@@ -142,6 +154,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val primary: P[Expr] = positioned(
     numericLit ^^ (n => NumberExpr(n.toInt)) |
+      stringLit ^^ StringExpr.apply |
       application |
       column |
 //      jsonExpression |

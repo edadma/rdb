@@ -67,10 +67,10 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case LeftJoinOperator(rel1, rel2, on) =>
       ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
-    case TableOperator(Ident(name)) =>
+    case TableOperator(id @ Ident(name)) =>
       db.table(name) match
         case Some(t) => ProcessOperator(t)
-        case None    => sys.error(s"table '$name' not found")
+        case None    => problem(id.pos, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
       val aggregates = rewritten_projs exists aggregate

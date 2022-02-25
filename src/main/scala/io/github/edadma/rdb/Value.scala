@@ -11,7 +11,10 @@ trait Value(val vtyp: Type):
     pos = p
     this
 
-case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber
+  def asText: StringValue = problem(pos, "cannot be converted to text")
+
+case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
+  override def asText: StringValue = StringValue(value.toString)
 
 object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
@@ -24,7 +27,8 @@ case object NullValue extends Value(NullType)
 
 case object StarValue extends Value(StarType)
 
-case class StringValue(s: String) extends Value(StringType)
+case class StringValue(s: String) extends Value(StringType):
+  override def asText: StringValue = this
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 
