@@ -110,7 +110,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         case e ~ b ~ l ~ _ ~ u =>
           BetweenExpr(e, b, l, u)
       } |
-//      expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
+      expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
 //      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => SQLInArrayExpr(e, i, es) } |
 //      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => SQLInQueryExpr(e, i, q) } |
       booleanLiteral |

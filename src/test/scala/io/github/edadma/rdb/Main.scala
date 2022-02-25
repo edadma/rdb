@@ -98,8 +98,11 @@ object Main extends App:
 //    )
 // WHERE EXISTS(SELECT * FROM e )
   val input =
+//    """
+//      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
+//      |""".trim.stripMargin
     """
-      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
+      |SELECT name FROM e WHERE m_id IS NOT NULL
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 

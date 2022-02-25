@@ -18,7 +18,7 @@ val aggregateFunction: Map[String, AggregateFunction] =
 
       val acc: PartialFunction[Value, Value] =
         case v =>
-          if v != NullValue then count += 1
+          if v.isNull then count += 1
 
           NumberValue(count)
 

@@ -4,6 +4,7 @@ import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
@@ -46,6 +47,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case ExistsExpr(expr)       => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case UnaryExpr("-", expr)   => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
     case UnaryExpr("NOT", expr) => BooleanValue(!beval(expr, ctx))
+    case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
+      BooleanValue((op contains "NOT") ^ eval(expr, ctx, mode).isNull)
     case BinaryExpr(left, "||", right) =>
       val l = teval(left, ctx, mode)
       val r = teval(right, ctx, mode)
@@ -56,6 +59,64 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
       if or ^ !beval(left, ctx) then BooleanValue(or)
       else BooleanValue(beval(right, ctx))
+    case BinaryExpr(left, op @ ("LIKE" | "ILIKE" | "NOT LIKE" | "NOT ILIKE"), right) =>
+      def like(s: String, pattern: String, casesensitive: Boolean = true): Boolean =
+        var sp = 0
+        var pp = 0
+        val choices = new mutable.Stack[ChoicePoint]
+
+        case class ChoicePoint(sp: Int, pp: Int)
+
+        def move(): Unit = {
+          sp += 1
+          pp += 1
+        }
+
+        def choice: Boolean =
+          if (choices nonEmpty) {
+            val ChoicePoint(nsp, npp) = choices.pop()
+
+            sp = nsp
+            pp = npp
+            true
+          } else false
+
+        while (sp < s.length || pp < pattern.length) {
+          if (pp == pattern.length && !choice)
+            return false
+          else
+            pattern(pp) match {
+              case '%' =>
+                if (pp == pattern.length - 1)
+                  return true
+
+                if (sp < s.length - 1)
+                  choices push ChoicePoint(sp + 1, pp)
+
+                pp += 1
+              case '_' => move()
+              case c =>
+                if (c == '\\')
+                  pp += 1
+
+                if (
+                  sp < s.length && ((casesensitive && s(sp) == pattern(pp)) || (!casesensitive && s(
+                    sp
+                  ).toLower == pattern(pp).toLower))
+                )
+                  move()
+                else if (!choice)
+                  return false
+            }
+        }
+
+        true
+
+      val s = teval(left, ctx, mode).s
+      val p = teval(right, ctx, mode).s
+      val res = like(s, p, op contains "ILIKE")
+
+      BooleanValue((op startsWith "NOT") ^ res)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
