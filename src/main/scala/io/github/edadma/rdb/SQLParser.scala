@@ -12,7 +12,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   val lexical: StdLexical =
     new StdLexical:
-      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=")
+      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=", ",")
       reserved ++= Seq(
         "AND",
         "AS",
@@ -31,6 +31,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "OR",
         "ORDER",
         "SELECT",
+        "TABLE",
         "TRUE",
         "WHERE"
       )
@@ -98,7 +99,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   )
 
   lazy val notExpression: P[Expr] = positioned(
-    "NOT" ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
+    "NOT" ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) |
+      booleanPrimary
   )
 
   lazy val booleanPrimary: P[Expr] = positioned(
@@ -190,6 +192,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //      caseExpression |
 //      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
+      "TABLE" ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
       "(" ~> expression <~ ")"
   )
 

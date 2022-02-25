@@ -38,9 +38,11 @@ case class SQLSelectExpr(
     limit: Option[Int]
 ) extends Expr
 
-case class SubqueryExpr(subquery: SQLSelectExpr) extends Expr
+case class SubqueryExpr(subquery: Expr) extends Expr
 
 case class StarExpr() extends Expr
 case class TableStarExpr(table: Ident) extends Expr
 
 case class Pair(k: String, v: Expr)
+
+case class TableConstructorExpr(query: Expr) extends Expr

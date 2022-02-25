@@ -99,7 +99,7 @@ object Main extends App:
 // WHERE EXISTS(SELECT * FROM e )
   val input =
     """
-      |SELECT * FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
+      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 
