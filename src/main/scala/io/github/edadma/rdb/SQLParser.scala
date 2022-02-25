@@ -12,8 +12,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   val lexical: StdLexical =
     new StdLexical:
-      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||")
-      reserved ++= Seq("SELECT", "FROM")
+      delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=")
+      reserved ++= Seq("SELECT", "FROM", "TRUE", "FALSE", "LIKE", "ILIKE", "NOT")
 
       override def token: Parser[Token] =
         quotedToken | stringToken | super.token
@@ -31,8 +31,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
   lazy val query: P[SQLSelectExpr] =
-    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ^^ { case _ ~ p ~ _ ~ f =>
-      SQLSelectExpr(p to ArraySeq, f, None, null, None, null, None)
+    "SELECT" ~ expressions ~ "FROM" ~ repsep(source, ",") ~ opt(booleanExpression) ^^ { case _ ~ p ~ _ ~ f ~ w =>
+      SQLSelectExpr(p to ArraySeq, f, w, null, None, null, None)
     }
 
   lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(identifier) ^^ {
@@ -54,8 +54,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val expressions: P[Seq[Expr]] = rep1sep(expression | star, ",")
 
-//  lazy val booleanExpression: P[Expr] = orExpression
-//
+  lazy val booleanExpression: P[Expr] = booleanPrimary
+
 //  lazy val orExpression: P[Expr] = positioned(
 //    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
 //      andExpression
@@ -69,9 +69,9 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //  lazy val notExpression: P[Expr] = positioned(
 //    kw("NOT") ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) | booleanPrimary
 //  )
-//
-//  lazy val booleanPrimary: P[Expr] = positioned(
-//    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
+
+  lazy val booleanPrimary: P[Expr] = positioned(
+    expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
 //      expression ~ ((kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN") | kw("BETWEEN")) ~ expression ~ kw(
 //        "AND"
 //      ) ~ expression ^^ { case e ~ b ~ l ~ _ ~ u =>
@@ -81,23 +81,21 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 //      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => SQLInArrayExpr(e, i, es) } |
 //      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => SQLInQueryExpr(e, i, q) } |
 //      kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
-//      booleanLiteral |
-//      "(" ~> booleanExpression <~ ")"
-//  )
-//
+      booleanLiteral |
+      "(" ~> booleanExpression <~ ")"
+  )
+
 //  lazy val isNull: P[String] =
 //    kw("IS") ~ kw("NULL") ^^^ "IS NULL" | kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
 //
 //  lazy val in: P[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
-//
-//  lazy val comparison: P[String] =
-//    "<=" | ">=" | "<" | ">" | "=" | "!=" | kw("LIKE") | kw("ILIKE") | (kw("NOT") ~ kw("LIKE") ^^^ "NOT LIKE") | (kw(
-//      "NOT"
-//    ) ~ kw("ILIKE") ^^^ "NOT ILIKE")
-//
-//  lazy val booleanLiteral: P[Expr] = positioned(
-//    (kw("TRUE") | kw("FALSE")) ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE")))
-//  )
+
+  lazy val comparison: P[String] =
+    "<=" | ">=" | "<" | ">" | "=" | "!=" | "LIKE" | "ILIKE" | ("NOT" ~ "LIKE" ^^^ "NOT LIKE" | "NOT" ~ "ILIKE" ^^^ "NOT ILIKE")
+
+  lazy val booleanLiteral: P[Expr] = positioned(
+    ("TRUE" | "FALSE") ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE")))
+  )
 
   lazy val expression: P[Expr] = concatenation
 
@@ -157,6 +155,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
       stringLit ^^ StringExpr.apply |
       application |
       column |
+      booleanLiteral |
 //      jsonExpression |
 //      caseExpression |
 //      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |

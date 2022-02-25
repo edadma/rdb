@@ -122,6 +122,6 @@ object Main extends App:
 
   val input =
     """
-      |SELECT 'asdf' || e_id FROM e""".stripMargin
+      |SELECT * FROM e WHERE e_id > 2""".trim.stripMargin
 
   pprintln(eval(rewrite(SQLParser.parseQuery(input))(db), Nil, AggregateMode.Return))
