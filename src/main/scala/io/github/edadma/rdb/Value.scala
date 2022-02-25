@@ -1,14 +1,20 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dal.{TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
+import io.github.edadma.dal.{BasicDAL, TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
 
 import scala.util.parsing.input.{Position, Positional}
 
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
-  def asText: StringValue = problem(pos, "cannot be converted to text")
+  def asText: TextValue = problem(pos, "cannot be converted to text")
+  def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
-  override def asText: StringValue = StringValue(value.toString)
+  override def asText: TextValue = TextValue(value.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case n: NumberValue => BasicDAL.compare[TypedNumber](this, n)
+      case _              => problem(that, s"'$this' can't be compared to '$that''")
 
 object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
@@ -21,8 +27,8 @@ case object NullValue extends Value(NullType)
 
 case object StarValue extends Value(StarType)
 
-case class StringValue(s: String) extends Value(StringType):
-  override def asText: StringValue = this
+case class TextValue(s: String) extends Value(TextType):
+  override def asText: TextValue = this
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType)
 

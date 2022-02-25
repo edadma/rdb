@@ -28,16 +28,16 @@ object Main extends App:
 //  )
 
   val e =
-    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", StringType), ColumnSpec("m_id", NumberType)))
+    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
 
   e.bulkInsert(
     Seq("e_id", "name", "m_id"),
     Seq(
-      Seq(NumberValue(1), StringValue("emp1"), NumberValue(2)),
-      Seq(NumberValue(2), StringValue("mgr1"), NumberValue(3)),
-      Seq(NumberValue(3), StringValue("mgr2"), NullValue),
-      Seq(NumberValue(4), StringValue("emp2"), NumberValue(3)),
-      Seq(NumberValue(5), StringValue("emp3"), NumberValue(3))
+      Seq(NumberValue(1), TextValue("emp1"), NumberValue(2)),
+      Seq(NumberValue(2), TextValue("mgr1"), NumberValue(3)),
+      Seq(NumberValue(3), TextValue("mgr2"), NullValue),
+      Seq(NumberValue(4), TextValue("emp2"), NumberValue(3)),
+      Seq(NumberValue(5), TextValue("emp3"), NumberValue(3))
     )
   )
 

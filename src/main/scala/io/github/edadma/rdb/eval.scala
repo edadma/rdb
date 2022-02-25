@@ -21,7 +21,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case ProcessOperator(proc)       => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case e @ NumberExpr(n: Int)      => NumberValue(IntType, n).setPos(e.pos)
     case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).setPos(e.pos)
-    case e @ StringExpr(s)           => StringValue(s).setPos(e.pos)
+    case e @ StringExpr(s)           => TextValue(s).setPos(e.pos)
     case e @ NullExpr()              => NullValue.setPos(e.pos)
     case e @ StarExpr()              => StarValue.setPos(e.pos)
     case c @ ColumnExpr(Ident(name)) =>
@@ -49,7 +49,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       val l = teval(left, ctx, mode)
       val r = teval(right, ctx, mode)
 
-      StringValue(l.s ++ r.s)
+      TextValue(l.s ++ r.s)
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
       val or = op == "OR"
 
@@ -70,10 +70,10 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
       BooleanValue(
         op match
-          case "<"  => BasicDAL.relate(LT, l, r)
-          case ">"  => BasicDAL.relate(GT, l, r)
-          case "<=" => BasicDAL.relate(LTE, l, r)
-          case ">=" => BasicDAL.relate(GTE, l, r)
+          case "<"  => l < r
+          case ">"  => l > r
+          case "<=" => l <= r
+          case ">=" => l >= r
       )
     case BinaryExpr(left, op @ ("=" | "!="), right) =>
       val l = eval(left, ctx, mode)
@@ -89,7 +89,7 @@ def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Di
 
 def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue = eval(expr, ctx, mode).asInstanceOf[NumberValue]
 
-def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): StringValue = eval(expr, ctx, mode).asText
+def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TextValue = eval(expr, ctx, mode).asText
 
 def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
   eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]

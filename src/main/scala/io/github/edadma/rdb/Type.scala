@@ -3,7 +3,7 @@ package io.github.edadma.rdb
 trait Type(val name: String)
 
 case object NumberType extends Type("number")
-case object StringType extends Type("string")
+case object TextType extends Type("text")
 case object NullType extends Type("null")
 case object StarType extends Type("*")
 case object BooleanType extends Type("boolean")
