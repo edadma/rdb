@@ -24,6 +24,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "FALSE",
         "FROM",
         "ILIKE",
+        "IN",
         "IS",
         "LIKE",
         "NOT",
@@ -111,8 +112,8 @@ object SQLParser extends StdTokenParsers with PackratParsers:
           BetweenExpr(e, b, l, u)
       } |
       expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
-//      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => SQLInArrayExpr(e, i, es) } |
-//      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => SQLInQueryExpr(e, i, q) } |
+      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => InSeqExpr(e, i, es) } |
+      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
       booleanLiteral |
       "(" ~> booleanExpression <~ ")"
   )

@@ -25,8 +25,18 @@ case class ApplyExpr(func: Ident, args: Seq[Expr]) extends Expr
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr]) extends Expr
 case class AggregateFunctionExpr(f: AggregateFunction, arg: Expr) extends Expr
 
-case class SQLInArrayExpr(value: Expr, op: String, exprs: List[Expr]) extends Expr
-case class SQLInQueryExpr(value: Expr, op: String, query: SQLSelectExpr) extends Expr
+case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr]) extends Expr
+case class InQueryExpr(value: Expr, op: String, query: Expr) extends Expr
+
+case class SubqueryExpr(subquery: Expr) extends Expr
+
+case class StarExpr() extends Expr
+case class TableStarExpr(table: Ident) extends Expr
+
+case class Pair(k: String, v: Expr)
+
+case class TableConstructorExpr(query: Expr) extends Expr
+
 case class SQLSelectExpr(
     exprs: ArraySeq[Expr],
     from: Seq[Expr],
@@ -37,12 +47,3 @@ case class SQLSelectExpr(
     lpos: Position | Null,
     limit: Option[Int]
 ) extends Expr
-
-case class SubqueryExpr(subquery: Expr) extends Expr
-
-case class StarExpr() extends Expr
-case class TableStarExpr(table: Ident) extends Expr
-
-case class Pair(k: String, v: Expr)
-
-case class TableConstructorExpr(query: Expr) extends Expr

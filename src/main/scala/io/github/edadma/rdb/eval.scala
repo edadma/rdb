@@ -39,11 +39,10 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       lookup(name, ctx) match
         case None      => problem(c, s"'$name' not found")
         case Some(res) => res
-    case InExpr(value, array) =>
+    case InSeqExpr(value, op, exprs) =>
       val v = eval(value, ctx, mode)
-      val a = aleval(array, ctx, mode)
 
-      BooleanValue(a contains v)
+      BooleanValue((op contains "NOT") ^ (exprs exists (e => eval(e, ctx, mode) == v)))
     case ExistsExpr(expr)       => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case UnaryExpr("-", expr)   => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
     case UnaryExpr("NOT", expr) => BooleanValue(!beval(expr, ctx))

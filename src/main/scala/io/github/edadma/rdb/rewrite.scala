@@ -4,8 +4,9 @@ import scala.collection.immutable.ArraySeq
 
 def rewrite(expr: Expr)(implicit db: DB): Expr =
   expr match
-    case _ if expr.typ != null      => expr
-    case TableConstructorExpr(expr) => TableConstructorExpr(rewrite(expr))
+    case _ if expr.typ != null       => expr
+    case InSeqExpr(value, op, exprs) => InSeqExpr(rewrite(value), op, exprs map rewrite)
+    case TableConstructorExpr(expr)  => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(Ident(func), args) =>
       scalarFunction get func match
         case None =>
