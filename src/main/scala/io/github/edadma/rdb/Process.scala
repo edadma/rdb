@@ -112,7 +112,7 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
                 case (true, false)  => Nulls.last
                 case (true, true)   => Nulls.first
 
-            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Ignore))(ordering), tail)
+            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Disallow))(ordering), tail)
 
       sort(data, by.reverse)
 

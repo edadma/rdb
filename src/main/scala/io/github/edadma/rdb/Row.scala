@@ -3,7 +3,7 @@ package io.github.edadma.rdb
 import scala.language.postfixOps
 
 enum AggregateMode:
-  case Return, Accumulate, AccumulateReturn, Disallow, Ignore
+  case Return, Accumulate, AccumulateReturn, Disallow
 
 case class Row(data: IndexedSeq[Value], meta: Metadata, mode: AggregateMode = AggregateMode.Accumulate)
 
