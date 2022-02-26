@@ -5,7 +5,7 @@ import scala.language.postfixOps
 enum AggregateMode:
   case Return, Accumulate, AccumulateReturn, Disallow
 
-case class Row(data: IndexedSeq[Value], meta: Metadata, mode: AggregateMode = AggregateMode.Accumulate)
+case class Row(data: IndexedSeq[Value], meta: Metadata, mode: AggregateMode = AggregateMode.Return)
 
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 

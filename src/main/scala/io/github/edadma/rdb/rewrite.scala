@@ -45,9 +45,8 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       if limit.isDefined then problem(limit.get.pos, "LIMIT clause no allowed here")
 
       val rewritten_projs = exprs map rewrite
-      val aggregates = rewritten_projs exists aggregate
 
-      ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs, aggregates))
+      ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
     case SQLSelectExpr(exprs, from, where, groupBy, orderBy, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
@@ -110,8 +109,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         ProjectProcess(
           if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
           else rewritten_proc,
-          rewritten_projs,
-          aggregates
+          rewritten_projs
         )
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))

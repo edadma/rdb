@@ -30,13 +30,17 @@ case class UngroupedProcess(input: Process, column: Boolean) extends Process:
   def iterator(ctx: Seq[Row]): RowIterator =
     val rows = input.iterator(ctx) to ArrayBuffer // todo: do this without buffering table
 
-    if column then rows.iterator ++ (rows map (_.copy(mode = AggregateMode.Return)) iterator)
+    if column then
+      rows
+        .map(_.copy(mode = AggregateMode.Accumulate))
+        .iterator ++ rows.map(_.copy(mode = AggregateMode.Return)).iterator
     else
+      for (i <- 0 until (rows.length - 1))
+        rows(i) = rows(i).copy(mode = AggregateMode.Accumulate)
       rows(rows.length - 1) = rows(rows.length - 1).copy(mode = AggregateMode.AccumulateReturn)
       rows.iterator
 
-case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates: Boolean /*, metactx: Seq[Metadata]*/ )
-    extends Process:
+case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
   private val ctx = Seq(input.meta) // input.meta +: metactx
 
   @tailrec
@@ -65,10 +69,9 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr], aggregrates:
           fields
             .map(f => eval(f, row +: ctx, row.mode))
 
-        (aggregrates, row.mode) match
-          case (false, _) | (true, AggregateMode.Return | AggregateMode.AccumulateReturn) =>
-            Iterator(Row(projected, meta))
-          case (true, _) => Iterator.empty
+        row.mode match
+          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta))
+          case _                                                     => Iterator.empty
       )
 
 case class AliasProcess(input: Process, alias: String) extends Process:
