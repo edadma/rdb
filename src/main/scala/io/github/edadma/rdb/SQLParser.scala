@@ -79,8 +79,10 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "KEY",
         "LEFT",
         "LIKE",
+        "LIMIT",
         "NOT",
         "NULL",
+        "OFFSET",
         "ON",
         "OR",
         "ORDER",
@@ -118,8 +120,9 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
   lazy val query: P[SQLSelectExpr] =
-    "SELECT" ~ expressions ~ fromClause ~ whereClause ~ groupByClause ~ orderByClause ^^ { case _ ~ p ~ f ~ w ~ g ~ o =>
-      SQLSelectExpr(p to ArraySeq, f, w, g, o, null, None, null, None)
+    "SELECT" ~ expressions ~ fromClause ~ whereClause ~ groupByClause ~ orderByClause ~ offsetClause ~ limitClause ^^ {
+      case _ ~ p ~ f ~ w ~ g ~ o ~ of ~ l =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, o, of, l)
     }
 
   lazy val fromClause: P[Seq[Expr]] = "FROM" ~> repsep(source, ",")
@@ -129,6 +132,12 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val groupByClause: P[Option[Seq[Expr]]] = opt("GROUP" ~> "BY" ~> rep1sep(expression, ","))
 
   lazy val orderByClause: P[Option[Seq[OrderBy]]] = opt("ORDER" ~> "BY" ~> rep1sep(orderBy, ","))
+
+  lazy val count: P[Count] = pos ~ integer ^^ { case p ~ c => Count(p, c) }
+
+  lazy val offsetClause: P[Option[Count]] = opt("OFFSET" ~> count)
+
+  lazy val limitClause: P[Option[Count]] = opt("LIMIT" ~> count)
 
   lazy val orderBy: P[OrderBy] = expression ~ opt("ASC" | "DESC") ^^ {
     case e ~ (None | Some("ASC")) => OrderBy(e, true)
@@ -250,15 +259,17 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     }
   )
 
+  lazy val integer: P[Int] = numericLit ^^ (_.toInt)
+
   lazy val primary: P[Expr] = positioned(
-    numericLit ^^ (n => NumberExpr(n.toInt)) |
+    integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       application |
       column |
       booleanLiteral |
 //      jsonExpression |
 //      caseExpression |
-//      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
+      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "TABLE" ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
       "(" ~> expression <~ ")"

@@ -102,7 +102,7 @@ object Main extends App:
 //      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
 //      |""".trim.stripMargin
     """
-      |SELECT * FROM e WHERE e_id NOT IN (3, 5)
+      |SELECT -e_id FROM e OFFSET 2 LIMIT 2
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 

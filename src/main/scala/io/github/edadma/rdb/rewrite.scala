@@ -37,18 +37,18 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
-    case SQLSelectExpr(exprs, Nil, where, groupBy, orderBy, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, Nil, where, groupBy, orderBy, offset, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause no allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause no allowed here")
       if orderBy.isDefined then problem(where.get, "ORDER BY clause no allowed here")
-      if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
-      if limit.isDefined then problem(lpos, "LIMIT clause no allowed here")
+      if offset.isDefined then problem(offset.get.pos, "OFFSET clause no allowed here")
+      if limit.isDefined then problem(limit.get.pos, "LIMIT clause no allowed here")
 
       val rewritten_projs = exprs map rewrite
       val aggregates = rewritten_projs exists aggregate
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs, aggregates))
-    case SQLSelectExpr(exprs, from, where, groupBy, orderBy, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, from, where, groupBy, orderBy, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -68,11 +68,19 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case Seq(StarExpr()) => r1a
           case _               => ProjectOperator(r1a, exprs map rewrite)
       val r3 =
-        if offset.isDefined then OffsetOperator(r2, offset.get)
-        else r2
+        offset match
+          case Some(Count(pos, count)) =>
+            if count < 1 then problem(pos, s"offset should be positive: $count")
+
+            OffsetOperator(r2, count)
+          case None => r2
       val r4 =
-        if limit.isDefined then LimitOperator(r3, limit.get)
-        else r3
+        limit match
+          case Some(Count(pos, count)) =>
+            if count < 1 then problem(pos, s"limit should be positive: $count")
+
+            LimitOperator(r3, count)
+          case None => r3
 
       rewrite(r4)
     case SortOperator(rel, by, nullsFirst) => ProcessOperator(SortProcess(procRewrite(rel), by, nullsFirst))

@@ -37,14 +37,14 @@ case class Pair(k: String, v: Expr)
 
 case class TableConstructorExpr(query: Expr) extends Expr
 
+case class Count(pos: Position, count: Int)
+
 case class SQLSelectExpr(
     exprs: ArraySeq[Expr],
     from: Seq[Expr],
     where: Option[Expr],
     groupBy: Option[Seq[Expr]],
     orderBy: Option[Seq[OrderBy]],
-    opos: Position | Null,
-    offset: Option[Int],
-    lpos: Position | Null,
-    limit: Option[Int]
+    offset: Option[Count],
+    limit: Option[Count]
 ) extends Expr
