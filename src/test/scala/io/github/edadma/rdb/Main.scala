@@ -102,7 +102,7 @@ object Main extends App:
 //      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
 //      |""".trim.stripMargin
     """
-      |SELECT * FROM e ORDER BY m_id
+      |SELECT * FROM e ORDER BY m_id NULLS LAST, name DESC
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
 

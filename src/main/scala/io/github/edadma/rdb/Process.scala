@@ -97,24 +97,47 @@ case class OrderBy(f: Expr, asc: Boolean, nullsFirst: Boolean)
 case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
   val meta: Metadata = input.meta
 
+  private final class SeqOrdering(ords: Seq[Ordering[Value]]) extends Ordering[Seq[Value]]:
+    def compare(xs: Seq[Value], ys: Seq[Value]): Int =
+      val x = xs.iterator
+      val y = ys.iterator
+      val ord = ords.iterator
+
+      while (x.hasNext && y.hasNext && ord.hasNext)
+        val res = ord.next().compare(x.next(), y.next())
+
+        if (res != 0) return res
+
+      0
+
   def iterator(ctx: Seq[Row]): RowIterator =
     val data = input.iterator(ctx) to ArraySeq
-    val sorted: ArraySeq[Row] =
-      @tailrec
-      def sort(rows: ArraySeq[Row], by: Seq[OrderBy]): ArraySeq[Row] =
-        by match
-          case Nil => rows
-          case OrderBy(f, asc, nullsFirst) :: tail =>
-            val ordering =
-              (asc, nullsFirst) match
-                case (false, false) => Nulls.first.reverse
-                case (false, true)  => Nulls.last.reverse
-                case (true, false)  => Nulls.last
-                case (true, true)   => Nulls.first
-
-            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Disallow))(ordering), tail)
-
-      sort(data, by.reverse)
+    val fs = by map { case OrderBy(f, _, _) => f }
+    val orderings =
+      by map { case OrderBy(_, asc, nullsFirst) =>
+        (asc, nullsFirst) match
+          case (false, false) => Nulls.first.reverse
+          case (false, true)  => Nulls.last.reverse
+          case (true, false)  => Nulls.last
+          case (true, true)   => Nulls.first
+      }
+    val ordering = new SeqOrdering(orderings)
+    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(ordering)
+//      @tailrec
+//      def sort(rows: ArraySeq[Row], by: Seq[OrderBy]): ArraySeq[Row] =
+//        by match
+//          case Nil => rows
+//          case OrderBy(f, asc, nullsFirst) :: tail =>
+//            val ordering =
+//              (asc, nullsFirst) match
+//                case (false, false) => Nulls.first.reverse
+//                case (false, true)  => Nulls.last.reverse
+//                case (true, false)  => Nulls.last
+//                case (true, true)   => Nulls.first
+//
+//            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Disallow))(ordering), tail)
+//
+//      sort(data, by.reverse)
 
     sorted.iterator
 
