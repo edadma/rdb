@@ -79,19 +79,14 @@ case class DistinctProcess(input: Process) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
 
-case class OrderBy(f: Expr, asc: Boolean)
+case class OrderBy(f: Expr, asc: Boolean, nullsLast: Boolean)
 
-case class SortProcess(input: Process, by: Seq[OrderBy], nullsFirst: Boolean) extends Process:
-//  val lt: PartialFunction[(Value, Value), Boolean] =
-//    case (a: NumberValue, b: NumberValue) => BasicDAL.relate(LT, a, b)
-//    case (StringValue(a), StringValue(b)) => a < b
-//    case (a, b) => problem(a, s"can't compare two values of types '${a.vtyp}' and '${b.vtyp}'")
-//
+case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
     val data = input.iterator(ctx) to ArraySeq
-    val sorted = data.sortBy(row => eval(by.head.f, row +: ctx, AggregateMode.Disallow))
+    val sorted = data.sortBy(row => eval(by.head.f, row +: ctx, AggregateMode.Ignore))
 
     sorted.iterator
 
@@ -121,6 +116,6 @@ case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
     input1.iterator(ctx).flatMap { x =>
       val matches = input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta)) filter (row => beval(cond, row +: ctx))
 
-      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NullValue()), meta))
+      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta))
       else matches
     }

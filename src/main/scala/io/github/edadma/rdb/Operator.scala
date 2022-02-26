@@ -8,7 +8,7 @@ case class AliasOperator(rel: Expr, alias: Ident) extends Operator
 case class ProjectOperator(rel: Expr, exprs: ArraySeq[Expr]) extends Operator
 case class TableOperator(table: Ident) extends Operator
 case class SelectOperator(rel: Expr, cond: Expr) extends Operator
-case class SortOperator(rel: Expr, by: Seq[OrderBy], nullsFirst: Boolean) extends Operator
+case class SortOperator(rel: Expr, by: Seq[OrderBy]) extends Operator
 case class CrossOperator(rel1: Expr, rel2: Expr) extends Operator
 case class InnerJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
 case class LeftJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator

@@ -60,6 +60,7 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "EXEC",
         "EXISTS",
         "FALSE",
+        "FIRST",
         "FLOAT",
         "FOREIGN",
         "FROM",
@@ -77,11 +78,13 @@ object SQLParser extends StdTokenParsers with PackratParsers:
         "JOIN",
         "JSON",
         "KEY",
+        "LAST",
         "LEFT",
         "LIKE",
         "LIMIT",
         "NOT",
         "NULL",
+        "NULLS",
         "OFFSET",
         "ON",
         "OR",
@@ -139,9 +142,11 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val limitClause: P[Option[Count]] = opt("LIMIT" ~> count)
 
-  lazy val orderBy: P[OrderBy] = expression ~ opt("ASC" | "DESC") ^^ {
-    case e ~ (None | Some("ASC")) => OrderBy(e, true)
-    case e ~ _                    => OrderBy(e, false)
+  lazy val orderBy: P[OrderBy] = expression ~ opt("ASC" | "DESC") ~ opt("NULLS" ~> ("FIRST" | "LAST")) ^^ {
+    case e ~ (None | Some("ASC")) ~ (None | Some("LAST")) => OrderBy(e, true, true)
+    case e ~ _ ~ (None | Some("LAST"))                    => OrderBy(e, false, true)
+    case e ~ (None | Some("ASC")) ~ _                     => OrderBy(e, true, false)
+    case e ~ _ ~ _                                        => OrderBy(e, false, false)
   }
 
   lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(opt("AS") ~> identifier) ^^ {

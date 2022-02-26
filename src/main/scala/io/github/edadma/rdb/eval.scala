@@ -14,10 +14,11 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         case AggregateMode.Return => f.result
         case AggregateMode.Accumulate =>
           f.acc(eval(arg, ctx, mode))
-          NullValue()
+          NULL
         case AggregateMode.AccumulateReturn =>
           f.acc(eval(arg, ctx, mode))
           f.result
+        case AggregateMode.Ignore   => NULL
         case AggregateMode.Disallow => sys.error(s"aggregates not allowed here: $expr")
     case ScalarFunctionExpr(f, args) => f.func(args map (e => eval(e, ctx, mode)))
     case ProcessOperator(proc)       => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)

@@ -62,7 +62,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val r1a =
         orderBy match
           case None     => r1
-          case Some(os) => SortOperator(r1, os map { case OrderBy(f, d) => OrderBy(rewrite(f), d) }, true)
+          case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
       val r2 =
         exprs match
           case Seq(StarExpr()) => r1a
@@ -83,9 +83,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case None => r3
 
       rewrite(r4)
-    case SortOperator(rel, by, nullsFirst) => ProcessOperator(SortProcess(procRewrite(rel), by, nullsFirst))
-    case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
-    case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
+    case SortOperator(rel, by)       => ProcessOperator(SortProcess(procRewrite(rel), by))
+    case OffsetOperator(rel, offset) => ProcessOperator(DropProcess(procRewrite(rel), offset))
+    case LimitOperator(rel, limit)   => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case InnerJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
