@@ -102,9 +102,10 @@ object Main extends App:
 //      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
 //      |""".trim.stripMargin
     """
-      |SELECT * FROM e ORDER BY m_id NULLS LAST, name DESC
+      |SELECT m_id, count(*) FROM e GROUP BY m_id
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
+  val rewritten = rewrite(ast)(db)
 
-  pprintln(ast)
-  pprintln(eval(rewrite(ast)(db), Nil, AggregateMode.Return))
+  pprintln(rewritten)
+  pprintln(eval(rewritten, Nil, AggregateMode.Return))

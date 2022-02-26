@@ -59,31 +59,36 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         where match
           case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
-      val r1a =
-        orderBy match
-          case None     => r1
-          case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
       val r2 =
-        exprs match
-          case Seq(StarExpr()) => r1a
-          case _               => ProjectOperator(r1a, exprs map rewrite)
+        groupBy match
+          case None     => r1
+          case Some(es) => GroupOperator(r1, es map rewrite)
       val r3 =
+        orderBy match
+          case None     => r2
+          case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+      val r4 =
+        exprs match
+          case Seq(StarExpr()) => r3
+          case _               => ProjectOperator(r3, exprs map rewrite)
+      val r5 =
         offset match
           case Some(Count(pos, count)) =>
             if count < 1 then problem(pos, s"offset should be positive: $count")
 
-            OffsetOperator(r2, count)
-          case None => r2
-      val r4 =
+            OffsetOperator(r4, count)
+          case None => r4
+      val r6 =
         limit match
           case Some(Count(pos, count)) =>
             if count < 1 then problem(pos, s"limit should be positive: $count")
 
-            LimitOperator(r3, count)
-          case None => r3
+            LimitOperator(r5, count)
+          case None => r5
 
-      rewrite(r4)
+      rewrite(r6)
     case SortOperator(rel, by)       => ProcessOperator(SortProcess(procRewrite(rel), by))
+    case GroupOperator(rel, by)      => ProcessOperator(GroupProcess(procRewrite(rel), by))
     case OffsetOperator(rel, offset) => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)   => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case InnerJoinOperator(rel1, rel2, on) =>
@@ -103,7 +108,8 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       ProcessOperator(
         ProjectProcess(
-          if aggregates then UngroupedProcess(rewritten_proc, columns) else rewritten_proc,
+          if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
+          else rewritten_proc,
           rewritten_projs,
           aggregates
         )

@@ -1,9 +1,11 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.BasicDAL
+import pprint.pprintln
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 trait Process:
@@ -78,6 +80,17 @@ case class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
+
+case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val data = input.iterator(ctx) to mutable.ArraySeq
+    val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
+
+    groups foreach (a => a(a.length - 1) = a.last.copy(mode = AggregateMode.AccumulateReturn))
+    pprintln(List.concat(groups: _*))
+    Iterator.concat(groups: _*)
 
 object Nulls:
   val first: Ordering[Value] =
