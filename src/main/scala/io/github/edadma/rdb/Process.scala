@@ -105,11 +105,12 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
         by match
           case Nil => rows
           case OrderBy(f, asc, nullsFirst) :: tail =>
-            val ordering = (asc, nullsFirst) match
-              case (false, false) => Nulls.first.reverse
-              case (false, true)  => Nulls.last.reverse
-              case (true, false)  => Nulls.last
-              case (true, true)   => Nulls.first
+            val ordering =
+              (asc, nullsFirst) match
+                case (false, false) => Nulls.first.reverse
+                case (false, true)  => Nulls.last.reverse
+                case (true, false)  => Nulls.last
+                case (true, true)   => Nulls.first
 
             sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Ignore))(ordering), tail)
 
