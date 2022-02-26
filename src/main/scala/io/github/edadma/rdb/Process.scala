@@ -37,6 +37,7 @@ case class UngroupedProcess(input: Process, column: Boolean) extends Process:
     else
       for (i <- 0 until (rows.length - 1))
         rows(i) = rows(i).copy(mode = AggregateMode.Accumulate)
+
       rows(rows.length - 1) = rows(rows.length - 1).copy(mode = AggregateMode.AccumulateReturn)
       rows.iterator
 
@@ -91,7 +92,12 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
     val data = input.iterator(ctx) to mutable.ArraySeq
     val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
 
-    groups foreach (a => a(a.length - 1) = a.last.copy(mode = AggregateMode.AccumulateReturn))
+    for (g <- groups)
+      for (i <- 0 until (g.length - 1))
+        g(i) = g(i).copy(mode = AggregateMode.Accumulate)
+
+      g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
+
     pprintln(List.concat(groups: _*))
     Iterator.concat(groups: _*)
 
