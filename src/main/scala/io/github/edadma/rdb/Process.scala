@@ -114,7 +114,7 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
 
             sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Ignore))(ordering), tail)
 
-      sort(data, by)
+      sort(data, by.reverse)
 
     sorted.iterator
 
