@@ -79,14 +79,41 @@ case class DistinctProcess(input: Process) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
 
-case class OrderBy(f: Expr, asc: Boolean, nullsLast: Boolean)
+object Nulls:
+  val first: Ordering[Value] =
+    (x: Value, y: Value) =>
+      if x.isNull then -1
+      else if y.isNull then 1
+      else x compare y
+
+  val last: Ordering[Value] =
+    (x: Value, y: Value) =>
+      if x.isNull then 1
+      else if y.isNull then -1
+      else x compare y
+
+case class OrderBy(f: Expr, asc: Boolean, nullsFirst: Boolean)
 
 case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
     val data = input.iterator(ctx) to ArraySeq
-    val sorted = data.sortBy(row => eval(by.head.f, row +: ctx, AggregateMode.Ignore))
+    val sorted: ArraySeq[Row] =
+      @tailrec
+      def sort(rows: ArraySeq[Row], by: Seq[OrderBy]): ArraySeq[Row] =
+        by match
+          case Nil => rows
+          case OrderBy(f, asc, nullsFirst) :: tail =>
+            val ordering = (asc, nullsFirst) match
+              case (false, false) => Nulls.first.reverse
+              case (false, true)  => Nulls.last.reverse
+              case (true, false)  => Nulls.last
+              case (true, true)   => Nulls.first
+
+            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Ignore))(ordering), tail)
+
+      sort(data, by)
 
     sorted.iterator
 

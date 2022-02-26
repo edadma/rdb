@@ -143,10 +143,10 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val limitClause: P[Option[Count]] = opt("LIMIT" ~> count)
 
   lazy val orderBy: P[OrderBy] = expression ~ opt("ASC" | "DESC") ~ opt("NULLS" ~> ("FIRST" | "LAST")) ^^ {
-    case e ~ (None | Some("ASC")) ~ (None | Some("LAST")) => OrderBy(e, true, true)
-    case e ~ _ ~ (None | Some("LAST"))                    => OrderBy(e, false, true)
-    case e ~ (None | Some("ASC")) ~ _                     => OrderBy(e, true, false)
-    case e ~ _ ~ _                                        => OrderBy(e, false, false)
+    case e ~ (None | Some("ASC")) ~ (None | Some("FIRST")) => OrderBy(e, true, true)
+    case e ~ _ ~ (None | Some("FIRST"))                    => OrderBy(e, false, true)
+    case e ~ (None | Some("ASC")) ~ _                      => OrderBy(e, true, false)
+    case e ~ _ ~ _                                         => OrderBy(e, false, false)
   }
 
   lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(opt("AS") ~> identifier) ^^ {

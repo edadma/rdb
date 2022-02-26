@@ -4,12 +4,10 @@ import io.github.edadma.dal.{BasicDAL, TypedNumber, DoubleType as DDoubleType, I
 
 import scala.util.parsing.input.{Position, Positional}
 
-//object NullOrdering:
-
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
   def asText: TextValue = problem(pos, "cannot be converted to text")
 
-  def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
+  infix def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
 
   def isNull: Boolean = isInstanceOf[NullValue]
 
@@ -30,8 +28,6 @@ object NumberValue:
 
 case class NullValue() extends Value(NullType):
   override def asText: TextValue = TextValue("NULL")
-
-  override def compare(that: Value): Int = -1
 
 case class StarValue() extends Value(StarType)
 
