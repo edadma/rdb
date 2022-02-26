@@ -37,8 +37,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
-    case SQLSelectExpr(exprs, Nil, where, orderBy, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, Nil, where, groupBy, orderBy, opos, offset, lpos, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause no allowed here")
+      if groupBy.isDefined then problem(where.get, "GROUP BY clause no allowed here")
       if orderBy.isDefined then problem(where.get, "ORDER BY clause no allowed here")
       if offset.isDefined then problem(opos, "OFFSET clause no allowed here")
       if limit.isDefined then problem(lpos, "LIMIT clause no allowed here")
@@ -47,7 +48,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val aggregates = rewritten_projs exists aggregate
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs, aggregates))
-    case SQLSelectExpr(exprs, from, where, orderBy, opos, offset, lpos, limit) =>
+    case SQLSelectExpr(exprs, from, where, groupBy, orderBy, opos, offset, lpos, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e

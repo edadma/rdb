@@ -14,18 +14,27 @@ object SQLParser extends StdTokenParsers with PackratParsers:
     new StdLexical:
       delimiters ++= Seq("+", "-", "*", "/", "(", ")", ".", "||", "<=", ">=", "<", ">", "=", "!=", ",")
       reserved ++= Seq(
+        "ADD",
+        "ALTER",
         "AND",
         "AS",
         "ASC",
         "BETWEEN",
         "BY",
+        "CREATE",
+        "DEFAULT",
         "DESC",
         "EXISTS",
         "FALSE",
+        "FOREIGN",
         "FROM",
+        "GROUP",
         "ILIKE",
         "IN",
+        "INT",
+        "INTEGER",
         "IS",
+        "KEY",
         "LIKE",
         "NOT",
         "NULL",
@@ -53,13 +62,15 @@ object SQLParser extends StdTokenParsers with PackratParsers:
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
   lazy val query: P[SQLSelectExpr] =
-    "SELECT" ~ expressions ~ fromClause ~ whereClause ~ orderByClause ^^ { case _ ~ p ~ f ~ w ~ o =>
-      SQLSelectExpr(p to ArraySeq, f, w, o, null, None, null, None)
+    "SELECT" ~ expressions ~ fromClause ~ whereClause ~ groupByClause ~ orderByClause ^^ { case _ ~ p ~ f ~ w ~ g ~ o =>
+      SQLSelectExpr(p to ArraySeq, f, w, g, o, null, None, null, None)
     }
 
   lazy val fromClause: P[Seq[Expr]] = "FROM" ~> repsep(source, ",")
 
   lazy val whereClause: P[Option[Expr]] = opt("WHERE" ~> booleanExpression)
+
+  lazy val groupByClause: P[Option[Seq[Expr]]] = opt("GROUP" ~> "BY" ~> rep1sep(expression, ","))
 
   lazy val orderByClause: P[Option[Seq[OrderBy]]] = opt("ORDER" ~> "BY" ~> rep1sep(orderBy, ","))
 
