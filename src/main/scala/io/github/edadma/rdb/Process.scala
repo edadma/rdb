@@ -123,21 +123,6 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
       }
     val ordering = new SeqOrdering(orderings)
     val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(ordering)
-//      @tailrec
-//      def sort(rows: ArraySeq[Row], by: Seq[OrderBy]): ArraySeq[Row] =
-//        by match
-//          case Nil => rows
-//          case OrderBy(f, asc, nullsFirst) :: tail =>
-//            val ordering =
-//              (asc, nullsFirst) match
-//                case (false, false) => Nulls.first.reverse
-//                case (false, true)  => Nulls.last.reverse
-//                case (true, false)  => Nulls.last
-//                case (true, true)   => Nulls.first
-//
-//            sort(rows.sortBy(row => eval(f, row +: ctx, AggregateMode.Disallow))(ordering), tail)
-//
-//      sort(data, by.reverse)
 
     sorted.iterator
 
