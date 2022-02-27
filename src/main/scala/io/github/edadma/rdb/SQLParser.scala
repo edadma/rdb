@@ -344,9 +344,21 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case t ~ cs ~ _ ~ rs => InsertCommand(t, cs, rs)
     }
 
+  lazy val create: P[Command] =
+    "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ {
+      case t ~ cs => CreateCommand(t, cs)
+    }
+
+  lazy val typ: P[String] = "INT" | "INTEGER" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT"
+
+  lazy val columnDesc: P[ColumnDesc] = identifier ~ typ ~ opt("PRIMARY" ~ "KEY") ~ opt("NOT" ~ "NULL") ^^ {
+    case c ~ t ~ p ~ n => ColumnDesc(c, t, p.isDefined, n.isDefined)
+  }
+
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |
-      insert
+    insert |
+    create
 
   def parseQuery(input: String): SQLSelectExpr =
     val tokens = new PackratReader(new lexical.Scanner(input))

@@ -10,7 +10,7 @@ abstract class DB:
 
   def table(name: String): Option[Table]
 
-  def create(name: String, spec: Seq[Spec]): Table
+  def create(name: String, specs: Seq[Spec]): Table
 
 abstract class Table extends Process:
 

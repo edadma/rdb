@@ -104,8 +104,14 @@ object Main extends App:
 //    """
 //      |SELECT * FROM e JOIN e m ON m.e_id = e.m_id
 //      |""".trim.stripMargin
+//  """
+//    |INSERT INTO e (e_id, name, m_id) VALUES (-123, 'asdf', 456)
+//    |""".trim.stripMargin
   """
-    |INSERT INTO e (e_id, name, m_id) VALUES (-123, 'asdf', 456)
+    |CREATE TABLE t (
+    | c1 INTEGER PRIMARY KEY,
+    | c2 TEXT
+    |)
     |""".trim.stripMargin
 //  val ast = SQLParser.parseQuery(input)
 //  val rewritten = rewrite(ast)(db)
@@ -114,4 +120,4 @@ object Main extends App:
 //  pprintln(eval(rewritten, Nil, AggregateMode.Return))
 
   pprintln(executeSQL(input))
-  pprintln(executeSQL("SELECT * FROM e"))
+//  pprintln(executeSQL("SELECT * FROM e"))

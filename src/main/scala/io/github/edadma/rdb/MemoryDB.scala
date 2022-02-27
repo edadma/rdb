@@ -13,7 +13,7 @@ class MemoryDB(val name: String) extends DB:
 
   def table(name: String): Option[Table] = tables get name
 
-  def create(name: String, spec: Seq[Spec]): Table =
+  def create(name: String, specs: Seq[Spec]): Table =
     if tables contains name then sys.error(s"table '$name' already exists")
     else
       val res = MemoryTable(name, spec)
