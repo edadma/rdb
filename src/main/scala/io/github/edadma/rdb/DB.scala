@@ -35,5 +35,6 @@ case class ColumnSpec(
     required: Boolean = false,
     indexed: Boolean = false,
     unique: Boolean = false,
-    fk: Option[String] = None
+    fk: Option[String] = None,
+    default: Option[Value] = None
 ) extends Spec

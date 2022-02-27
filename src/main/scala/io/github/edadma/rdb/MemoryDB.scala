@@ -56,7 +56,22 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
     bulkInsert(keys, Seq(values))
 
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value] =
-    require(header.toSet subsetOf columnMap.keySet)
+    val headerSet = header.toSet
+    val columnSet = columnMap.keySet
+
+    require(headerSet subsetOf columnSet)
+
+    val auto = new ArrayBuffer[ColumnSpec]
+    val missing =
+      for (m <- columnSet diff headerSet)
+        yield
+          val idx = columnMap(m)
+          val s = columns(idx)
+
+          if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
+
+          (idx, s.default getOrElse NullValue())
+
     val mapping = header map (h => meta.columnMap(h)._1)
     val specs = header map (h => columns(columnMap(h)))
     var result: Map[String, Value] = Map.empty
@@ -69,6 +84,9 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
           if s.required then problem(v, s"column '${s.name}' is required")
           else arr(i) = v
         else arr(i) = s.typ.convert(v)
+
+      for ((i, v) <- missing)
+        arr(i) = v
 
       data += arr
 
