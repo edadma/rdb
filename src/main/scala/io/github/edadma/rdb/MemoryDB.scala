@@ -9,7 +9,7 @@ class MemoryDB(val name: String) extends DB:
 
   private val tables = new mutable.HashMap[String, MemoryTable]
 
-  def exists(name: String): Boolean = tables contains name
+  def hasTable(name: String): Boolean = tables contains name
 
   def table(name: String): Option[Table] = tables get name
 
@@ -40,6 +40,8 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def meta: Metadata = _meta
 
   def iterator(ctx: Seq[Row]): RowIterator = data.iterator map (r => Row(r to ArraySeq, meta))
+
+  def hasColumn(name: String): Boolean = columnMap contains name
 
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def addColumn(spec: ColumnSpec): Unit =

@@ -6,7 +6,7 @@ abstract class DB:
 
   def name: String
 
-  def exists(name: String): Boolean
+  def hasTable(name: String): Boolean
 
   def table(name: String): Option[Table]
 
@@ -15,6 +15,8 @@ abstract class DB:
 abstract class Table extends Process:
 
   def name: String
+
+  def hasColumn(name: String): Boolean
 
   def addColumn(spec: ColumnSpec): Unit
 

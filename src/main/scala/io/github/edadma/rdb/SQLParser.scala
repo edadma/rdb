@@ -322,23 +322,30 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "(" ~> expression <~ ")"
   )
 
+  lazy val literal: P[Expr] = positioned(
+    booleanLiteral |
+      integer ^^ (n => NumberExpr(n)) |
+      decimal ^^ (n => NumberExpr(n)) |
+      stringLit ^^ StringExpr.apply |
+      "-" ~> primary ^^ (e => UnaryExpr("-", e))
+  )
+
 //  lazy val caseExpression: P[CaseExpr] =
 //    "CASE") ~> rep1(when) ~ opt("ELSE") ~> expression) <~ "END") ^^ { case ws ~ e => CaseExpr(ws, e) }
 //
 //  lazy val when: P[OQLWhen] =
 //    "WHEN") ~ booleanExpression ~ "THEN") ~ expression ^^ { case _ ~ l ~ _ ~ e => OQLWhen(l, e) }
 
-//  lazy val float: P[Number] = """[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?""".r ^^ (_.toDouble.asInstanceOf[Number])
-//
-//  lazy val integer: P[Number] = "[0-9]+".r ^^ (_.toInt.asInstanceOf[Number])
-//
-//  lazy val singleQuoteString: P[String] =
-//    """'(?:[^'\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*'""".r ^^ (s => s.substring(1, s.length - 1))
-//
-//  lazy val doubleQuoteString: P[String] =
-//    """"(?:[^"\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*"""".r ^^ (s => s.substring(1, s.length - 1))
-//
-//  lazy val string: P[String] = singleQuoteString | doubleQuoteString
+  lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
+
+  lazy val insert: P[Command] =
+    "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ rep1sep(row, ",") ^^ {
+      case t ~ cs ~ rs => InsertCommand(t, cs, rs)
+    }
+
+  lazy val command: P[Command] =
+    query ^^ QueryCommand.apply |
+      insert
 
   def parseQuery(input: String): SQLSelectExpr =
     val tokens = new PackratReader(new lexical.Scanner(input))
@@ -348,9 +355,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case Failure(error, rest) => problem(rest.pos, error)
       case Error(error, rest)   => problem(rest.pos, error)
 
-//  def parseBooleanExpression(input: String): Expr =
-//    parseAll(phrase(booleanExpression), new PackratReader(new CharSequenceReader(input))) match {
-//      case Success(result, _)   => result
-//      case Failure(error, rest) => problem(rest.pos, error)
-//      case Error(error, rest)   => problem(rest.pos, error)
-//    }
+  def parseCommand(input: String): Command =
+    val tokens = new PackratReader(new lexical.Scanner(input))
+
+    phrase(command)(tokens) match
+      case Success(result, _)   => result
+      case Failure(error, rest) => problem(rest.pos, error)
+      case Error(error, rest)   => problem(rest.pos, error)

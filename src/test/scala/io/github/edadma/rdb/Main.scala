@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
-import pprint._
+import pprint.*
 
 object Main extends App:
 
