@@ -160,7 +160,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         SQLSelectExpr(p to ArraySeq, f, w, g, o, of, l)
     }
 
-  lazy val fromClause: P[Option[Seq[Expr]]] = opt("FROM" ~> rep1sep(source, ","))
+  lazy val fromClause: P[Option[Seq[Expr]]] = opt("FROM" ~> rep1sep(sources, ","))
 
   lazy val whereClause: P[Option[Expr]] = opt("WHERE" ~> booleanExpression)
 
@@ -181,10 +181,17 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     case e ~ _ ~ _                                         => OrderBy(e, false, false)
   }
 
-  lazy val source: P[Expr] = (table | ("(" ~> query <~ ")")) ~ opt(opt("AS") ~> identifier) ^^ {
-    case s ~ None    => s
-    case s ~ Some(a) => AliasOperator(s, a)
-  }
+  lazy val sources: P[Expr] =
+    sources ~ opt("INNER" | ("LEFT" ~ opt("OUTER"))) ~ "JOIN" ~ source ~ "ON" ~ booleanExpression ^^ {
+      case l ~ (None | Some("INNER")) ~ _ ~ r ~ _ ~ c => InnerJoinOperator(l, r, c)
+      case l ~ /*Some("LEFT" ~ _)*/ _ ~ _ ~ r ~ _ ~ c => LeftJoinOperator(l, r, c)
+    } | source
+
+  lazy val source: P[Expr] =
+    (table | ("(" ~> query <~ ")")) ~ opt(opt("AS") ~> identifier) ^^ {
+      case s ~ None    => s
+      case s ~ Some(a) => AliasOperator(s, a)
+    }
 
   lazy val table: P[Expr] = positioned(
     identifier ^^ TableOperator.apply
