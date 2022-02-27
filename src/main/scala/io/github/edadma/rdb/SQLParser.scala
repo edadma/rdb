@@ -100,6 +100,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "UPDATE",
       "UNION",
       "UNIQUE",
+      "VALUES",
       "WHEN",
       "WHERE"
     )
@@ -117,7 +118,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         '.' ~ digits ~ optExponent ^^ { case _ ~ fracPart ~ exp =>
           DecimalLit(s".$fracPart$exp")
         } |
-        digits ~ optExponent ^^ { case intPart ~ exp =>
+        digits ~ exponent ^^ { case intPart ~ exp =>
           DecimalLit(s"$intPart$exp")
         }
 
@@ -308,8 +309,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val decimal: P[Double] = decimalLit ^^ (_.toDouble)
 
   lazy val primary: P[Expr] = positioned(
+    decimal ^^ (n => NumberExpr(n)) |
     integer ^^ (n => NumberExpr(n)) |
-      decimal ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       application |
       column |
@@ -324,8 +325,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val literal: P[Expr] = positioned(
     booleanLiteral |
-      integer ^^ (n => NumberExpr(n)) |
       decimal ^^ (n => NumberExpr(n)) |
+      integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       "-" ~> primary ^^ (e => UnaryExpr("-", e))
   )
@@ -339,8 +340,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
 
   lazy val insert: P[Command] =
-    "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ rep1sep(row, ",") ^^ {
-      case t ~ cs ~ rs => InsertCommand(t, cs, rs)
+    "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ^^ {
+      case t ~ cs ~ _ ~ rs => InsertCommand(t, cs, rs)
     }
 
   lazy val command: P[Command] =

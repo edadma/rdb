@@ -5,7 +5,7 @@ import pprint.*
 
 object Main extends App:
 
-  val db = MemoryDB("test")
+  implicit val db: DB = MemoryDB("test")
 //  val t = db.create("t", Seq(ColumnSpec("t_id", NumberType), ColumnSpec("t_text", StringType)))
 //
 //  t.bulkInsert(
@@ -101,11 +101,17 @@ object Main extends App:
 //    """
 //      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
 //      |""".trim.stripMargin
-    """
-      |SELECT * FROM e JOIN e m ON m.e_id = e.m_id
-      |""".trim.stripMargin
-  val ast = SQLParser.parseQuery(input)
-  val rewritten = rewrite(ast)(db)
+//    """
+//      |SELECT * FROM e JOIN e m ON m.e_id = e.m_id
+//      |""".trim.stripMargin
+  """
+    |INSERT INTO e (e_id, name, m_id) VALUES (-123, 'asdf', 456)
+    |""".trim.stripMargin
+//  val ast = SQLParser.parseQuery(input)
+//  val rewritten = rewrite(ast)(db)
+//
+//  pprintln(rewritten)
+//  pprintln(eval(rewritten, Nil, AggregateMode.Return))
 
-  pprintln(rewritten)
-  pprintln(eval(rewritten, Nil, AggregateMode.Return))
+  pprintln(executeSQL(input))
+  pprintln(executeSQL("SELECT * FROM e"))
