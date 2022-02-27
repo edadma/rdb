@@ -65,7 +65,10 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
       val arr = new Array[Value](meta.width)
 
       for (((i, v), s) <- mapping zip r zip specs)
-        arr(i) = v
+        if v.isNull then
+          if s.required then problem(v, s"column '${s.name}' is required")
+          else arr(i) = v
+        else arr(i) = s.typ.convert(v)
 
       data += arr
 

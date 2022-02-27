@@ -156,7 +156,7 @@ def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Di
 
 def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue = eval(expr, ctx, mode).asInstanceOf[NumberValue]
 
-def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TextValue = eval(expr, ctx, mode).asText
+def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TextValue = eval(expr, ctx, mode).toText
 
 def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
   eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]

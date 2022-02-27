@@ -1,18 +1,19 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.{BasicDAL, TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
+import io.github.edadma.datetime.Datetime
 
 import scala.util.parsing.input.{Position, Positional}
 
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
-  def asText: TextValue = problem(pos, "cannot be converted to text")
+  def toText: TextValue = problem(pos, "cannot be converted to text")
 
   infix def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
 
   def isNull: Boolean = isInstanceOf[NullValue]
 
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
-  override def asText: TextValue = TextValue(value.toString)
+  override def toText: TextValue = TextValue(value.toString)
 
   override def compare(that: Value): Int =
     that match
@@ -27,12 +28,22 @@ object NumberValue:
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
 
 case class NullValue() extends Value(NullType):
-  override def asText: TextValue = TextValue("NULL")
+  override def toText: TextValue = TextValue("NULL")
 
 case class StarValue() extends Value(StarType)
 
+case class TimestampValue(t: Datetime) extends Value(TimestampType):
+  t.timestamp
+
+  override def toText: TextValue = TextValue(t.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case TimestampValue(u) => t compare u
+      case _                 => super.compare(that)
+
 case class TextValue(s: String) extends Value(TextType):
-  override def asText: TextValue = this
+  override def toText: TextValue = this
 
   override def compare(that: Value): Int =
     that match

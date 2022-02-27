@@ -91,7 +91,7 @@ mainClass := Some(s"${organization.value}.${name.value}.Main")
 //    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.11" % "test",
 libraryDependencies ++= Seq(
   "io.github.edadma" %% "dal" % "0.1.8",
-  "io.github.edadma" %% "datetime" % "0.1.14"
+  "io.github.edadma" %% "datetime" % "0.1.15"
 )
 libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-parser-combinators" % "2.1.1"
