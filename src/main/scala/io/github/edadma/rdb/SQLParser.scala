@@ -9,10 +9,6 @@ import scala.util.parsing.input.{Position, Positional}
 object SQLParser extends StandardTokenParsers with PackratParsers:
 
   class SQLLexer extends StdLexical:
-    case class DecimalLit(chars: String) extends Token {
-      override def toString: String = chars
-    }
-
     delimiters ++= Seq(
       "+",
       "-",
@@ -107,6 +103,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "WHEN",
       "WHERE"
     )
+
+    case class DecimalLit(chars: String) extends Token {
+      override def toString: String = chars
+    }
 
     override def token: Parser[Token] = quotedToken | stringToken | decimalToken | super.token
 
