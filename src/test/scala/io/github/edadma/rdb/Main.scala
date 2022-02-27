@@ -102,7 +102,7 @@ object Main extends App:
 //      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
 //      |""".trim.stripMargin
     """
-      |SELECT * FROM e m JOIN e ON m.e_id = m_id
+      |SELECT * FROM e JOIN e m ON m.e_id = e.m_id
       |""".trim.stripMargin
   val ast = SQLParser.parseQuery(input)
   val rewritten = rewrite(ast)(db)

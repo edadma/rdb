@@ -98,7 +98,6 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
 
       g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
 
-    pprintln(List.concat(groups: _*))
     Iterator.concat(groups: _*)
 
 object Nulls:
