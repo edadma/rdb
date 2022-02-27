@@ -22,6 +22,8 @@ abstract class Table extends Process:
 
   def row(idx: Int): Row
 
+  def increment(col: String): Value
+
   def insert(row: Map[String, Value]): Map[String, Value]
 
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value]

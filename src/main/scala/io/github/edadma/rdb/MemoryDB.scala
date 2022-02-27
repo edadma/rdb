@@ -28,6 +28,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
   private val data = new ArrayBuffer[Array[Value]]
+  private val auto
   private var _meta: Metadata = Metadata(Vector.empty)
 
   spec foreach {
@@ -49,6 +50,8 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def rows: Int = data.length
 
   def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta)
+
+  def increment(col: String): Value
 
   def insert(row: Map[String, Value]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
