@@ -3,120 +3,152 @@ package io.github.edadma.rdb
 import scala.collection.immutable.ArraySeq
 import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.lexical.StdLexical
-import scala.util.parsing.combinator.syntactical.StdTokenParsers
+import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.input.{Position, Positional}
 
-object SQLParser extends StdTokenParsers with PackratParsers:
+object SQLParser extends StandardTokenParsers with PackratParsers:
 
-  type Tokens = StdLexical
+  class SQLLexer extends StdLexical:
+    case class DecimalLit(chars: String) extends Token {
+      override def toString: String = chars
+    }
 
-  val lexical: StdLexical =
-    new StdLexical:
-      delimiters ++= Seq(
-        "+",
-        "-",
-        "*",
-        "/",
-        "%",
-        "(",
-        ")",
-        ".",
-        "||",
-        "<=",
-        ">=",
-        "<",
-        ">",
-        "=",
-        "!=",
-        ",",
-        "&",
-        "|",
-        "^",
-        "@"
+    delimiters ++= Seq(
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      "(",
+      ")",
+      ".",
+      "||",
+      "<=",
+      ">=",
+      "<",
+      ">",
+      "=",
+      "!=",
+      ",",
+      "&",
+      "|",
+      "^",
+      "@"
+    )
+    reserved ++= Seq(
+      "ADD",
+      "ALL",
+      "ALTER",
+      "AND",
+      "ANY",
+      "AS",
+      "ASC",
+      "BETWEEN",
+      "BY",
+      "CASE",
+      "CHECK",
+      "COLUMN",
+      "CONSTRAINT",
+      "CREATE",
+      "DROP",
+      "DATABASE",
+      "DEFAULT",
+      "DELETE",
+      "DESC",
+      "DISTINCT",
+      "ELSE",
+      "END",
+      "EXEC",
+      "EXISTS",
+      "FALSE",
+      "FIRST",
+      "FLOAT",
+      "FOREIGN",
+      "FROM",
+      "GROUP",
+      "HAVING",
+      "ILIKE",
+      "IN",
+      "INDEX",
+      "INNER",
+      "INSERT",
+      "INT",
+      "INTO",
+      "INTEGER",
+      "IS",
+      "JOIN",
+      "JSON",
+      "KEY",
+      "LAST",
+      "LEFT",
+      "LIKE",
+      "LIMIT",
+      "NOT",
+      "NULL",
+      "NULLS",
+      "OFFSET",
+      "ON",
+      "OR",
+      "ORDER",
+      "PRIMARY",
+      "PROCEDURE",
+      "REFERENCES",
+      "SELECT",
+      "SET",
+      "SOME",
+      "TABLE",
+      "TEXT",
+      "TIMESTAMP",
+      "THEN",
+      "TRUE",
+      "UPDATE",
+      "UNION",
+      "UNIQUE",
+      "WHEN",
+      "WHERE"
+    )
+
+    override def token: Parser[Token] = quotedToken | stringToken | decimalToken | super.token
+
+    private def decimalToken: Parser[Token] =
+      digits ~ '.' ~ digits ~ optExponent ^^ { case intPart ~ _ ~ fracPart ~ exp =>
+        DecimalLit(s"$intPart.$fracPart$exp")
+      } |
+        '.' ~ digits ~ optExponent ^^ { case _ ~ fracPart ~ exp =>
+          DecimalLit(s".$fracPart$exp")
+        } |
+        digits ~ optExponent ^^ { case intPart ~ exp =>
+          DecimalLit(s"$intPart$exp")
+        }
+
+    private def digits = rep1(digit) ^^ (_ mkString)
+
+    private def chr(c: Char) = elem("", ch => ch == c)
+
+    private def exponent = (chr('e') | 'E') ~ opt(chr('+') | '-') ~ digits ^^ {
+      case e ~ None ~ exp    => List(e, exp) mkString
+      case e ~ Some(s) ~ exp => List(e, s, exp) mkString
+    }
+
+    private def optExponent = opt(exponent) ^^ {
+      case None    => ""
+      case Some(e) => e
+    }
+
+    private def quotedToken: Parser[Token] =
+      '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
+
+    private def stringToken: Parser[Token] =
+      '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
+        StringLit(unescape(l mkString))
       )
-      reserved ++= Seq(
-        "ADD",
-        "ALL",
-        "ALTER",
-        "AND",
-        "ANY",
-        "AS",
-        "ASC",
-        "BETWEEN",
-        "BY",
-        "CASE",
-        "CHECK",
-        "COLUMN",
-        "CONSTRAINT",
-        "CREATE",
-        "DROP",
-        "DATABASE",
-        "DEFAULT",
-        "DELETE",
-        "DESC",
-        "DISTINCT",
-        "ELSE",
-        "END",
-        "EXEC",
-        "EXISTS",
-        "FALSE",
-        "FIRST",
-        "FLOAT",
-        "FOREIGN",
-        "FROM",
-        "GROUP",
-        "HAVING",
-        "ILIKE",
-        "IN",
-        "INDEX",
-        "INNER",
-        "INSERT",
-        "INT",
-        "INTO",
-        "INTEGER",
-        "IS",
-        "JOIN",
-        "JSON",
-        "KEY",
-        "LAST",
-        "LEFT",
-        "LIKE",
-        "LIMIT",
-        "NOT",
-        "NULL",
-        "NULLS",
-        "OFFSET",
-        "ON",
-        "OR",
-        "ORDER",
-        "PRIMARY",
-        "PROCEDURE",
-        "REFERENCES",
-        "SELECT",
-        "SET",
-        "SOME",
-        "TABLE",
-        "TEXT",
-        "TIMESTAMP",
-        "THEN",
-        "TRUE",
-        "UPDATE",
-        "UNION",
-        "UNIQUE",
-        "WHEN",
-        "WHERE"
-      )
 
-      override def token: Parser[Token] =
-        quotedToken | stringToken | super.token
+  override val lexical: SQLLexer = new SQLLexer
 
-      private def quotedToken: Parser[Token] =
-        '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
+  import lexical.DecimalLit
 
-      private def stringToken: Parser[Token] =
-        '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
-          StringLit(unescape(l mkString))
-        )
+  def decimalLit: Parser[String] =
+    elem("decimal", _.isInstanceOf[DecimalLit]) ^^ (_.asInstanceOf[DecimalLit].chars)
 
   type P[+T] = PackratParser[T]
 
@@ -266,8 +298,11 @@ object SQLParser extends StdTokenParsers with PackratParsers:
 
   lazy val integer: P[Int] = numericLit ^^ (_.toInt)
 
+  lazy val decimal: P[Double] = decimalLit ^^ (_.toDouble)
+
   lazy val primary: P[Expr] = positioned(
     integer ^^ (n => NumberExpr(n)) |
+      decimal ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       application |
       column |
