@@ -24,7 +24,7 @@ abstract class Table extends Process:
 
   def insert(row: Map[String, Value]): Map[String, Value]
 
-  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Unit
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value]
 
 trait Spec
 case class ColumnSpec(
