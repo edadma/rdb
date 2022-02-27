@@ -28,8 +28,9 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
   private val data = new ArrayBuffer[Array[Value]]
-  private val auto
+  private val auto = new mutable.HashMap[String, Int]
   private var _meta: Metadata = Metadata(Vector.empty)
+  private val autoSet = columns filter (_.auto) map (_.name) toSet
 
   spec foreach {
     case s: ColumnSpec => addColumn(s)
@@ -51,7 +52,14 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta)
 
-  def increment(col: String): Value
+  def increment(col: String): Value =
+    auto get col match
+      case None =>
+        auto(col) = 1
+        ONE
+      case Some(cur) =>
+        auto(col) = cur + 1
+        NumberValue(cur)
 
   def insert(row: Map[String, Value]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
@@ -62,11 +70,11 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
-    require(headerSet subsetOf columnSet)
+    require(headerSet subsetOf columnSet, s"unknown columns: ${headerSet diff columnSet mkString ", "}")
 
-    val auto = new ArrayBuffer[ColumnSpec]
+    val missingSet = columnSet diff headerSet
     val missing =
-      for (m <- columnSet diff headerSet)
+      for (m <- missingSet diff autoSet)
         yield
           val idx = columnMap(m)
           val s = columns(idx)
@@ -74,7 +82,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
           if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
 
           (idx, s.default getOrElse NullValue())
-
+    val autos = autoSet diff missingSet map (c => (c, columnMap(c)))
     val mapping = header map (h => meta.columnMap(h)._1)
     val specs = header map (h => columns(columnMap(h)))
     var result: Map[String, Value] = Map.empty
@@ -90,6 +98,9 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
       for ((i, v) <- missing)
         arr(i) = v
+
+      for ((c, i) <- autos)
+        arr(i) = increment(c)
 
       data += arr
 
