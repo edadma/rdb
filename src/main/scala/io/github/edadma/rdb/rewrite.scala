@@ -37,7 +37,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
-    case SQLSelectExpr(exprs, Nil, where, groupBy, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, None, where, groupBy, orderBy, offset, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause no allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause no allowed here")
       if orderBy.isDefined then problem(where.get, "ORDER BY clause no allowed here")
@@ -47,7 +47,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val rewritten_projs = exprs map rewrite
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
-    case SQLSelectExpr(exprs, from, where, groupBy, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, Some(from), where, groupBy, orderBy, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e

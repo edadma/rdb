@@ -41,7 +41,7 @@ case class Count(pos: Position, count: Int)
 
 case class SQLSelectExpr(
     exprs: ArraySeq[Expr],
-    from: Seq[Expr],
+    from: Option[Seq[Expr]],
     where: Option[Expr],
     groupBy: Option[Seq[Expr]],
     orderBy: Option[Seq[OrderBy]],

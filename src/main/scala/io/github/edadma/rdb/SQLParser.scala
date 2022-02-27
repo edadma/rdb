@@ -160,7 +160,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         SQLSelectExpr(p to ArraySeq, f, w, g, o, of, l)
     }
 
-  lazy val fromClause: P[Seq[Expr]] = "FROM" ~> repsep(source, ",")
+  lazy val fromClause: P[Option[Seq[Expr]]] = opt("FROM" ~> rep1sep(source, ","))
 
   lazy val whereClause: P[Option[Expr]] = opt("WHERE" ~> booleanExpression)
 
