@@ -64,7 +64,6 @@ def executeSQL(sql: String)(implicit db: DB): Result =
         cond match
           case Some(value) => FilterProcess(t, rewrite(value))
           case None        => t
-
       var count = 0
 
       for (r <- rows.iterator(Nil))
