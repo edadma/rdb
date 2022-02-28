@@ -6,7 +6,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 
-import pprint.*
+//import pprint.*
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match

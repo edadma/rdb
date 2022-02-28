@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import pprint.*
+//import pprint.*
 
 import scala.collection.immutable.ArraySeq
 
