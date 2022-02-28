@@ -40,6 +40,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "AS",
       "ASC",
       "BETWEEN",
+      "BOOLEAN",
       "BY",
       "CASE",
       "CHECK",
@@ -310,7 +311,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val primary: P[Expr] = positioned(
     decimal ^^ (n => NumberExpr(n)) |
-    integer ^^ (n => NumberExpr(n)) |
+      integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       application |
       column |
@@ -345,11 +346,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val create: P[Command] =
-    "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ {
-      case t ~ cs => CreateCommand(t, cs)
+    "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ { case t ~ cs =>
+      CreateCommand(t, cs)
     }
 
-  lazy val typ: P[String] = "INT" | "INTEGER" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT"
+  lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT"
 
   lazy val columnDesc: P[ColumnDesc] = identifier ~ typ ~ opt("PRIMARY" ~ "KEY") ~ opt("NOT" ~ "NULL") ^^ {
     case c ~ t ~ p ~ n => ColumnDesc(c, t, p.isDefined, n.isDefined)
@@ -357,8 +358,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |
-    insert |
-    create
+      insert |
+      create
 
   def parseQuery(input: String): SQLSelectExpr =
     val tokens = new PackratReader(new lexical.Scanner(input))

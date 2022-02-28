@@ -27,21 +27,28 @@ def executeSQL(sql: String)(implicit db: DB): Result =
           InsertResult(t.bulkInsert(columns map (_.name), data))
     case QueryCommand(query) =>
       QueryResult(eval(rewrite(query)(db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
-    case CreateCommand(id@Ident(table), columns) =>
+    case CreateCommand(id @ Ident(table), columns) =>
       if db hasTable table then problem(id, s"duplicate table: $table")
 
       val specs =
         val names = new mutable.HashSet[String]
 
-        columns map {case ColumnDesc(id@Ident(name), typ, pk, required) =>
+        columns map { case ColumnDesc(id @ Ident(name), typ, pk, required) =>
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
 
           val t =
             typ match
-              case "INT"|"INTEGER" => Integ
-          ColumnSpec(name, )
+              case "INT" | "INTEGER" => IntegerType
+              case "DOUBLE"          => DoubleType
+              case "TEXT"            => TextType
+              case "JSON"            => JSONType
+              case "BOOLEAN"         => BooleanType
+              case "TIMESTAMP"       => TimestampType
+
+          ColumnSpec(name, t, pk = pk, required = required)
         }
 
-      db.create()
+      db.create(table, specs)
+      CreateTableResult()

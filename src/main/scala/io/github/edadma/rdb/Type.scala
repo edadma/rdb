@@ -8,6 +8,8 @@ trait Type(val name: String):
     else v
 
 case object NumberType extends Type("number")
+case object IntegerType extends Type("integer")
+case object DoubleType extends Type("double")
 case object TextType extends Type("text")
 case object TimestampType extends Type("timestamp"):
   override def convert(v: Value): Value =
