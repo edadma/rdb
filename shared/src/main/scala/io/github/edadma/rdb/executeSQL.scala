@@ -67,7 +67,22 @@ def executeSQL(sql: String)(implicit db: DB): Result =
       var count = 0
 
       for (r <- rows.iterator(Nil))
-        r.updater.get(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
+        r.updater match
+          case None    => problem(id, "not updatable")
+          case Some(u) => u(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
         count += 1
 
       UpdateResult(count)
+    case DeleteCommand(id @ Ident(table), cond) =>
+      val t = db.table(table) getOrElse problem(id, s"unknown table: $table")
+      val rows =
+        cond match
+          case Some(value) => FilterProcess(t, rewrite(value))
+          case None        => t
+      var count = 0
+
+      for (r <- rows.iterator(Nil))
+        r.deleter.get(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
+        count += 1
+
+      DeleteResult(count)

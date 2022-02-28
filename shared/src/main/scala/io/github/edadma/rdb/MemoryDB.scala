@@ -25,9 +25,11 @@ class MemoryDB(val name: String) extends DB:
 
 class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
+  private class TableRow(var deleted: Boolean, val data: Array[Value])
+
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
-  private val data = new ArrayBuffer[Array[Value]]
+  private val data = new ArrayBuffer[TableRow]
   private val auto = new mutable.HashMap[String, Int]
   private var _meta: Metadata = Metadata(Vector.empty)
   private val autoSet = columns filter (_.auto) map (_.name) toSet
@@ -40,7 +42,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def meta: Metadata = _meta
 
   def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex map { case (r, i) =>
-    Row(r to ArraySeq, meta, Some(new Updater(i)))
+    Row(r.data to ArraySeq, meta, Some(new Updater(i)))
   }
 
   def hasColumn(name: String): Boolean = columnMap contains name
@@ -54,7 +56,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta, Some(new Updater(idx)))
+  def row(idx: Int): Row = Row(data(idx).data to ArraySeq, meta, Some(new Updater(idx)))
 
   def increment(col: String): Value =
     auto get col match
@@ -112,7 +114,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
             c -> v
 
       result = newAutos.toMap
-      data += arr
+      data += TableRow(false, arr)
 
     result
 
@@ -122,6 +124,6 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
         val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
         val spec = columns(col)
 
-        data(idx)(col) = spec.typ.convert(v)
+        data(idx).data(col) = spec.typ.convert(v)
 
-  override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
+  override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.data.toSeq)}]"

@@ -355,6 +355,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       UpdateCommand(t, ss, c)
     }
 
+  lazy val delete: P[Command] =
+    "DELETE" ~> "FROM" ~> identifier ~ opt("WHERE" ~> booleanExpression) ^^ { case t ~ c =>
+      DeleteCommand(t, c)
+    }
+
   lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT"
 
   lazy val columnDesc: P[ColumnDesc] = identifier ~ typ ~ opt("PRIMARY" ~ "KEY") ~ opt("NOT" ~ "NULL") ^^ {
