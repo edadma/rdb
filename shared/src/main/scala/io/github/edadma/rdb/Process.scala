@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.BasicDAL
-import pprint.pprintln
+//import pprint.pprintln
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
