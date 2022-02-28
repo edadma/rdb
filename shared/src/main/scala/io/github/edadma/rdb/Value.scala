@@ -66,3 +66,6 @@ case class TableValue(data: IndexedSeq[Row], meta: Metadata) extends Value(Table
 case class ArrayValue(data: IndexedSeq[Value]) extends Value(ArrayType) with ArrayLikeValue:
   infix def contains(v: Value): Boolean = data.contains(v)
   def isEmpty: Boolean = data.isEmpty
+
+case class ObjectValue(properties: Seq[(String, Value)]) extends Value(ObjectType):
+  override def toText: TextValue = TextValue("NULL")
