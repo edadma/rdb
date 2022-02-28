@@ -103,9 +103,15 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
       for ((i, v) <- missing)
         arr(i) = v
 
-      for ((c, i) <- autos)
-        arr(i) = increment(c)
+      val newAutos =
+        for ((c, i) <- autos)
+          yield
+            val v = increment(c)
 
+            arr(i) = v
+            c -> v
+
+      result = newAutos.toMap
       data += arr
 
     result

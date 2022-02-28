@@ -135,4 +135,4 @@ object Main extends App:
         |""".trim.stripMargin
     )
   )
-  pprintln(executeSQL("SELECT * FROM t"))
+  PPrinter.BlackWhite.pprintln(executeSQL("SELECT * FROM t"))
