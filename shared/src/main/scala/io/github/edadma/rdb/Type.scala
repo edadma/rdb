@@ -35,7 +35,7 @@ case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
     v match
       case _: (ArrayValue | ObjectValue) => v
-      case TextValue(t)                  => TimestampValue(Datetime.fromString(t))
+      case TextValue(json)               => JSONParser.parseJSON(json)
       case _                             => super.convert(v)
 
 case object ObjectType extends Type("object")

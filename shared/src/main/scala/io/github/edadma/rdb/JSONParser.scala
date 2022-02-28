@@ -16,7 +16,7 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
       "[",
       "]"
     )
-    reserved ++= Seq("null")
+    reserved ++= Seq("null", "true", "false")
 
     case class DecimalLit(chars: String) extends Token {
       override def toString: String = chars
@@ -62,7 +62,7 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
 
   lazy val json: P[Value] = arrayValue | objectValue
 
-  lazy val value: P[Value] = arrayValue | objectValue | numberValue | stringValue | nullValue
+  lazy val value: P[Value] = arrayValue | objectValue | numberValue | stringValue | nullValue | booleanValue
 
   lazy val arrayValue: P[Value] =
     positioned(
@@ -83,6 +83,8 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
     )
 
   lazy val stringValue: P[Value] = positioned(stringLit ^^ TextValue.apply)
+
+  lazy val booleanValue: P[Value] = positioned(("true" | "false") ^^ (s => BooleanValue(s == "true")))
 
   lazy val nullValue: P[Value] = positioned("null" ^^^ NullValue())
 

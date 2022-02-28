@@ -3,6 +3,8 @@ package io.github.edadma.rdb
 import scala.collection.immutable.ArraySeq
 import pprint.*
 
+import scala.util.Try
+
 object Main extends App:
 
   val json =
@@ -31,7 +33,7 @@ object Main extends App:
       |]
       |""".stripMargin
 
-  pprintln(JSONParser.parseJSON(json))
+  println(JSONParser.parseJSON(json).toText)
 
 //  implicit val db: DB = MemoryDB("test")
 //
