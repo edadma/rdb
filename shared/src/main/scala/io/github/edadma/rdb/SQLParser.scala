@@ -283,11 +283,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val arrayExpression: P[Expr] = positioned(
-    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr
+    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr.apply
   )
 
   lazy val objectExpression: P[Expr] = positioned(
-    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr
+    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr.apply
   )
 
   lazy val jsonExpression: P[Expr] = arrayExpression | objectExpression
