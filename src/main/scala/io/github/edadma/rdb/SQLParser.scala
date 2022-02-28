@@ -340,6 +340,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
 
+  lazy val set: P[UpdateSet] = identifier ~ "=" ~ literal ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
+
   lazy val insert: P[Command] =
     "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ^^ {
       case t ~ cs ~ _ ~ rs => InsertCommand(t, cs, rs)
@@ -347,7 +349,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val create: P[Command] =
     "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ { case t ~ cs =>
-      CreateCommand(t, cs)
+      CreateTableCommand(t, cs)
+    }
+
+  lazy val update: P[Command] =
+    "UPDATE" ~> identifier ~ "SET" ~ rep1sep(set, ",") ~ opt("WHERE" ~> booleanExpression) ^^ { case t ~ _ ~ ss ~ c =>
+      UpdateCommand(t, ss, c)
     }
 
   lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT"

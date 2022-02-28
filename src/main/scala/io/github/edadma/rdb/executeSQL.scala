@@ -27,7 +27,7 @@ def executeSQL(sql: String)(implicit db: DB): Result =
           InsertResult(t.bulkInsert(columns map (_.name), data))
     case QueryCommand(query) =>
       QueryResult(eval(rewrite(query)(db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
-    case CreateCommand(id @ Ident(table), columns) =>
+    case CreateTableCommand(id @ Ident(table), columns) =>
       if db hasTable table then problem(id, s"duplicate table: $table")
 
       val specs =
