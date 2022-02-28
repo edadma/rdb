@@ -277,26 +277,24 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     )
   )
 
-//  lazy val stringLiteral: P[Expr] = positioned(
-//    string ^^ (unescape _ andThen StringExpr.apply)
-//  )
+  lazy val pair: P[(String, Expr)] =
+    (stringLit | ident) ~ ":" ~ (arrayExpression | objectExpression | literal) ^^ { case k ~ _ ~ v =>
+      k -> v
+    }
 
-//  lazy val pair: P[(String, Expr)] =
-//    doubleQuoteString ~ ":" ~ (arrayExpression | objectExpression | literalExpression) ^^ { case k ~ _ ~ v =>
-//      Pair(k, v)
-//    }
-//
-//  lazy val arrayExpression: P[Expr] =
-//    "[" ~> repsep(arrayExpression | objectExpression | literalExpression, ",") <~ "]" ^^ ArrayExpr
-//
-//  lazy val objectExpression: P[Expr] =
-//    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr
-//
-//  lazy val jsonExpression: P[Expr] =
-//    (arrayExpression | objectExpression) ^^ JSONExpr
+  lazy val arrayExpression: P[Expr] = positioned(
+    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr
+  )
 
-  lazy val application: P[Expr] =
+  lazy val objectExpression: P[Expr] = positioned(
+    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr
+  )
+
+  lazy val jsonExpression: P[Expr] = arrayExpression | objectExpression
+
+  lazy val application: P[Expr] = positioned(
     identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
+  )
 
   lazy val column: P[ColumnExpr] = positioned(
     identifier ~ opt("." ~> identifier) ^^ {
@@ -316,7 +314,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       application |
       column |
       booleanLiteral |
-//      jsonExpression |
+      jsonExpression |
 //      caseExpression |
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |

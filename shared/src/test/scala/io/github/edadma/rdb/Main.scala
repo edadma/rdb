@@ -6,37 +6,44 @@ import pprint.*
 import scala.util.Try
 
 object Main extends App:
+  implicit val db: DB = MemoryDB("test")
 
   val json =
     """
       |[
       |  {
-      |    "name": "Molecule Man",
-      |    "age": 29,
-      |    "secretIdentity": "Dan Jukes",
-      |    "powers": [
-      |      "Radiation resistance",
-      |      "Turning tiny",
-      |      "Radiation blast"
+      |    "a": "asdf",
+      |    "b": 123,
+      |    "c": [
+      |      "d",
+      |      456
       |    ]
       |  },
       |  {
-      |    "name": "Madame Uppercut",
-      |    "age": null,
-      |    "secretIdentity": "Jane Wilson",
-      |    "powers": [
-      |      "Million tonne punch",
-      |      "Damage resistance",
-      |      "Superhuman reflexes"
+      |    "e": "zxcv",
+      |    "f": 789,
+      |    "c": [
+      |      "d",
+      |      901
       |    ]
       |  }
       |]
       |""".stripMargin
 
+  pprintln(
+    executeSQL(
+      """
+        |CREATE TABLE t (
+        | c1 INTEGER PRIMARY KEY,
+        | c2 JSON
+        |)
+        |""".trim.stripMargin
+    )
+  )
+  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (1, '{\"a\": 123}')"))
+  pprintln(executeSQL("SELECT * FROM t"))
   println(JSONParser.parseJSON(json).toText)
 
-//  implicit val db: DB = MemoryDB("test")
-//
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
 //
@@ -67,17 +74,6 @@ object Main extends App:
 //  pprintln(rewritten)
 //  pprintln(eval(rewritten, Nil, AggregateMode.Return))
 
-//    pprintln(
-//      executeSQL(
-//        """
-//      |CREATE TABLE t (
-//      | c1 INTEGER PRIMARY KEY,
-//      | c2 INTEGER
-//      |)
-//      |""".trim.stripMargin
-//      )
-//    )
-//  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (345, 3)"))
 //  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (356, 4)"))
 //  pprintln(executeSQL("SELECT * FROM t"))
 //  pprintln(
