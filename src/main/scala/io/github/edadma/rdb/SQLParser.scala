@@ -340,7 +340,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
 
-  lazy val set: P[UpdateSet] = identifier ~ "=" ~ literal ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
+  lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
   lazy val insert: P[Command] =
     "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ^^ {
@@ -366,7 +366,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |
       insert |
-      create
+      create |
+      update
 
   def parseQuery(input: String): SQLSelectExpr =
     val tokens = new PackratReader(new lexical.Scanner(input))

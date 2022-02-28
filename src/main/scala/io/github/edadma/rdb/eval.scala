@@ -154,7 +154,12 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 
-def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue = eval(expr, ctx, mode).asInstanceOf[NumberValue]
+def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue =
+  val v = eval(expr, ctx, mode)
+
+  if v.vtyp != NumberType then problem(expr, "a number was expected")
+
+  v.asInstanceOf[NumberValue]
 
 def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TextValue = eval(expr, ctx, mode).toText
 

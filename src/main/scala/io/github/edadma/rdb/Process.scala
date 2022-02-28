@@ -17,7 +17,7 @@ type RowIterator = Iterator[Row]
 case object SingleProcess extends Process:
   val meta: Metadata = Metadata(Vector.empty)
 
-  def iterator(ctx: Seq[Row]): RowIterator = Iterator(Row(Vector.empty, meta, AggregateMode.AccumulateReturn))
+  def iterator(ctx: Seq[Row]): RowIterator = Iterator(Row(Vector.empty, meta, None, AggregateMode.AccumulateReturn))
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
@@ -71,7 +71,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
             .map(f => eval(f, row +: ctx, row.mode))
 
         row.mode match
-          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta))
+          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta, None))
           case _                                                     => Iterator.empty
       )
 
@@ -164,15 +164,16 @@ case class CrossProcess(input1: Process, input2: Process) extends Process:
     for
       x <- input1.iterator(ctx)
       y <- input2.iterator(ctx)
-    yield Row(x.data ++ y.data, meta)
+    yield Row(x.data ++ y.data, meta, None)
 
 case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 
   def iterator(ctx: Seq[Row]): RowIterator =
     input1.iterator(ctx).flatMap { x =>
-      val matches = input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta)) filter (row => beval(cond, row +: ctx))
+      val matches =
+        input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta, None)) filter (row => beval(cond, row +: ctx))
 
-      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta))
+      if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta, None))
       else matches
     }

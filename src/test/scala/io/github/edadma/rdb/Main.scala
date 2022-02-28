@@ -107,17 +107,32 @@ object Main extends App:
 //  """
 //    |INSERT INTO e (e_id, name, m_id) VALUES (-123, 'asdf', 456)
 //    |""".trim.stripMargin
-  """
-    |CREATE TABLE t (
-    | c1 INTEGER PRIMARY KEY,
-    | c2 TEXT
-    |)
-    |""".trim.stripMargin
 //  val ast = SQLParser.parseQuery(input)
 //  val rewritten = rewrite(ast)(db)
 //
 //  pprintln(rewritten)
 //  pprintln(eval(rewritten, Nil, AggregateMode.Return))
 
-  pprintln(executeSQL(input))
-//  pprintln(executeSQL("SELECT * FROM e"))
+    pprintln(
+      executeSQL(
+        """
+      |CREATE TABLE t (
+      | c1 INTEGER PRIMARY KEY,
+      | c2 INTEGER
+      |)
+      |""".trim.stripMargin
+      )
+    )
+  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (345, 3)"))
+  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (356, 4)"))
+  pprintln(executeSQL("SELECT * FROM t"))
+  pprintln(
+    executeSQL(
+      """
+        |UPDATE t
+        | SET c2 = c1 + 1
+        | WHERE c1 > 345
+        |""".trim.stripMargin
+    )
+  )
+  pprintln(executeSQL("SELECT * FROM t"))

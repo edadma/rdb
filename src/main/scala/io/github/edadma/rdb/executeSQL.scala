@@ -52,3 +52,23 @@ def executeSQL(sql: String)(implicit db: DB): Result =
 
       db.create(table, specs)
       CreateTableResult()
+    case UpdateCommand(id @ Ident(table), sets, cond) =>
+      val t = db.table(table) getOrElse problem(id, s"unknown table: $table")
+      val (cols, exprs) =
+        sets map { case UpdateSet(id @ Ident(col), value) =>
+          if !t.hasColumn(col) then problem(id, s"table $table doesn't has column '$col'")
+
+          col -> rewrite(value)
+        } unzip
+      val rows =
+        cond match
+          case Some(value) => FilterProcess(t, rewrite(value))
+          case None        => t
+
+      var count = 0
+
+      for (r <- rows.iterator(Nil))
+        r.updater.get(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
+        count += 1
+
+      UpdateResult(count)

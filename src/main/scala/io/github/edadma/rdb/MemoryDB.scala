@@ -39,7 +39,9 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = data.iterator map (r => Row(r to ArraySeq, meta))
+  def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex map { case (r, i) =>
+    Row(r to ArraySeq, meta, Some(new Updater(i)))
+  }
 
   def hasColumn(name: String): Boolean = columnMap contains name
 
@@ -52,7 +54,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta)
+  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta, Some(new Updater(idx)))
 
   def increment(col: String): Value =
     auto get col match
@@ -107,5 +109,13 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
       data += arr
 
     result
+
+  class Updater private[rdb] (idx: Int) extends (Seq[(String, Value)] => Unit):
+    def apply(update: Seq[(String, Value)]): Unit =
+      for ((k, v) <- update)
+        val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
+        val spec = columns(col)
+
+        data(idx)(col) = spec.typ.convert(v)
 
   override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
