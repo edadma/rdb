@@ -1,5 +1,6 @@
 package io.github.edadma.rdb
 
+import io.github.edadma.dllist.DLList
 import scala.collection.immutable.ArraySeq
 import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
@@ -25,11 +26,11 @@ class MemoryDB(val name: String) extends DB:
 
 class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
-  private class TableRow(var deleted: Boolean, val data: Array[Value])
+//  private class TableRow(var deleted: Boolean, val data: Array[Value])
 
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
-  private val data = new ArrayBuffer[TableRow]
+  private val data = new DLList[Array[Value]]
   private val auto = new mutable.HashMap[String, Int]
   private var _meta: Metadata = Metadata(Vector.empty)
   private val autoSet = columns filter (_.auto) map (_.name) toSet
@@ -41,10 +42,8 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex filterNot { case (r, _) => r.deleted } map {
-    case (r, i) =>
-      Row(r.data to ArraySeq, meta, Some(updater(i)), Some(deleter(i)))
-  }
+  def iterator(ctx: Seq[Row]): RowIterator =
+    data.nodeIterator map (n => Row(n.element to ArraySeq, meta, Some(updater(n.element)), Some(deleter(n))))
 
   def hasColumn(name: String): Boolean = columnMap contains name
 
@@ -57,7 +56,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-  def row(idx: Int): Row = Row(data(idx).data to ArraySeq, meta, Some(updater(idx)), Some(deleter(idx)))
+//  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta, Some(updater(idx)), Some(deleter(idx)))
 
   def increment(col: String): Value =
     auto get col match
@@ -115,18 +114,18 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
             c -> v
 
       result = newAutos.toMap
-      data += TableRow(false, arr)
+      data += arr
 
     result
 
-  private def updater(idx: Int) =
+  private def updater(row: Array[Value]) =
     (update: Seq[(String, Value)]) =>
       for ((k, v) <- update)
         val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
         val spec = columns(col)
 
-        data(idx).data(col) = spec.typ.convert(v)
+        row(col) = spec.typ.convert(v)
 
-  private def deleter(idx: Int) = () => data(idx).deleted = true
+  private def deleter(node: data.Node): () => Unit = () => node.unlink
 
-  override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.data.toSeq)}]"
+  override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
