@@ -41,8 +41,9 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def meta: Metadata = _meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex map { case (r, i) =>
-    Row(r.data to ArraySeq, meta, Some(updater(i)), Some(deleter(i)))
+  def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex filterNot { case (r, _) => r.deleted } map {
+    case (r, i) =>
+      Row(r.data to ArraySeq, meta, Some(updater(i)), Some(deleter(i)))
   }
 
   def hasColumn(name: String): Boolean = columnMap contains name
