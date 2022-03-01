@@ -6,7 +6,7 @@ import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
 
-class MemoryDB(val name: String) extends DB:
+class MemoryDB(val name: String = "mem") extends DB:
 
   private val tables = new mutable.HashMap[String, MemoryTable]
 

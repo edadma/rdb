@@ -1,0 +1,27 @@
+{
+  "name": "@edadma/rdb",
+  "version": "0.1.0-pre.8",
+  "description": "In-memory database",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/rdb.git"
+  },
+  "keywords": [
+    "SQL",
+    "in-memory",
+    "database",
+    "scala",
+    "javascript",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/edadma/rdb/issues"
+  },
+  "homepage": "https://github.com/edadma/rdb#readme"
+}

@@ -32,7 +32,7 @@ case class SubqueryExpr(subquery: Expr) extends Expr
 
 case class StarExpr() extends Expr
 case class TableStarExpr(table: Ident) extends Expr
-case class ObjectExpr(properties: Seq[(String, Expr)]) extends Expr
+case class ObjectExpr(properties: Seq[(Ident, Expr)]) extends Expr
 case class ArrayExpr(elems: Seq[Expr]) extends Expr
 case class TableConstructorExpr(query: Expr) extends Expr
 

@@ -40,7 +40,7 @@ object Main extends App:
         |""".trim.stripMargin
     )
   )
-  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (1, '{\"a\": 123}')"))
+  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (1, {\"a\": [123, 456]})"))
   pprintln(executeSQL("SELECT * FROM t"))
   println(JSONParser.parseJSON(json).toText)
 

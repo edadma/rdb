@@ -29,7 +29,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "&",
       "|",
       "^",
-      "@"
+      "@",
+      "{",
+      "}",
+      ":",
+      "[",
+      "]"
     )
     reserved ++= Seq(
       "ADD",
@@ -277,8 +282,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     )
   )
 
-  lazy val pair: P[(String, Expr)] =
-    (stringLit | ident) ~ ":" ~ (arrayExpression | objectExpression | literal) ^^ { case k ~ _ ~ v =>
+  lazy val pair: P[(Ident, Expr)] =
+    identifier ~ ":" ~ (arrayExpression | objectExpression | literal) ^^ { case k ~ _ ~ v =>
       k -> v
     }
 
@@ -290,7 +295,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr.apply
   )
 
-  lazy val jsonExpression: P[Expr] = arrayExpression | objectExpression
+  lazy val jsonLiteral: P[Expr] = arrayExpression | objectExpression
 
   lazy val application: P[Expr] = positioned(
     identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
@@ -314,7 +319,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       application |
       column |
       booleanLiteral |
-      jsonExpression |
+      jsonLiteral |
 //      caseExpression |
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
@@ -324,6 +329,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val literal: P[Expr] = positioned(
     booleanLiteral |
+      jsonLiteral |
       decimal ^^ (n => NumberExpr(n)) |
       integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |

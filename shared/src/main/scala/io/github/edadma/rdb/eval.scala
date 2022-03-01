@@ -151,6 +151,15 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case "="  => l == r
           case "!=" => l != r
       )
+    case ObjectExpr(properties) =>
+      val keys = new mutable.HashSet[String]
+
+      ObjectValue(properties map { case (id @ Ident(k), v) =>
+        if keys(k) then problem(id, s"duplicate property key: $k")
+
+        k -> eval(v, ctx, mode)
+      })
+    case ArrayExpr(elems) => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 

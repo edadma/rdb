@@ -51,7 +51,7 @@ def executeSQL(sql: String)(implicit db: DB): Result =
         }
 
       db.create(table, specs)
-      CreateTableResult()
+      CreateTableResult(table)
     case UpdateCommand(id @ Ident(table), sets, cond) =>
       val t = db.table(table) getOrElse problem(id, s"unknown table: $table")
       val (cols, exprs) =
