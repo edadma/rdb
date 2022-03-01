@@ -42,7 +42,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   def meta: Metadata = _meta
 
   def iterator(ctx: Seq[Row]): RowIterator = data.iterator.zipWithIndex map { case (r, i) =>
-    Row(r.data to ArraySeq, meta, Some(new Updater(i)))
+    Row(r.data to ArraySeq, meta, Some(updater(i)), Some(deleter(i)))
   }
 
   def hasColumn(name: String): Boolean = columnMap contains name
@@ -56,7 +56,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-  def row(idx: Int): Row = Row(data(idx).data to ArraySeq, meta, Some(new Updater(idx)))
+  def row(idx: Int): Row = Row(data(idx).data to ArraySeq, meta, Some(updater(idx)), Some(deleter(idx)))
 
   def increment(col: String): Value =
     auto get col match
@@ -118,12 +118,14 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
     result
 
-  class Updater private[rdb] (idx: Int) extends (Seq[(String, Value)] => Unit):
-    def apply(update: Seq[(String, Value)]): Unit =
+  private def updater(idx: Int) =
+    (update: Seq[(String, Value)]) =>
       for ((k, v) <- update)
         val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
         val spec = columns(col)
 
         data(idx).data(col) = spec.typ.convert(v)
+
+  private def deleter(idx: Int) = () => data(idx).deleted = true
 
   override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.data.toSeq)}]"

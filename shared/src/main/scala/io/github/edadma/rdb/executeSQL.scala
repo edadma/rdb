@@ -82,7 +82,10 @@ def executeSQL(sql: String)(implicit db: DB): Result =
       var count = 0
 
       for (r <- rows.iterator(Nil))
-        r.deleter.get(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
+        r.deleter match
+          case Some(d) => d()
+          case None    => problem(id, "not updatable")
+
         count += 1
 
       DeleteResult(count)

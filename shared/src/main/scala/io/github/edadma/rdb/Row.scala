@@ -9,6 +9,7 @@ case class Row(
     data: IndexedSeq[Value],
     meta: Metadata,
     updater: Option[Seq[(String, Value)] => Unit],
+    deleter: Option[() => Unit],
     mode: AggregateMode = AggregateMode.Return
 )
 
