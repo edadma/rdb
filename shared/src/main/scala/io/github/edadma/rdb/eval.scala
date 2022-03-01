@@ -160,6 +160,13 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         k -> eval(v, ctx, mode)
       })
     case ArrayExpr(elems) => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
+    case CaseExpr(whens, els) =>
+      whens find { case When(when, _) => beval(when, ctx) } match
+        case None =>
+          els match
+            case None    => NullValue()
+            case Some(e) => eval(e, ctx, mode)
+        case Some(When(_, expr)) => eval(expr, ctx, mode)
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 

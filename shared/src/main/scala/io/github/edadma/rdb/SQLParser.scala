@@ -320,7 +320,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       column |
       booleanLiteral |
       jsonLiteral |
-//      caseExpression |
+      caseExpression |
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
 //      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "TABLE" ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
@@ -336,11 +336,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "-" ~> primary ^^ (e => UnaryExpr("-", e))
   )
 
-//  lazy val caseExpression: P[CaseExpr] =
-//    "CASE") ~> rep1(when) ~ opt("ELSE") ~> expression) <~ "END") ^^ { case ws ~ e => CaseExpr(ws, e) }
-//
-//  lazy val when: P[OQLWhen] =
-//    "WHEN") ~ booleanExpression ~ "THEN") ~ expression ^^ { case _ ~ l ~ _ ~ e => OQLWhen(l, e) }
+  lazy val caseExpression: P[CaseExpr] =
+    "CASE" ~> rep1(when) ~ opt("ELSE" ~> expression) <~ "END" ^^ { case ws ~ e => CaseExpr(ws, e) }
+
+  lazy val when: P[When] =
+    "WHEN" ~> booleanExpression ~ "THEN" ~ expression ^^ { case l ~ _ ~ e => When(l, e) }
 
   lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
 

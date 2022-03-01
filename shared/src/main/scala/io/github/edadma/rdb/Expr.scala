@@ -19,6 +19,8 @@ case class NullExpr() extends Expr { typ = NullType }
 case class InExpr(value: Expr, array: Expr) extends Expr
 case class ExistsExpr(subquery: Expr) extends Expr
 case class BetweenExpr(value: Expr, op: String, lower: Expr, upper: Expr) extends Expr
+case class CaseExpr(whens: Seq[When], els: Option[Expr]) extends Expr
+case class When(when: Expr, expr: Expr)
 
 case class ApplyExpr(func: Ident, args: Seq[Expr]) extends Expr
 
