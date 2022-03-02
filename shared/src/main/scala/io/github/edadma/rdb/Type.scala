@@ -1,7 +1,9 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.datetime.Datetime
-import io.github.edadma.dal.{DoubleType as DDoubleType, IntType as DIntType}
+import io.github.edadma.dal.{LongType as DLongType, DoubleType as DDoubleType, IntType as DIntType}
+
+import scala.util.matching.Regex
 
 trait Type(val name: String):
   def convert(v: Value): Value =
@@ -16,11 +18,31 @@ case object IntegerType extends Type("integer"):
       case n @ NumberValue(DIntType, _) => n
       case _                            => super.convert(v)
 
+case object LongType extends Type("long"):
+  override def convert(v: Value): Value =
+    v match
+      case n @ NumberValue(DLongType, _) => n
+      case _                             => super.convert(v)
+
 case object DoubleType extends Type("double"):
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DDoubleType | DIntType, _) => n
       case _                                          => super.convert(v)
+
+case object UUIDType extends Type("uuid"):
+  private val UUIDv4: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$".r
+
+  def valid(id: String): Boolean = UUIDv4 matches id
+
+  override def convert(v: Value): Value =
+    v match
+      case id: UUIDValue => id
+      case t @ TextValue(id) =>
+        if !valid(id) then problem(t, "invalid version 4 UUID")
+
+        UUIDValue(id)
+      case _ => super.convert(v)
 
 case object TextType extends Type("text")
 

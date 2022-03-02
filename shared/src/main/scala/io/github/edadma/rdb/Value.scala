@@ -55,6 +55,13 @@ case class TimestampValue(t: Datetime) extends Value(TimestampType):
 
   def string: String = t.toString
 
+case class UUIDValue(id: String) extends Value(UUIDType):
+  override def toText: TextValue = TextValue(id)
+
+  override def render: String = s"'$id'"
+
+  def string: String = id
+
 case class TextValue(s: String) extends Value(TextType):
   override def toText: TextValue = this
 

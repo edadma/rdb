@@ -41,11 +41,13 @@ def executeSQL(sql: String)(implicit db: DB): Result =
           val t =
             typ match
               case "INT" | "INTEGER" => IntegerType
+              case "LONG"            => LongType
               case "DOUBLE"          => DoubleType
               case "TEXT"            => TextType
               case "JSON"            => JSONType
               case "BOOLEAN"         => BooleanType
               case "TIMESTAMP"       => TimestampType
+              case "UUID"            => UUIDType
 
           ColumnSpec(name, t, pk = pk, required = required)
         }
