@@ -322,8 +322,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       jsonLiteral |
       caseExpression |
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
-//      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "TABLE" ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
+      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "(" ~> expression <~ ")"
   )
 

@@ -30,7 +30,7 @@ case class AggregateFunctionExpr(f: AggregateFunction, arg: Expr) extends Expr
 case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr]) extends Expr
 case class InQueryExpr(value: Expr, op: String, query: Expr) extends Expr
 
-case class SubqueryExpr(subquery: Expr) extends Expr
+case class SubqueryExpr(query: Expr) extends Expr
 
 case class StarExpr() extends Expr
 case class TableStarExpr(table: Ident) extends Expr

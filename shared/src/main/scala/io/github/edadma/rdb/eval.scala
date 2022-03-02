@@ -55,10 +55,10 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
       BooleanValue((op contains "NOT") ^ eval(expr, ctx, mode).isNull)
     case BinaryExpr(left, "||", right) =>
-      val l = teval(left, ctx, mode)
-      val r = teval(right, ctx, mode)
+      val l = seval(left, ctx, mode)
+      val r = seval(right, ctx, mode)
 
-      TextValue(l.s ++ r.s)
+      TextValue(l ++ r)
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
       val or = op == "OR"
 
@@ -117,8 +117,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
         true
 
-      val s = teval(left, ctx, mode).s
-      val p = teval(right, ctx, mode).s
+      val s = seval(left, ctx, mode)
+      val p = seval(right, ctx, mode)
       val res = like(s, p, op contains "ILIKE")
 
       BooleanValue((op startsWith "NOT") ^ res)
@@ -132,8 +132,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         case "*" => BasicDAL.compute(TIMES, l, r, NumberValue.from)
         case "/" => BasicDAL.compute(DIVIDE, l, r, NumberValue.from)
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
-      val l = neval(left, ctx, mode)
-      val r = neval(right, ctx, mode)
+      val l = eval(left, ctx, mode)
+      val r = eval(right, ctx, mode)
 
       BooleanValue(
         op match
@@ -167,6 +167,13 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
             case None    => NullValue()
             case Some(e) => eval(e, ctx, mode)
         case Some(When(_, expr)) => eval(expr, ctx, mode)
+    case SubqueryExpr(query) =>
+      val res = teval(query, ctx, mode)
+
+      if res.isEmpty then problem(query, "sub-query returned empty result")
+      else if res.length > 1 then problem(query, "sub-query returned more than one row")
+      else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row with one column")
+      else res.data.head.data.head
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 
@@ -177,7 +184,9 @@ def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue =
 
   v.asInstanceOf[NumberValue]
 
-def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TextValue = eval(expr, ctx, mode).toText
+def seval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): String = eval(expr, ctx, mode).string
+
+def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TableValue = eval(expr, ctx, mode).asInstanceOf[TableValue]
 
 def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
   eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]

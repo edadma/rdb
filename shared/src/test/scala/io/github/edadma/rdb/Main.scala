@@ -42,7 +42,7 @@ object Main extends App:
   )
   pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (1, {\"a\": [123, 456]})"))
   pprintln(executeSQL("SELECT * FROM t"))
-  pprintln(executeSQL("SELECT CASE WHEN 1 = 1 THEN 'asdf' ELSE 'zxcv' END"))
+  pprintln(executeSQL("SELECT CASE WHEN (SELECT count(*) FROM t) = 1 THEN 'asdf' ELSE 'zxcv' END"))
 
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))

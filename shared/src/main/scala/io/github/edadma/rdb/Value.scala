@@ -8,7 +8,9 @@ import scala.util.parsing.input.{Position, Positional}
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
   def toText: TextValue = problem(pos, "cannot be converted to text")
 
-  def render: String
+  def render: String = string
+
+  def string: String
 
   infix def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
 
@@ -17,7 +19,7 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
   override def toText: TextValue = TextValue(value.toString)
 
-  def render: String = value.toString
+  def string: String = value.toString
 
   override def compare(that: Value): Int =
     that match
@@ -34,10 +36,10 @@ object NumberValue:
 case class NullValue() extends Value(NullType):
   override def toText: TextValue = TextValue("NULL")
 
-  def render: String = "null"
+  def string: String = "null"
 
 case class StarValue() extends Value(StarType):
-  def render: String = "*"
+  def string: String = "*"
 
 case class TimestampValue(t: Datetime) extends Value(TimestampType):
   t.timestamp
@@ -49,12 +51,16 @@ case class TimestampValue(t: Datetime) extends Value(TimestampType):
       case TimestampValue(u) => t compare u
       case _                 => super.compare(that)
 
-  def render: String = s"'$t'"
+  override def render: String = s"'$t'"
+
+  def string: String = t.toString
 
 case class TextValue(s: String) extends Value(TextType):
   override def toText: TextValue = this
 
-  def render: String = s"\"$s\""
+  override def render: String = s"\"$s\""
+
+  def string: String = s
 
   override def compare(that: Value): Int =
     that match
@@ -64,7 +70,7 @@ case class TextValue(s: String) extends Value(TextType):
 case class BooleanValue(b: Boolean) extends Value(BooleanType):
   override def toText: TextValue = TextValue(if b then "TURE" else "FALSE")
 
-  def render: String = if b then "true" else "false"
+  def string: String = if b then "true" else "false"
 
 trait ArrayLikeValue extends Value:
   infix def contains(v: Value): Boolean
@@ -73,6 +79,8 @@ trait ArrayLikeValue extends Value:
 
   def nonEmpty: Boolean = !isEmpty
 
+  def length: Int
+
 case class TableValue(data: IndexedSeq[Row], meta: Metadata) extends Value(TableType) with ArrayLikeValue:
   infix def contains(v: Value): Boolean =
     require(meta.width == 1, s"contains: expected one column: $meta")
@@ -80,17 +88,22 @@ case class TableValue(data: IndexedSeq[Row], meta: Metadata) extends Value(Table
 
   def isEmpty: Boolean = data.isEmpty
 
-  def render: String = data.mkString("[", ", ", "]")
+  def length: Int = data.length
+
+  def string: String = data.mkString("[", ", ", "]")
 
 case class ArrayValue(data: IndexedSeq[Value]) extends Value(ArrayType) with ArrayLikeValue:
   override def toText: TextValue = TextValue(render)
 
-  def render: String = data.map(_.render).mkString("[", ", ", "]")
+  def string: String = data.map(_.render).mkString("[", ", ", "]")
 
   infix def contains(v: Value): Boolean = data.contains(v)
+
   def isEmpty: Boolean = data.isEmpty
+
+  def length: Int = data.length
 
 case class ObjectValue(properties: Seq[(String, Value)]) extends Value(ObjectType):
   override def toText: TextValue = TextValue(render)
 
-  def render: String = properties.map({ case (k, v) => s"\"$k\": ${v.render}" }).mkString("{", ", ", "}")
+  def string: String = properties.map({ case (k, v) => s"\"$k\": ${v.render}" }).mkString("{", ", ", "}")
