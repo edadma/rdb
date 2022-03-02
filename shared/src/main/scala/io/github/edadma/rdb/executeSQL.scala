@@ -41,7 +41,7 @@ def executeSQL(sql: String)(implicit db: DB): Result =
           val t =
             typ match
               case "INT" | "INTEGER" => IntegerType
-              case "LONG"            => LongType
+              case "BIGINT"          => BigintType
               case "DOUBLE"          => DoubleType
               case "TEXT"            => TextType
               case "JSON"            => JSONType

@@ -45,7 +45,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "AS",
       "ASC",
       "BETWEEN",
-      "LONG",
+      "BIGINT",
       "BOOLEAN",
       "BY",
       "CASE",
@@ -368,7 +368,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
-  lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "LONG" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT" | "UUID"
+  lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "BIGINT" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT" | "UUID"
 
   lazy val columnDesc: P[ColumnDesc] = identifier ~ typ ~ opt("PRIMARY" ~ "KEY") ~ opt("NOT" ~ "NULL") ^^ {
     case c ~ t ~ p ~ n => ColumnDesc(c, t, p.isDefined, n.isDefined)

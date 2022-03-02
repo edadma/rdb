@@ -56,8 +56,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-//  def row(idx: Int): Row = Row(data(idx) to ArraySeq, meta, Some(updater(idx)), Some(deleter(idx)))
-
+  // todo: this should be type based. types should have an "auto" function, including UUID
   def increment(col: String): Value =
     auto get col match
       case None =>
