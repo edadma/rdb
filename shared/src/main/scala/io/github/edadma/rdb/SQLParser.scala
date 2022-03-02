@@ -370,9 +370,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "BIGINT" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT" | "UUID"
 
-  lazy val columnDesc: P[ColumnDesc] = identifier ~ typ ~ opt("PRIMARY" ~ "KEY") ~ opt("NOT" ~ "NULL") ^^ {
-    case c ~ t ~ p ~ n => ColumnDesc(c, t, p.isDefined, n.isDefined)
-  }
+  lazy val columnDesc: P[ColumnDesc] =
+    identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>
+      ColumnDesc(c, t, a, n.isDefined, p.isDefined)
+    }
 
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |

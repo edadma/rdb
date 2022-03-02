@@ -9,4 +9,4 @@ case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], cond: Option[Expr])
 case class DeleteCommand(table: Ident, cond: Option[Expr]) extends Command
 
 case class UpdateSet(col: Ident, value: Expr)
-case class ColumnDesc(name: Ident, typ: String, pk: Boolean, required: Boolean)
+case class ColumnDesc(name: Ident, typ: String, auto: Boolean, required: Boolean, pk: Boolean)
