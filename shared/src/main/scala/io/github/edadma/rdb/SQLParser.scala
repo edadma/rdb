@@ -34,7 +34,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "}",
       ":",
       "[",
-      "]"
+      "]",
+      ";"
     )
     reserved ++= Seq(
       "ADD",
@@ -388,18 +389,18 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       create |
       update
 
-  def parseQuery(input: String): SQLSelectExpr =
+  lazy val commands: P[Seq[Command]] = rep1sep(command, ";") <~ opt(";")
+
+  def parse[T](input: String, parser: P[T]): T =
     val tokens = new PackratReader(new lexical.Scanner(input))
 
-    phrase(query)(tokens) match
+    phrase(parser)(tokens) match
       case Success(result, _)   => result
       case Failure(error, rest) => problem(rest.pos, error)
       case Error(error, rest)   => problem(rest.pos, error)
 
-  def parseCommand(input: String): Command =
-    val tokens = new PackratReader(new lexical.Scanner(input))
+  def parseQuery(input: String): SQLSelectExpr = parse(input, query)
 
-    phrase(command)(tokens) match
-      case Success(result, _)   => result
-      case Failure(error, rest) => problem(rest.pos, error)
-      case Error(error, rest)   => problem(rest.pos, error)
+  def parseCommand(input: String): Command = parse(input, command)
+
+  def parseCommands(input: String): Seq[Command] = parse(input, commands)

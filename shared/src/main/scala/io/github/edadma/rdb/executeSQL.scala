@@ -4,12 +4,12 @@ package io.github.edadma.rdb
 
 import scala.collection.mutable
 
-def executeSQL(sql: String)(implicit db: DB): Result =
-  val com = SQLParser.parseCommand(sql)
+def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
+  val cs = SQLParser.parseCommands(sql)
 
   // pprintln(com)
 
-  com match
+  cs map {
     case InsertCommand(id @ Ident(table), columns, rows) =>
       val t = db.table(table).getOrElse(problem(id, s"unknown table: $table"))
       val cols = columns.length
@@ -91,3 +91,4 @@ def executeSQL(sql: String)(implicit db: DB): Result =
         count += 1
 
       DeleteResult(count)
+  }

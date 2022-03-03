@@ -14,13 +14,13 @@ object Main extends App:
         |CREATE TABLE t (
         | c1 UUID AUTO PRIMARY KEY,
         | c2 INT
-        |)
+        |);
+        |INSERT INTO t (c2) VALUES (123);
+        |INSERT INTO t (c2) VALUES (456);
+        |SELECT * FROM t;
         |""".trim.stripMargin
     )
   )
-  pprintln(executeSQL("INSERT INTO t (c2) VALUES (123)"))
-  pprintln(executeSQL("INSERT INTO t (c2) VALUES (456)"))
-  pprintln(executeSQL("SELECT * FROM t"))
   pprintln(executeSQL("SELECT CURRENT_TIMESTAMP"))
 
 //  val e =
