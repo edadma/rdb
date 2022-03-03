@@ -20,11 +20,15 @@ case object IntegerType extends Type("integer"):
       case n @ NumberValue(DIntType, _) => n
       case _                            => super.convert(v)
 
+  override def init: Value = ONE
+
 case object BigintType extends Type("bigint"):
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DLongType, _) => n
       case _                             => super.convert(v)
+
+  override def init: Value = ONE
 
 case object DoubleType extends Type("double"):
   override def convert(v: Value): Value =

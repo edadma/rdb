@@ -3,16 +3,14 @@ package io.github.edadma.rdb
 import scala.collection.immutable.ArraySeq
 import pprint.*
 
-import scala.util.Try
-
 object Main extends App:
   implicit val db: DB = MemoryDB("test")
 
-  pprintln(
+  PPrinter.BlackWhite.pprintln(
     executeSQL(
       """
         |CREATE TABLE t (
-        | c1 UUID AUTO PRIMARY KEY,
+        | c1 INT AUTO PRIMARY KEY,
         | c2 INT
         |);
         |INSERT INTO t (c2) VALUES (123);
@@ -21,7 +19,6 @@ object Main extends App:
         |""".trim.stripMargin
     )
   )
-  pprintln(executeSQL("SELECT CURRENT_TIMESTAMP"))
 
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
