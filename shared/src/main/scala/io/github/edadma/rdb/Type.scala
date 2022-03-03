@@ -10,7 +10,7 @@ trait Type(val name: String):
     if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
     else v
 
-  def init: Value = problem(pos, s"type '$name' doesn't support auto")
+  def init: Value = sys.error(s"type '$name' doesn't support auto")
 
 case object NumberType extends Type("number")
 
@@ -45,6 +45,8 @@ case object UUIDType extends Type("uuid"):
 
         UUIDValue(id)
       case _ => super.convert(v)
+
+  override def init: Value = UUIDValue.generate
 
 case object TextType extends Type("text")
 

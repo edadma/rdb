@@ -22,7 +22,7 @@ abstract class Table extends Process:
 
   def rows: Int
 
-  def increment(col: String): Value
+  def auto(col: String): Value
 
   def insert(row: Map[String, Value]): Map[String, Value]
 

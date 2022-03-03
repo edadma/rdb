@@ -19,6 +19,7 @@ object Main extends App:
     )
   )
   pprintln(executeSQL("INSERT INTO t (c2) VALUES (123)"))
+  pprintln(executeSQL("INSERT INTO t (c2) VALUES (456)"))
   pprintln(executeSQL("SELECT * FROM t"))
 
 //  val e =

@@ -31,14 +31,15 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
   private val data = new DLList[Array[Value]]
-  private val auto = new mutable.HashMap[String, Value]
+  private val autoMap = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
-  private val autoSet = columns filter (_.auto) map (_.name) toSet
 
   spec foreach {
     case s: ColumnSpec => addColumn(s)
     case _             =>
   }
+
+  private val autoSet = columns filter (_.auto) map (_.name) toSet
 
   def meta: Metadata = _meta
 
@@ -56,15 +57,18 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
   def rows: Int = data.length
 
-  // todo: this should be type based. types should have an "auto" function, including UUID
-  def increment(col: String): Value =
-    auto get col match
+  def auto(col: String): Value =
+    autoMap get col match
       case None =>
-        auto(col) = 1
-        ONE
+        val first = columns(columnMap(col)).typ.init
+
+        autoMap(col) = first
+        first
       case Some(cur) =>
-        auto(col) = cur + 1
-        NumberValue(cur)
+        val next = cur.next
+
+        autoMap(col) = next
+        next
 
   def insert(row: Map[String, Value]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
@@ -86,10 +90,10 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
           if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
 
-          if s.pk && !s.auto then sys.error(s"bulkInsert: column '$m' is a non-auto primary key")
+          if s.pk then sys.error(s"bulkInsert: column '$m' is a required primary key")
 
           (idx, s.default getOrElse NullValue())
-    val autos = autoSet diff missingSet map (c => (c, columnMap(c)))
+    val autos = autoSet intersect missingSet map (c => (c, columnMap(c)))
     val mapping = header map (h => meta.columnMap(h)._1)
     val specs = header map (h => columns(columnMap(h)))
     var result: Map[String, Value] = Map.empty
@@ -109,7 +113,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
       val newAutos =
         for ((c, i) <- autos)
           yield
-            val v = increment(c)
+            val v = auto(c)
 
             arr(i) = v
             c -> v
@@ -119,14 +123,23 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
 
     result
 
-  private def updater(row: Array[Value]) =
-    (update: Seq[(String, Value)]) =>
+  class Updater private[MemoryTable] (row: Array[Value]) extends (Seq[(String, Value)] => Unit):
+    def apply(update: Seq[(String, Value)]): Unit =
       for ((k, v) <- update)
         val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
         val spec = columns(col)
 
         row(col) = spec.typ.convert(v)
 
-  private def deleter(node: data.Node): () => Unit = () => node.unlink
+    override def toString: String = "[MemoryDB Updater]"
+
+  private def updater(row: Array[Value]) = new Updater(row)
+
+  class Deleter private[MemoryTable] (node: data.Node) extends (() => Unit):
+    def apply(): Unit = node.unlink
+
+    override def toString: String = "[MemoryDB Deleter]"
+
+  private def deleter(node: data.Node) = new Deleter(node)
 
   override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
