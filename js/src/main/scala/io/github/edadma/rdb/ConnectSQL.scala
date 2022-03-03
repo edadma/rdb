@@ -26,8 +26,8 @@ class ConnectSQL():
     executeSQL(sql)(db) match
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
-      case InsertResult(result) =>
-        val res = result.view.mapValues(toJS).toMap.toJSDictionary
+      case InsertResult(obj, _) =>
+        val res = obj.view.mapValues(toJS).toMap.toJSDictionary
 
         js.Dynamic.literal(command = "insert", result = res)
       case QueryResult(table) =>

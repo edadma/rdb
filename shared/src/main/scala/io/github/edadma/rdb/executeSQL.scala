@@ -24,7 +24,12 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
           for (id @ Ident(c) <- columns)
             if !t.hasColumn(c) then problem(id, s"unknown column: $c")
 
-          InsertResult(t.bulkInsert(columns map (_.name), data))
+          val result = t.bulkInsert(columns map (_.name), data)
+          val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+          val metadata = Metadata(cols.toIndexedSeq)
+          val row = Row(seq.toIndexedSeq, metadata, None, None)
+
+          InsertResult(result, TableValue(Vector(row), metadata))
     case QueryCommand(query) =>
       QueryResult(eval(rewrite(query)(db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
     case CreateTableCommand(id @ Ident(table), columns) =>
