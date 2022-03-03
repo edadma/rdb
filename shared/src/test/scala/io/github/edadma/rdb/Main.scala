@@ -21,6 +21,7 @@ object Main extends App:
   pprintln(executeSQL("INSERT INTO t (c2) VALUES (123)"))
   pprintln(executeSQL("INSERT INTO t (c2) VALUES (456)"))
   pprintln(executeSQL("SELECT * FROM t"))
+  pprintln(executeSQL("SELECT CURRENT_TIMESTAMP"))
 
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))

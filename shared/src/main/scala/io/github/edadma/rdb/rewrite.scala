@@ -12,14 +12,18 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       CaseExpr(whens map { case When(when, expr) => When(rewrite(when), rewrite(expr)) }, els map rewrite)
     case InSeqExpr(value, op, exprs) => InSeqExpr(rewrite(value), op, exprs map rewrite)
     case TableConstructorExpr(expr)  => TableConstructorExpr(rewrite(expr))
-    case ApplyExpr(Ident(func), args) =>
+    case ApplyExpr(id @ Ident(func), args) =>
       scalarFunction get func match
         case None =>
           aggregateFunction get func match
-            case None                        => sys.error(s"unknown function '$func'")
-            case Some(f) if args.length != 1 => sys.error("aggregate function take one argument")
+            case None                        => problem(id, s"unknown function '$func'")
+            case Some(f) if args.length != 1 => problem(id, "aggregate function takes one argument")
             case Some(f)                     => AggregateFunctionExpr(f, rewrite(args.head))
         case Some(f) => ScalarFunctionExpr(f, args map rewrite)
+    case VariableExpr(id @ Ident(name)) =>
+      scalarVariable get name match
+        case None    => problem(id, s"unknown variable '$name'")
+        case Some(v) => VariableInstanceExpr(v.instance)
     case InExpr(value, array) => InExpr(rewrite(value), rewrite(array))
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery))
     case UnaryExpr(op, expr) =>
@@ -119,7 +123,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
-    // todo: ColumnExpr
+    // todo: ColumnExpr, VariableExpr
     case _ => expr
 
 def aggregate(expr: Expr): Boolean =

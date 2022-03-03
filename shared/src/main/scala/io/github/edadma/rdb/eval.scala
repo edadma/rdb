@@ -10,6 +10,7 @@ import scala.collection.mutable
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
+    case VariableInstanceExpr(v)    => v.value
     case TableConstructorExpr(expr) => aleval(expr, ctx, mode)
     case AggregateFunctionExpr(f, arg) =>
       mode match

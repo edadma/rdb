@@ -28,6 +28,8 @@ case class ApplyExpr(func: Ident, args: Seq[Expr]) extends Expr
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr]) extends Expr
 case class AggregateFunctionExpr(f: AggregateFunction, arg: Expr) extends Expr
 
+case class VariableInstanceExpr(v: VariableInstance) extends Expr
+
 case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr]) extends Expr
 case class InQueryExpr(value: Expr, op: String, query: Expr) extends Expr
 
