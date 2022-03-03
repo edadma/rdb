@@ -21,7 +21,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
     githubOwner := "edadma",
     githubRepository := name.value,
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
-    //    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.11" % "test",
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.11" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal" % "0.1.8",
       "io.github.edadma" %%% "datetime" % "0.1.15",
@@ -53,9 +53,9 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
     ),
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-    Test / scalaJSUseMainModuleInitializer := true,
-    Test / scalaJSUseTestModuleInitializer := false,
-//    Test / scalaJSUseMainModuleInitializer := false,
-//    Test / scalaJSUseTestModuleInitializer := true,
+//    Test / scalaJSUseMainModuleInitializer := true,
+//    Test / scalaJSUseTestModuleInitializer := false,
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
     scalaJSUseMainModuleInitializer := true
   )
