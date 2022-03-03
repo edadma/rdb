@@ -8,41 +8,18 @@ import scala.util.Try
 object Main extends App:
   implicit val db: DB = MemoryDB("test")
 
-  val json =
-    """
-      |[
-      |  {
-      |    "a": "asdf",
-      |    "b": 123,
-      |    "c": [
-      |      "d",
-      |      456
-      |    ]
-      |  },
-      |  {
-      |    "e": "zxcv",
-      |    "f": 789,
-      |    "c": [
-      |      "d",
-      |      901
-      |    ]
-      |  }
-      |]
-      |""".stripMargin
-
   pprintln(
     executeSQL(
       """
         |CREATE TABLE t (
-        | c1 INTEGER PRIMARY KEY,
-        | c2 JSON
+        | c1 UUID AUTO PRIMARY KEY,
+        | c2 INT
         |)
         |""".trim.stripMargin
     )
   )
-  pprintln(executeSQL("INSERT INTO t (c1, c2) VALUES (1, {\"a\": [123, 456]})"))
+  pprintln(executeSQL("INSERT INTO t (c2) VALUES (123)"))
   pprintln(executeSQL("SELECT * FROM t"))
-  pprintln(executeSQL("SELECT CASE WHEN (SELECT count(*) FROM t) = 1 THEN 'asdf' ELSE 'zxcv' END"))
 
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))

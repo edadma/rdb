@@ -33,7 +33,7 @@ def executeSQL(sql: String)(implicit db: DB): Result =
       val specs =
         val names = new mutable.HashSet[String]
 
-        columns map { case ColumnDesc(id @ Ident(name), typ, pk, required) =>
+        columns map { case ColumnDesc(id @ Ident(name), typ, auto, required, pk) =>
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
@@ -49,7 +49,7 @@ def executeSQL(sql: String)(implicit db: DB): Result =
               case "TIMESTAMP"       => TimestampType
               case "UUID"            => UUIDType
 
-          ColumnSpec(name, t, pk = pk, required = required)
+          ColumnSpec(name, t, auto, required, pk)
         }
 
       db.create(table, specs)

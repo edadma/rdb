@@ -9,6 +9,7 @@ trait Expr extends Positional:
   var typ: Type | Null = null
 
 case class ColumnExpr(col: Ident) extends Expr
+case class VariableExpr(name: Ident) extends Expr
 case class UnaryExpr(op: String, expr: Expr) extends Expr
 case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
 case class BooleanExpr(b: Boolean) extends Expr { typ = BooleanType }

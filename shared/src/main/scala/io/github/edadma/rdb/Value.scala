@@ -16,6 +16,8 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
 
   def isNull: Boolean = isInstanceOf[NullValue]
 
+  def next: Value = problem(pos, "can't generate next value")
+
 case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
   override def toText: TextValue = TextValue(value.toString)
 
@@ -25,6 +27,8 @@ case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with
     that match
       case n: NumberValue => BasicDAL.compare[TypedNumber](this, n)
       case _              => super.compare(that)
+
+  override def next: Value = BasicDAL.compute(PLUS, this, ONE, NumberValue.from)
 
 object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
@@ -55,12 +59,17 @@ case class TimestampValue(t: Datetime) extends Value(TimestampType):
 
   def string: String = t.toString
 
+object UUIDValue:
+  def generate: UUIDValue = UUIDValue(Platform.randomUUID)
+
 case class UUIDValue(id: String) extends Value(UUIDType):
   override def toText: TextValue = TextValue(id)
 
   override def render: String = s"'$id'"
 
   def string: String = id
+
+  override def next: Value = UUIDValue.generate
 
 case class TextValue(s: String) extends Value(TextType):
   override def toText: TextValue = this

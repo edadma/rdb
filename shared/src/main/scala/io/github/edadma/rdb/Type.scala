@@ -10,6 +10,8 @@ trait Type(val name: String):
     if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
     else v
 
+  def init: Value = problem(pos, s"type '$name' doesn't support auto")
+
 case object NumberType extends Type("number")
 
 case object IntegerType extends Type("integer"):

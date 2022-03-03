@@ -44,6 +44,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "ANY",
       "AS",
       "ASC",
+      "AUTO",
       "BETWEEN",
       "BIGINT",
       "BOOLEAN",
@@ -53,6 +54,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "COLUMN",
       "CONSTRAINT",
       "CREATE",
+      "CURRENT_TIMESTAMP",
       "DROP",
       "DATABASE",
       "DEFAULT",
@@ -310,6 +312,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
   )
 
+  lazy val variable: P[VariableExpr] = positioned(
+    pos ~ "CURRENT_TIMESTAMP" ^^ { case p ~ v => VariableExpr(Ident(v).setPos(p)) }
+  )
+
   lazy val integer: P[Int] = numericLit ^^ (_.toInt)
 
   lazy val decimal: P[Double] = decimalLit ^^ (_.toDouble)
@@ -320,6 +326,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       stringLit ^^ StringExpr.apply |
       application |
       column |
+      variable |
       booleanLiteral |
       jsonLiteral |
       caseExpression |
@@ -372,7 +379,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>
-      ColumnDesc(c, t, a, n.isDefined, p.isDefined)
+      ColumnDesc(c, t, a.isDefined, n.isDefined, p.isDefined)
     }
 
   lazy val command: P[Command] =

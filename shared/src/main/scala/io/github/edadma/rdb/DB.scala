@@ -32,9 +32,9 @@ trait Spec
 case class ColumnSpec(
     name: String,
     typ: Type,
-    pk: Boolean = false,
     auto: Boolean = false,
     required: Boolean = false,
+    pk: Boolean = false,
     indexed: Boolean = false,
     unique: Boolean = false,
     fk: Option[String] = None,

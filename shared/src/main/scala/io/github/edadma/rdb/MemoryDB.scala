@@ -31,7 +31,7 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
   private val columns = new ArrayBuffer[ColumnSpec]
   private val columnMap = new mutable.HashMap[String, Int]
   private val data = new DLList[Array[Value]]
-  private val auto = new mutable.HashMap[String, Int]
+  private val auto = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
   private val autoSet = columns filter (_.auto) map (_.name) toSet
 
@@ -85,6 +85,8 @@ class MemoryTable(val name: String, spec: Seq[Spec]) extends Table:
           val s = columns(idx)
 
           if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
+
+          if s.pk && !s.auto then sys.error(s"bulkInsert: column '$m' is a non-auto primary key")
 
           (idx, s.default getOrElse NullValue())
     val autos = autoSet diff missingSet map (c => (c, columnMap(c)))
