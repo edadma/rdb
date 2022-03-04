@@ -248,6 +248,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => InSeqExpr(e, i, es) } |
       expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
       booleanLiteral |
+      "NULL" ^^^ NullExpr() |
       "(" ~> booleanExpression <~ ")"
   )
 
@@ -326,6 +327,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     decimal ^^ (n => NumberExpr(n)) |
       integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
+      "NULL" ^^^ NullExpr() |
       application |
       column |
       variable |
@@ -344,6 +346,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       decimal ^^ (n => NumberExpr(n)) |
       integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
+      "NULL" ^^^ NullExpr() |
       "-" ~> primary ^^ (e => UnaryExpr("-", e))
   )
 
