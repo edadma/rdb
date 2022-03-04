@@ -11,7 +11,7 @@ object Main extends App:
       """
         |CREATE TABLE t (
         | c1 INT AUTO PRIMARY KEY,
-        | c2 TEXT
+        | c2 TIMESTAMP WITHOUT TIME ZONE
         |);
         |INSERT INTO t (c2) VALUES (NULL);
         |SELECT * FROM t;

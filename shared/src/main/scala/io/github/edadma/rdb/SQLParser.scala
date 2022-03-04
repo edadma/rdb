@@ -105,6 +105,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "SOME",
       "TABLE",
       "TEXT",
+      "TIME",
       "TIMESTAMP",
       "THEN",
       "TRUE",
@@ -114,7 +115,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "UUID",
       "VALUES",
       "WHEN",
-      "WHERE"
+      "WHERE",
+      "WITHOUT",
+      "ZONE"
     )
 
     case class DecimalLit(chars: String) extends Token {
@@ -382,7 +385,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
-  lazy val typ: P[String] = "BOOLEAN" | "INT" | "INTEGER" | "BIGINT" | "DOUBLE" | "JSON" | "TIMESTAMP" | "TEXT" | "UUID"
+  lazy val typ: P[String] =
+    "BOOLEAN"
+      | "INT" | "INTEGER"
+      | "BIGINT"
+      | "DOUBLE"
+      | "JSON"
+      | "TIMESTAMP" <~ opt("WITHOUT" ~ "TIME" ~ "ZONE")
+      | "TEXT"
+      | "UUID"
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>
