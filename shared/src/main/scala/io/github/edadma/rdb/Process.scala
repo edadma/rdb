@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.BasicDAL
-//import pprint.pprintln
+import pprint.pprintln
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
@@ -18,7 +18,7 @@ case object SingleProcess extends Process:
   val meta: Metadata = Metadata(Vector.empty)
 
   def iterator(ctx: Seq[Row]): RowIterator = Iterator(
-    Row(Vector.empty, meta, None, None, AggregateMode.AccumulateReturn)
+    Row(Vector.empty, meta, None, None, AggregateMode.AccumulateReturn),
   )
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:
@@ -74,7 +74,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
 
         row.mode match
           case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta, None, None))
-          case _                                                     => Iterator.empty
+          case _                                                     => Iterator.empty,
       )
 
 case class AliasProcess(input: Process, alias: String) extends Process:
@@ -91,8 +91,17 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val data = input.iterator(ctx) to mutable.ArraySeq
-    val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
+    val disc = (row: Row) => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))
+    val groupsMap = new mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]
+
+    for (r <- input.iterator(ctx))
+      val d = disc(r)
+
+      groupsMap get d match
+        case None    => groupsMap(d) = ArrayBuffer(r)
+        case Some(g) => g += r
+
+    val groups = groupsMap.values.toSeq
 
     for (g <- groups)
       for (i <- 0 until (g.length - 1))

@@ -9,29 +9,44 @@ object Main extends App:
   pprintln(
     executeSQL(
       """
-        |CREATE TABLE "author" (
-        |  "pk_author_id" BIGINT PRIMARY KEY,
+        |CREATE TABLE "students" (
+        |  "id" INTEGER PRIMARY KEY,
+        |  "student_name" TEXT
+        |);
+        |CREATE TABLE "class" (
+        |  "id" INTEGER PRIMARY KEY,
         |  "name" TEXT
         |);
-        |CREATE TABLE "book" (
-        |  "pk_book_id" BIGINT PRIMARY KEY,
-        |  "title" TEXT,
+        |CREATE TABLE "student_class" (
+        |  "studentid" INTEGER,
+        |  "classid" INTEGER,
         |  "year" INTEGER,
-        |  "author_id" BIGINT
+        |  "semester" TEXT,
+        |  "grade" TEXT
         |);
-        |ALTER TABLE "book" ADD FOREIGN KEY ("author_id") REFERENCES "author";
-        |INSERT INTO "author" ("pk_author_id", "name") VALUES
-        |  (1, 'Robert Louis Stevenson'),
-        |  (2, 'Lewis Carroll'),
-        |  (3, 'Charles Dickens'),
-        |  (4, 'Mark Twain');
-        |INSERT INTO "book" ("pk_book_id", "title", "year", "author_id") VALUES
-        |  (1, 'Treasure Island', 1883, 1),
-        |  (2, E'Alice\'s Adventures in Wonderland', 1865, 2),
-        |  (3, 'Oliver Twist', 1838, 3),
-        |  (4, 'A Tale of Two Cities', 1859, 3),
-        |  (5, 'The Adventures of Tom Sawyer', 1876, 4),
-        |  (6, 'Adventures of Huckleberry Finn', 1884, 4);
+        |ALTER TABLE "student_class" ADD FOREIGN KEY ("studentid") REFERENCES "students";
+        |ALTER TABLE "student_class" ADD FOREIGN KEY ("classid") REFERENCES "class";
+        |INSERT INTO "students" ("id", "student_name") VALUES
+        |  (1, 'John'),
+        |  (2, 'Debbie');
+        |INSERT INTO "class" ("id", "name") VALUES
+        |  (1, 'English'),
+        |  (2, 'Maths'),
+        |  (3, 'Spanish'),
+        |  (4, 'Biology'),
+        |  (5, 'Science'),
+        |  (6, 'Programming'),
+        |  (7, 'Law'),
+        |  (8, 'Commerce'),
+        |  (9, 'Physical Education');
+        |INSERT INTO "student_class" ("studentid", "classid", "year", "semester", "grade") VALUES
+        |  (1, 3, 2019, 'fall', 'B+'),
+        |  (1, 5, 2018, 'winter', 'A'),
+        |  (1, 9, 2019, 'summer', 'F'),
+        |  (2, 1, 2018, 'fall', 'A+'),
+        |  (2, 4, 2019, 'winter', 'B-'),
+        |  (2, 5, 2018, 'summer', 'A-'),
+        |  (2, 9, 2019, 'fall', 'B+');
         |""".trim.stripMargin,
     ),
   )
@@ -39,13 +54,12 @@ object Main extends App:
     executeSQL(
       """
       |SELECT 
-      |    "author"."name",
-      |    (TABLE(SELECT 
-      |        count(*), TYPE(count(*))
-      |      FROM "book" AS "author$books"
-      |      WHERE "author$books"."author_id" = "author"."pk_author_id"
-      |      ))
-      |  FROM "author"
+      |    "student_class$student"."student_name",
+      |    count(*)
+      |  FROM "student_class"
+      |    LEFT JOIN "students" AS "student_class$student" ON "student_class"."studentid" = "student_class$student"."id"
+      |  GROUP BY "student_class$student"."student_name"
+      |  ORDER BY "student_class$student"."student_name" DESC
       |""".stripMargin,
     ),
   )
