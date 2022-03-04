@@ -6,37 +6,37 @@ import pprint.*
 object Main extends App:
   implicit val db: DB = MemoryDB("test")
 
-  PPrinter.BlackWhite.pprintln(
-    executeSQL(
-      """
-        |CREATE TABLE t (
-        | c1 INT AUTO PRIMARY KEY,
-        | c2 TEXT
-        |);
-        |INSERT INTO t (c2) VALUES ('asdf');
-        |SELECT TYPE(c1), TYPE(c2) FROM t;
-        |""".trim.stripMargin,
+//  PPrinter.BlackWhite.pprintln(
+//    executeSQL(
+//      """
+//        |CREATE TABLE t (
+//        | c1 INT AUTO PRIMARY KEY,
+//        | c2 TEXT
+//        |);
+//        |INSERT INTO t (c2) VALUES ('asdf');
+//        |SELECT TYPE(c1), TYPE(c2) FROM t;
+//        |""".trim.stripMargin,
+//    ),
+//  )
+
+  val e =
+    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
+
+  e.bulkInsert(
+    Seq("e_id", "name", "m_id"),
+    Seq(
+      Seq(NumberValue(1), TextValue("emp1"), NumberValue(2)),
+      Seq(NumberValue(2), TextValue("mgr1"), NumberValue(3)),
+      Seq(NumberValue(3), TextValue("mgr2"), NULL),
+      Seq(NumberValue(4), TextValue("emp2"), NumberValue(3)),
+      Seq(NumberValue(5), TextValue("emp3"), NumberValue(3)),
     ),
   )
 
-//  val e =
-//    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
-//
-//  e.bulkInsert(
-//    Seq("e_id", "name", "m_id"),
-//    Seq(
-//      Seq(NumberValue(1), TextValue("emp1"), NumberValue(2)),
-//      Seq(NumberValue(2), TextValue("mgr1"), NumberValue(3)),
-//      Seq(NumberValue(3), TextValue("mgr2"), NULL),
-//      Seq(NumberValue(4), TextValue("emp2"), NumberValue(3)),
-//      Seq(NumberValue(5), TextValue("emp3"), NumberValue(3))
-//    )
-//  )
-
-//  val input =
-//    """
-//      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
-//      |""".trim.stripMargin
+  val input =
+    """
+      |SELECT name, TABLE(SELECT * FROM e WHERE mgr.e_id = m_id) FROM e mgr WHERE EXISTS (SELECT * FROM e WHERE mgr.e_id = m_id)
+      |""".trim.stripMargin
 //    """
 //      |SELECT * FROM e JOIN e m ON m.e_id = e.m_id
 //      |""".trim.stripMargin
@@ -60,4 +60,4 @@ object Main extends App:
 //        |""".trim.stripMargin
 //    )
 //  )
-//  PPrinter.BlackWhite.pprintln(executeSQL("SELECT * FROM t"))
+  PPrinter.BlackWhite.pprintln(executeSQL(input))

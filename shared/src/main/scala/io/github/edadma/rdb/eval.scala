@@ -50,6 +50,21 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       val v = eval(value, ctx, mode)
 
       BooleanValue((op contains "NOT") ^ (exprs exists (e => eval(e, ctx, mode) == v)))
+    case InQueryExpr(value, op, query) =>
+      val v = eval(value, ctx, mode)
+      val res = teval(query, ctx, mode)
+
+      if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
+
+      BooleanValue((op contains "NOT") ^ (res.data contains v))
+    case SubqueryExpr(query) =>
+      val res = teval(query, ctx, mode)
+
+      if res.isEmpty then problem(query, "sub-query returned empty result")
+      else if res.length > 1 then problem(query, "sub-query returned more than one row")
+      else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row of one column")
+
+      res.data.head.data.head
     case ExistsExpr(expr)       => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case UnaryExpr("-", expr)   => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
     case UnaryExpr("NOT", expr) => BooleanValue(!beval(expr, ctx))
@@ -107,7 +122,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
                 if (
                   sp < s.length && ((casesensitive && s(sp) == pattern(pp)) || (!casesensitive && s(
-                    sp
+                    sp,
                   ).toLower == pattern(pp).toLower))
                 )
                   move()
@@ -141,7 +156,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case "<"  => l < r
           case ">"  => l > r
           case "<=" => l <= r
-          case ">=" => l >= r
+          case ">=" => l >= r,
       )
     case BinaryExpr(left, op @ ("=" | "!="), right) =>
       val l = eval(left, ctx, mode)
@@ -150,7 +165,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       BooleanValue(
         op match
           case "="  => l == r
-          case "!=" => l != r
+          case "!=" => l != r,
       )
     case ObjectExpr(properties) =>
       val keys = new mutable.HashSet[String]
@@ -168,13 +183,6 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
             case None    => NullValue()
             case Some(e) => eval(e, ctx, mode)
         case Some(When(_, expr)) => eval(expr, ctx, mode)
-    case SubqueryExpr(query) =>
-      val res = teval(query, ctx, mode)
-
-      if res.isEmpty then problem(query, "sub-query returned empty result")
-      else if res.length > 1 then problem(query, "sub-query returned more than one row")
-      else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row with one column")
-      else res.data.head.data.head
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
 
