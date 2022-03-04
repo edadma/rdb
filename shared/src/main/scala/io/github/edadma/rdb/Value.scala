@@ -1,6 +1,13 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dal.{BasicDAL, TypedNumber, DoubleType as DDoubleType, IntType as DIntType, Type as DType}
+import io.github.edadma.dal.{
+  BasicDAL,
+  BigDecType,
+  TypedNumber,
+  DoubleType as DDoubleType,
+  IntType as DIntType,
+  Type as DType,
+}
 import io.github.edadma.datetime.Datetime
 
 import scala.util.parsing.input.{Position, Positional}
@@ -34,6 +41,8 @@ object NumberValue:
   def apply(n: Int): NumberValue = NumberValue(DIntType, n)
 
   def apply(n: Double): NumberValue = NumberValue(DDoubleType, n)
+
+  def apply(n: BigDecimal): NumberValue = NumberValue(BigDecType, n)
 
   def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
 

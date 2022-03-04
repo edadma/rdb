@@ -1,8 +1,9 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.datetime.Datetime
-import io.github.edadma.dal.{BigDecType, LongType as DLongType, DoubleType as DDoubleType, IntType as DIntType}
+import io.github.edadma.dal.{BigDecType, DoubleType as DDoubleType, IntType as DIntType, LongType as DLongType}
 
+import java.math.MathContext
 import scala.util.matching.Regex
 
 trait Type(val name: String):
@@ -37,10 +38,16 @@ case object DoubleType extends Type("double"):
       case _                                          => super.convert(v)
 
 case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
+  private val mc = MathContext(precision)
+  private val scaler = BigInt(10).pow(scale).toLong
+
   override def convert(v: Value): Value =
     v match
-      case n @ NumberValue(DDoubleType | DIntType | BigDecType, _) => n
-      case _                                                       => super.convert(v)
+      case n @ NumberValue(BigDecType, _)       => n
+      case NumberValue(DIntType | DLongType, n) => NumberValue(BigDecimal(n.longValue * scaler, scale, mc))
+      case NumberValue(DDoubleType, n) =>
+        NumberValue(BigDecimal(n.doubleValue, mc).setScale(scale, BigDecimal.RoundingMode.DOWN))
+      case _ => super.convert(v)
 
 case object UUIDType extends Type("uuid"):
   private val UUIDv4: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$".r
