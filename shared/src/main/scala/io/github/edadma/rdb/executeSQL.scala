@@ -10,7 +10,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
   // pprintln(com)
 
   cs map {
-    case InsertCommand(id @ Ident(table), columns, rows) =>
+    case InsertCommand(id @ Ident(table), columns, rows, returning) =>
       val t = db.table(table).getOrElse(problem(id, s"unknown table: $table"))
       val cols = columns.length
 
@@ -25,9 +25,23 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
             if !t.hasColumn(c) then problem(id, s"unknown column: $c")
 
           val result = t.bulkInsert(columns map (_.name), data)
-          val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-          val metadata = Metadata(cols.toIndexedSeq)
-          val row = Row(seq.toIndexedSeq, metadata, None, None)
+
+          val (row, metadata) =
+            returning match
+              case None =>
+                val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+                val metadata = Metadata(cols.toIndexedSeq)
+
+                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+              case Some(ret @ Ident(returning)) =>
+                if result contains returning then
+                  val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
+                    (ColumnMetadata(Some(table), k, v.vtyp), v)
+                  } unzip
+                  val metadata = Metadata(cols.toIndexedSeq)
+
+                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                else problem(ret, s"'$returning' not found in result from insert")
 
           InsertResult(result, TableValue(Vector(row), metadata))
     case QueryCommand(query) =>

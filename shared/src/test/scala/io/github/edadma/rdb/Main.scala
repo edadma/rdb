@@ -13,7 +13,7 @@ object Main extends App:
         | c1 INT AUTO PRIMARY KEY,
         | c2 INT
         |);
-        |INSERT INTO t (c2) VALUES (123);
+        |INSERT INTO t (c2) VALUES (123) RETURNING c1;
         |INSERT INTO t (c2) VALUES (456);
         |SELECT * FROM t;
         |""".trim.stripMargin

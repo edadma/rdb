@@ -99,6 +99,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "PRIMARY",
       "PROCEDURE",
       "REFERENCES",
+      "RETURNING",
       "SELECT",
       "SET",
       "SOME",
@@ -357,8 +358,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
   lazy val insert: P[Command] =
-    "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ^^ {
-      case t ~ cs ~ _ ~ rs => InsertCommand(t, cs, rs)
+    "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ~ opt(
+      "RETURNING" ~> identifier
+    ) ^^ { case t ~ cs ~ _ ~ rs ~ ret =>
+      InsertCommand(t, cs, rs, ret)
     }
 
   lazy val create: P[Command] =
