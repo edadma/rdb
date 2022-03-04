@@ -68,13 +68,13 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
       val r2 =
-        groupBy match
-          case None     => r1
-          case Some(es) => GroupOperator(r1, es map rewrite)
-      val r3 =
         orderBy match
+          case None     => r1
+          case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+      val r3 =
+        groupBy match
           case None     => r2
-          case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+          case Some(es) => GroupOperator(r2, es map rewrite)
       val r4 =
         exprs match
           case Seq(StarExpr()) => r3
