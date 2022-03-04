@@ -25,8 +25,8 @@ case object IntegerType extends Type("integer"):
 case object BigintType extends Type("bigint"):
   override def convert(v: Value): Value =
     v match
-      case n @ NumberValue(DLongType, _) => n
-      case _                             => super.convert(v)
+      case n @ NumberValue(DLongType | DIntType, _) => n
+      case _                                        => super.convert(v)
 
   override def init: Value = ONE
 
