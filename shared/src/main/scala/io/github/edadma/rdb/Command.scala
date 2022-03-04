@@ -11,7 +11,7 @@ case class DeleteCommand(table: Ident, cond: Option[Expr]) extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration) extends Command
 
 case class UpdateSet(col: Ident, value: Expr)
-case class ColumnDesc(name: Ident, typ: String, auto: Boolean, required: Boolean, pk: Boolean)
+case class ColumnDesc(name: Ident, typ: Type, auto: Boolean, required: Boolean, pk: Boolean)
 
 trait TableAlteration
 

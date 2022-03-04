@@ -56,19 +56,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
-
-          val t =
-            typ match
-              case "INT" | "INTEGER" => IntegerType
-              case "BIGINT"          => BigintType
-              case "DOUBLE"          => DoubleType
-              case "TEXT"            => TextType
-              case "JSON"            => JSONType
-              case "BOOLEAN"         => BooleanType
-              case "TIMESTAMP"       => TimestampType
-              case "UUID"            => UUIDType
-
-          ColumnSpec(name, t, auto, required, pk)
+          ColumnSpec(name, typ, auto, required, pk)
         }
 
       db.create(table, specs)

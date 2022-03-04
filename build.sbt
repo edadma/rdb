@@ -5,7 +5,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
   .in(file("."))
   .settings(
     name := "rdb",
-    version := "0.1.0-pre.16",
+    version := "0.1.0-pre.17",
     scalaVersion := "3.1.1",
     scalacOptions ++=
       Seq(
@@ -15,7 +15,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
         "-language:postfixOps",
         "-language:implicitConversions",
         "-language:existentials",
-        "-language:dynamics"
+        "-language:dynamics",
       ),
     organization := "io.github.edadma",
     githubOwner := "edadma",
@@ -23,23 +23,23 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.11" % "test",
     libraryDependencies ++= Seq(
-      "io.github.edadma" %%% "dal" % "0.1.8",
+      "io.github.edadma" %%% "dal" % "0.1.9",
       "io.github.edadma" %%% "datetime" % "0.1.15",
-      "io.github.edadma" %%% "dllist" % "0.1.2"
+      "io.github.edadma" %%% "dllist" % "0.1.2",
     ),
     libraryDependencies ++= Seq(
-      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.1.1"
+      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.1.1",
     ),
     publishMavenStyle := true,
     Test / publishArtifact := false,
-    licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
+    licenses += "ISC" -> url("https://opensource.org/licenses/ISC"),
   )
   .jvmSettings(
     libraryDependencies ++= Seq(
       "com.github.scopt" %%% "scopt" % "4.0.1",
-      "com.lihaoyi" %%% "pprint" % "0.7.1"
+      "com.lihaoyi" %%% "pprint" % "0.7.1",
     ),
-    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided"
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
   )
 //  .nativeSettings(
 //    libraryDependencies ++= Seq(
@@ -49,7 +49,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
 //  )
   .jsSettings(
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %%% "pprint" % "0.7.1" % "test"
+      "com.lihaoyi" %%% "pprint" % "0.7.1" % "test",
     ),
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
@@ -57,5 +57,5 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
 //    Test / scalaJSUseTestModuleInitializer := false,
     Test / scalaJSUseMainModuleInitializer := false,
     Test / scalaJSUseTestModuleInitializer := true,
-    scalaJSUseMainModuleInitializer := true
+    scalaJSUseMainModuleInitializer := true,
   )

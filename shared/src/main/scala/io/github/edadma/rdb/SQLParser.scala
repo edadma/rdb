@@ -35,7 +35,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       ":",
       "[",
       "]",
-      ";"
+      ";",
     )
     reserved ++= Seq(
       "ADD",
@@ -93,6 +93,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "NOT",
       "NULL",
       "NULLS",
+      "NUMERIC",
       "OFFSET",
       "ON",
       "OR",
@@ -119,7 +120,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "WHEN",
       "WHERE",
       "WITHOUT",
-      "ZONE"
+      "ZONE",
     )
 
     case class DecimalLit(chars: String) extends Token {
@@ -158,7 +159,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
     private def stringToken: Parser[Token] =
       opt('E') ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
-        StringLit(unescape(l mkString))
+        StringLit(unescape(l mkString)),
       )
 
   override val lexical: SQLLexer = new SQLLexer
@@ -212,15 +213,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val table: P[Expr] = positioned(
-    identifier ^^ TableOperator.apply
+    identifier ^^ TableOperator.apply,
   )
 
   lazy val star: P[Expr] = positioned(
-    "*" ^^^ StarExpr()
+    "*" ^^^ StarExpr(),
   )
 
   lazy val identifier: P[Ident] = positioned(
-    ident ^^ Ident.apply
+    ident ^^ Ident.apply,
   )
 
   lazy val expressions: P[Seq[Expr]] = rep1sep(expression | star, ",")
@@ -229,17 +230,17 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val orExpression: P[Expr] = positioned(
     orExpression ~ "OR" ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
-      andExpression
+      andExpression,
   )
 
   lazy val andExpression: P[Expr] = positioned(
     andExpression ~ "AND" ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "AND", r) } |
-      notExpression
+      notExpression,
   )
 
   lazy val notExpression: P[Expr] = positioned(
     "NOT" ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) |
-      booleanPrimary
+      booleanPrimary,
   )
 
   lazy val booleanPrimary: P[Expr] = positioned(
@@ -254,7 +255,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
       booleanLiteral |
       "NULL" ^^^ NullExpr() |
-      "(" ~> booleanExpression <~ ")"
+      "(" ~> booleanExpression <~ ")",
   )
 
   lazy val isNull: P[String] =
@@ -266,7 +267,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     "<=" | ">=" | "<" | ">" | "=" | "!=" | "LIKE" | "ILIKE" | ("NOT" ~ "LIKE" ^^^ "NOT LIKE" | "NOT" ~ "ILIKE" ^^^ "NOT ILIKE")
 
   lazy val booleanLiteral: P[Expr] = positioned(
-    ("TRUE" | "FALSE") ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE")))
+    ("TRUE" | "FALSE") ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE"))),
   )
 
   lazy val expression: P[Expr] = concatenation
@@ -275,14 +276,14 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     concatenation ~ "||" ~ additive ^^ { case l ~ o ~ r =>
       BinaryExpr(l, o, r)
     } |
-      additive
+      additive,
   )
 
   lazy val additive: P[Expr] = positioned(
     additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
       BinaryExpr(l, o, r)
     } |
-      multiplicative
+      multiplicative,
   )
 
   lazy val multiplicative: P[Expr] = positioned(
@@ -290,8 +291,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       multiplicative ~ ("*" | "/") ~ primary ^^ { case l ~ o ~ r =>
         BinaryExpr(l, o, r)
       } |
-        primary
-    )
+        primary,
+    ),
   )
 
   lazy val pair: P[(Ident, Expr)] =
@@ -300,28 +301,28 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val arrayExpression: P[Expr] = positioned(
-    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr.apply
+    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr.apply,
   )
 
   lazy val objectExpression: P[Expr] = positioned(
-    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr.apply
+    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr.apply,
   )
 
   lazy val jsonLiteral: P[Expr] = arrayExpression | objectExpression
 
   lazy val application: P[Expr] = positioned(
-    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) }
+    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
   )
 
   lazy val column: P[ColumnExpr] = positioned(
     identifier ~ opt("." ~> identifier) ^^ {
       case c ~ None                          => ColumnExpr(c)
       case (tid @ Ident(t)) ~ Some(Ident(c)) => ColumnExpr(Ident(s"$t.$c").setPos(tid.pos))
-    }
+    },
   )
 
   lazy val variable: P[VariableExpr] = positioned(
-    pos ~ "CURRENT_TIMESTAMP" ^^ { case p ~ v => VariableExpr(Ident(v).setPos(p)) }
+    pos ~ "CURRENT_TIMESTAMP" ^^ { case p ~ v => VariableExpr(Ident(v).setPos(p)) },
   )
 
   lazy val integer: P[Int] = numericLit ^^ (_.toInt)
@@ -342,7 +343,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
       "TABLE" ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
       "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
-      "(" ~> expression <~ ")"
+      "(" ~> expression <~ ")",
   )
 
   lazy val literal: P[Expr] = positioned(
@@ -352,7 +353,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       "NULL" ^^^ NullExpr() |
-      "-" ~> primary ^^ (e => UnaryExpr("-", e))
+      "-" ~> primary ^^ (e => UnaryExpr("-", e)),
   )
 
   lazy val caseExpression: P[CaseExpr] =
@@ -367,7 +368,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val insert: P[Command] =
     "INSERT" ~> "INTO" ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ "VALUES" ~ rep1sep(row, ",") ~ opt(
-      "RETURNING" ~> identifier
+      "RETURNING" ~> identifier,
     ) ^^ { case t ~ cs ~ _ ~ rs ~ ret =>
       InsertCommand(t, cs, rs, ret)
     }
@@ -387,15 +388,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
-  lazy val typ: P[String] =
-    "BOOLEAN"
-      | "INT" | "INTEGER"
-      | "BIGINT"
-      | "DOUBLE" <~ opt("PRECISION")
-      | "JSON"
-      | "TIMESTAMP" <~ opt("WITHOUT" ~ "TIME" ~ "ZONE")
-      | "TEXT"
-      | "UUID"
+  lazy val typ: P[Type] =
+    "BOOLEAN" ^^^ BooleanType
+      | ("INT" | "INTEGER") ^^^ IntegerType
+      | "BIGINT" ^^^ BigintType
+      | "DOUBLE" ~ opt("PRECISION") ^^^ DoubleType
+      | "NUMERIC" ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => NumericType(p.toInt, s) }
+      | "JSON" ^^^ JSONType
+      | "TIMESTAMP" ~ opt("WITHOUT" ~ "TIME" ~ "ZONE") ^^^ TimestampType
+      | "TEXT" ^^^ TextType
+      | "UUID" ^^^ UUIDType
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>
