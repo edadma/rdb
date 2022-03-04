@@ -25,7 +25,7 @@ case class When(when: Expr, expr: Expr)
 case class ApplyExpr(func: Ident, args: Seq[Expr]) extends Expr
 
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr]) extends Expr
-case class AggregateFunctionExpr(f: AggregateFunction, arg: Expr) extends Expr
+case class AggregateFunctionExpr(f: AggregateFunctionInstance, arg: Expr) extends Expr
 
 case class VariableInstanceExpr(v: VariableInstance) extends Expr
 

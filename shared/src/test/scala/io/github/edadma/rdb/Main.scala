@@ -41,7 +41,7 @@ object Main extends App:
       |SELECT 
       |    "author"."name",
       |    (TABLE(SELECT 
-      |        count(*)
+      |        count(*), TYPE(count(*))
       |      FROM "book" AS "author$books"
       |      WHERE "author$books"."author_id" = "author"."pk_author_id"
       |      ))
