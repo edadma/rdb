@@ -17,7 +17,6 @@ case class StringExpr(s: String) extends Expr { typ = TextType }
 case class NumberExpr(n: Number) extends Expr { typ = NumberType }
 case class NullExpr() extends Expr { typ = NullType }
 
-case class InExpr(value: Expr, array: Expr) extends Expr
 case class ExistsExpr(subquery: Expr) extends Expr
 case class BetweenExpr(value: Expr, op: String, lower: Expr, upper: Expr) extends Expr
 case class CaseExpr(whens: Seq[When], els: Option[Expr]) extends Expr
@@ -50,5 +49,5 @@ case class SQLSelectExpr(
     groupBy: Option[Seq[Expr]],
     orderBy: Option[Seq[OrderBy]],
     offset: Option[Count],
-    limit: Option[Count]
+    limit: Option[Count],
 ) extends Expr

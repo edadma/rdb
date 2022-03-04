@@ -10,8 +10,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case SubqueryExpr(query)   => SubqueryExpr(rewrite(query))
     case CaseExpr(whens, els) =>
       CaseExpr(whens map { case When(when, expr) => When(rewrite(when), rewrite(expr)) }, els map rewrite)
-    case InSeqExpr(value, op, exprs) => InSeqExpr(rewrite(value), op, exprs map rewrite)
-    case TableConstructorExpr(expr)  => TableConstructorExpr(rewrite(expr))
+    case InSeqExpr(value, op, exprs)   => InSeqExpr(rewrite(value), op, exprs map rewrite)
+    case InQueryExpr(value, op, array) => InQueryExpr(rewrite(value), op, rewrite(array))
+    case TableConstructorExpr(expr)    => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
       scalarFunction get func match
         case None =>
@@ -24,7 +25,6 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       scalarVariable get name match
         case None    => problem(id, s"unknown variable '$name'")
         case Some(v) => VariableInstanceExpr(v.instance)
-    case InExpr(value, array) => InExpr(rewrite(value), rewrite(array))
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery))
     case UnaryExpr(op, expr) =>
       val e = rewrite(expr)
@@ -118,8 +118,8 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         ProjectProcess(
           if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
           else rewritten_proc,
-          rewritten_projs
-        )
+          rewritten_projs,
+        ),
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
