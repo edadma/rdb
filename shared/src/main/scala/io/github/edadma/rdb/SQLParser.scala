@@ -62,6 +62,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "DELETE",
       "DESC",
       "DISTINCT",
+      "DOUBLE",
       "ELSE",
       "END",
       "EXEC",
@@ -96,6 +97,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "ON",
       "OR",
       "ORDER",
+      "PRECISION",
       "PRIMARY",
       "PROCEDURE",
       "REFERENCES",
@@ -389,7 +391,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     "BOOLEAN"
       | "INT" | "INTEGER"
       | "BIGINT"
-      | "DOUBLE"
+      | "DOUBLE" <~ opt("PRECISION")
       | "JSON"
       | "TIMESTAMP" <~ opt("WITHOUT" ~ "TIME" ~ "ZONE")
       | "TEXT"
