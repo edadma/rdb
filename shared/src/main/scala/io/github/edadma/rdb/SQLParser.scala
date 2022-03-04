@@ -364,7 +364,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       InsertCommand(t, cs, rs, ret)
     }
 
-  lazy val create: P[Command] =
+  lazy val createTable: P[Command] =
     "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ { case t ~ cs =>
       CreateTableCommand(t, cs)
     }
@@ -386,11 +386,22 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       ColumnDesc(c, t, a.isDefined, n.isDefined, p.isDefined)
     }
 
+  lazy val alterTable: P[Command] =
+    "ALTER" ~> "TABLE" ~> identifier ~ tableAlteration ^^ { case t ~ a =>
+      AlterTableCommand(t, a)
+    }
+
+  lazy val tableAlteration: P[TableAlteration] =
+    "ADD" ~> "FOREIGN" ~> "KEY" ~> ("(" ~> identifier <~ ")") ~ ("REFERENCES" ~> identifier) ^^ { case fk ~ ref =>
+      AddForeignKeyTableAlteration(fk, ref)
+    }
+
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |
       insert |
-      create |
-      update
+      createTable |
+      update |
+      alterTable
 
   lazy val commands: P[Seq[Command]] = rep1sep(command, ";") <~ opt(";")
 

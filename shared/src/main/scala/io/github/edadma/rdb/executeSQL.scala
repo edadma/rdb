@@ -110,4 +110,5 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
         count += 1
 
       DeleteResult(count)
+    case AlterTableCommand(table, alter) => AlterTableResult()
   }
