@@ -11,12 +11,12 @@ object Main extends App:
       """
         |CREATE TABLE t (
         | c1 INT AUTO PRIMARY KEY,
-        | c2 DOUBLE PRECISION
+        | c2 TEXT
         |);
-        |INSERT INTO t (c2) VALUES (3.4);
-        |SELECT * FROM t;
-        |""".trim.stripMargin
-    )
+        |INSERT INTO t (c2) VALUES ('asdf');
+        |SELECT TYPE(c1), TYPE(c2) FROM t;
+        |""".trim.stripMargin,
+    ),
   )
 
 //  val e =
