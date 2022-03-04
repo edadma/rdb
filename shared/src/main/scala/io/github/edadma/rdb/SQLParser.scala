@@ -152,7 +152,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
 
     private def stringToken: Parser[Token] =
-      '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
+      opt('E') ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
         StringLit(unescape(l mkString))
       )
 

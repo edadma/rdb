@@ -11,10 +11,9 @@ object Main extends App:
       """
         |CREATE TABLE t (
         | c1 INT AUTO PRIMARY KEY,
-        | c2 INT
+        | c2 TEXT
         |);
-        |INSERT INTO t (c2) VALUES (123) RETURNING c1;
-        |INSERT INTO t (c2) VALUES (456);
+        |INSERT INTO t (c2) VALUES (E'asdf');
         |SELECT * FROM t;
         |""".trim.stripMargin
     )

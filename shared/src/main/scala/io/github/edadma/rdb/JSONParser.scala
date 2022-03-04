@@ -70,6 +70,7 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
       "[" ~> repsep(value, ",") <~ "]" ^^ (a => ArrayValue(a.toIndexedSeq))
     )
 
+  // todo: strings are pre-unescaped by SQLParser
   lazy val property: P[(String, Value)] =
     stringLit ~ ":" ~ value ^^ { case k ~ _ ~ v =>
       k -> v
