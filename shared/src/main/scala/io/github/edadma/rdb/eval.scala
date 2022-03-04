@@ -56,7 +56,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
       if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
 
-      BooleanValue((op contains "NOT") ^ (res.data contains v))
+      BooleanValue((op contains "NOT") ^ (res.data exists (_.data.head == v)))
     case SubqueryExpr(query) =>
       val res = teval(query, ctx, mode)
 
