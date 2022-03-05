@@ -20,8 +20,48 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
       """
         |List(
         |  CreateTableResult(table = "t"),
-        |  InsertResult(result = Map("c1" -> NumberValue(typ = IntType, value = 1))),
-        |  InsertResult(result = Map("c1" -> NumberValue(typ = IntType, value = 2))),
+        |  InsertResult(
+        |    obj = Map("c1" -> NumberValue(typ = IntType, value = 1)),
+        |    table = TableValue(
+        |      data = Vector(
+        |        Row(
+        |          data = Vector(NumberValue(typ = IntType, value = 1)),
+        |          meta = Metadata(
+        |            columns = Vector(
+        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType)
+        |            )
+        |          ),
+        |          updater = None,
+        |          deleter = None,
+        |          mode = Return
+        |        )
+        |      ),
+        |      meta = Metadata(
+        |        columns = Vector(ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType))
+        |      )
+        |    )
+        |  ),
+        |  InsertResult(
+        |    obj = Map("c1" -> NumberValue(typ = IntType, value = 2)),
+        |    table = TableValue(
+        |      data = Vector(
+        |        Row(
+        |          data = Vector(NumberValue(typ = IntType, value = 2)),
+        |          meta = Metadata(
+        |            columns = Vector(
+        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType)
+        |            )
+        |          ),
+        |          updater = None,
+        |          deleter = None,
+        |          mode = Return
+        |        )
+        |      ),
+        |      meta = Metadata(
+        |        columns = Vector(ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType))
+        |      )
+        |    )
+        |  ),
         |  QueryResult(
         |    table = TableValue(
         |      data = ArraySeq(
