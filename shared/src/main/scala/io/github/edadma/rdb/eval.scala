@@ -32,7 +32,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case e @ NumberExpr(n: Double)   => NumberValue(DoubleType, n).setPos(e.pos)
     case e @ StringExpr(s)           => TextValue(s).setPos(e.pos)
     case e @ NullExpr()              => NullValue().setPos(e.pos)
-    case e @ BooleanExpress(b)       => BooleanValue(b).setPos(e.pos)
+    case e @ BooleanExpr(b)          => BooleanValue(b).setPos(e.pos)
     case e @ StarExpr()              => StarValue().setPos(e.pos)
     case c @ ColumnExpr(Ident(name)) =>
       @tailrec
