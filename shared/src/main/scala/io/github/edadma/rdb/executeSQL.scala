@@ -74,7 +74,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       if db hasType name then problem(id, s"duplicate type '$name'")
 
       db.createEnum(name, labels)
-      CreateTypeResult()
+      CreateTypeResult(name)
     case UpdateCommand(id @ Ident(table), sets, cond) =>
       val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val (cols, exprs) =

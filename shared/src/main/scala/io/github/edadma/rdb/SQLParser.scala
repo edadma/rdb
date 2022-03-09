@@ -65,6 +65,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "DOUBLE",
       "ELSE",
       "END",
+      "ENUM",
       "EXEC",
       "EXISTS",
       "FALSE",
@@ -406,6 +407,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | "TIMESTAMP" ~ opt("WITHOUT" ~ "TIME" ~ "ZONE") ^^^ Left(TimestampType)
       | "TEXT" ^^^ Left(TextType)
       | "UUID" ^^^ Left(UUIDType)
+      | identifier ^^ Right.apply
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>
@@ -426,6 +428,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     query ^^ QueryCommand.apply |
       insert |
       createTable |
+      createType |
       update |
       alterTable
 

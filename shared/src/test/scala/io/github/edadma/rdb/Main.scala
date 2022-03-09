@@ -9,15 +9,16 @@ object Main extends App:
   PPrinter.BlackWhite.pprintln(
     executeSQL(
       """
+        |CREATE TYPE e AS ENUM ('one', 'two', 'three');
         |CREATE TABLE t (
         | c1 INT AUTO PRIMARY KEY,
-        | c2 INT
+        | c2 e
         |);
-        |INSERT INTO t (c2) VALUES (123);
-        |INSERT INTO t (c2) VALUES (456);
+        |INSERT INTO t (c2) VALUES ('three');
+        |INSERT INTO t (c2) VALUES ('two');
         |SELECT * FROM t;
         |""".trim.stripMargin,
-    )
+    ),
   )
 
 //  val e =

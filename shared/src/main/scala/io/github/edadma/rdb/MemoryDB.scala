@@ -28,9 +28,9 @@ class MemoryDB(val name: String = "mem") extends DB:
 
     types(name) = EnumType(name, labels.toIndexedSeq)
 
-  def hasType(name: String): Boolean = ???
+  def hasType(name: String): Boolean = types contains name
 
-  def getType(name: String): Option[Type] = ???
+  def getType(name: String): Option[Type] = types get name
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
