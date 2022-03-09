@@ -19,7 +19,12 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
 
   def string: String
 
-  infix def compare(that: Value): Int = problem(pos, s"'$this' can't be compared to '$that''")
+  infix def compare(that: Value): Int =
+    if this.isNull then -1
+    else if that.isNull then 1
+    else if vtyp != that.vtyp then problem(pos, s"'$this' can't be compared to '$that''")
+    else if this == that then 0
+    else 1
 
   def isNull: Boolean = isInstanceOf[NullValue]
 

@@ -16,7 +16,7 @@ object Main extends App:
         |);
         |INSERT INTO t (c2) VALUES ('three');
         |INSERT INTO t (c2) VALUES ('two');
-        |SELECT * FROM t WHERE c2 = 'threex';
+        |SELECT * FROM t WHERE c2 = 'three';
         |""".trim.stripMargin,
     ),
   )
