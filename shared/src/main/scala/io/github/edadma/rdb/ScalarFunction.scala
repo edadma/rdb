@@ -8,5 +8,5 @@ val scalarFunction: Map[String, ScalarFunction] =
   List(
     ScalarFunction("ABS", { case Seq(NumberValue(t, n)) => NumberValue(abs(n.doubleValue)) }, NumberType),
     ScalarFunction("TABLE", { case Seq(TableValue(d, _)) => ArrayValue(d map (r => ArrayValue(r.data))) }, ArrayType),
-    ScalarFunction("TYPE", { case Seq(v) => TextValue(v.vtyp.name) }, TextType),
+    ScalarFunction("TYPEOF", { case Seq(v) => TextValue(v.vtyp.name) }, TextType),
   ) map (f => f.name -> f) toMap
