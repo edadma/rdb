@@ -90,7 +90,11 @@ case class TextValue(s: String) extends Value(TextType):
   override def compare(that: Value): Int =
     that match
       case TextValue(t) => s compare t
-      case _            => super.compare(that)
+      case EnumValue(v, t) =>
+        t.labelsMap get s match
+          case None    => problem(pos, s"'$s' is not a label of enum '${t.name}'")
+          case Some(l) => l compare v
+      case _ => super.compare(that)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType):
   override def toText: TextValue = TextValue(if b then "TURE" else "FALSE")

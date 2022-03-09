@@ -165,8 +165,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
       BooleanValue(
         op match
-          case "="  => l == r
-          case "!=" => l != r,
+          case "="  => l.compare(r) == 0
+          case "!=" => l.compare(r) != 0,
       )
     case ObjectExpr(properties) =>
       val keys = new mutable.HashSet[String]
