@@ -1,3 +1,3 @@
 export class ConnectSQL {
-    execute(sql: string): any
+    execute(sql: string): any[]
 }

@@ -112,6 +112,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "TIMESTAMP",
       "THEN",
       "TRUE",
+      "TYPE",
       "UPDATE",
       "UNION",
       "UNIQUE",
@@ -376,6 +377,13 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val createTable: P[Command] =
     "CREATE" ~> "TABLE" ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ { case t ~ cs =>
       CreateTableCommand(t, cs)
+    }
+
+  lazy val createEnum: P[Seq[String]] = "ENUM" ~> ("(" ~> rep1sep(stringLit, ",") <~ ")")
+
+  lazy val createType: P[Command] =
+    "CREATE" ~> "TYPE" ~> identifier ~ "AS" ~ createEnum ^^ { case t ~ ls =>
+      CreateEnumCommand(t, ls)
     }
 
   lazy val update: P[Command] =

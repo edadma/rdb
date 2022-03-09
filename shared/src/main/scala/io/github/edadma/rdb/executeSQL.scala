@@ -11,7 +11,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
   cs map {
     case InsertCommand(id @ Ident(table), columns, rows, returning) =>
-      val t = db.table(table).getOrElse(problem(id, s"unknown table: $table"))
+      val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
       val cols = columns.length
 
       rows find (_.length != cols) match
@@ -59,10 +59,12 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
           ColumnSpec(name, typ, auto, required, pk)
         }
 
-      db.create(table, specs)
+      db.createTable(table, specs)
       CreateTableResult(table)
+    case CreateEnumCommand(id @ Ident(table), labels) =>
+
     case UpdateCommand(id @ Ident(table), sets, cond) =>
-      val t = db.table(table) getOrElse problem(id, s"unknown table: $table")
+      val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val (cols, exprs) =
         sets map { case UpdateSet(id @ Ident(col), value) =>
           if !t.hasColumn(col) then problem(id, s"table $table doesn't has column '$col'")
@@ -83,7 +85,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
       UpdateResult(count)
     case DeleteCommand(id @ Ident(table), cond) =>
-      val t = db.table(table) getOrElse problem(id, s"unknown table: $table")
+      val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val rows =
         cond match
           case Some(value) => FilterProcess(t, rewrite(value))

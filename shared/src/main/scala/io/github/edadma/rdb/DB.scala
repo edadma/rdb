@@ -8,9 +8,13 @@ abstract class DB:
 
   def hasTable(name: String): Boolean
 
-  def table(name: String): Option[Table]
+  def hasType(name: String): Boolean
 
-  def create(name: String, specs: Seq[Spec]): Table
+  def getTable(name: String): Option[Table]
+
+  def getType(name: String): Option[Type]
+
+  def createTable(name: String, specs: Seq[Spec]): Table
 
 abstract class Table extends Process:
 
@@ -38,5 +42,5 @@ case class ColumnSpec(
     indexed: Boolean = false,
     unique: Boolean = false,
     fk: Option[String] = None,
-    default: Option[Value] = None
+    default: Option[Value] = None,
 ) extends Spec

@@ -22,8 +22,8 @@ class ConnectSQL():
       case TimestampValue(t)           => new js.Date(t.toString)
 
   @JSExport
-  def execute(sql: String): Any =
-    executeSQL(sql)(db) match
+  def execute(sql: String): js.Array[js.Any] =
+    executeSQL(sql)(db) map {
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
       case InsertResult(obj, _) =>
@@ -34,3 +34,4 @@ class ConnectSQL():
         val res = table.data map (_.data map toJS toJSArray) toJSArray
 
         js.Dynamic.literal(command = "select", result = res)
+    } toJSArray
