@@ -382,7 +382,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val createEnum: P[Seq[String]] = "ENUM" ~> ("(" ~> rep1sep(stringLit, ",") <~ ")")
 
   lazy val createType: P[Command] =
-    "CREATE" ~> "TYPE" ~> identifier ~ "AS" ~ createEnum ^^ { case t ~ ls =>
+    "CREATE" ~> "TYPE" ~> identifier ~ ("AS" ~> createEnum) ^^ { case t ~ ls =>
       CreateEnumCommand(t, ls)
     }
 
@@ -396,16 +396,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
-  lazy val typ: P[Type] =
-    "BOOLEAN" ^^^ BooleanType
-      | ("INT" | "INTEGER") ^^^ IntegerType
-      | "BIGINT" ^^^ BigintType
-      | "DOUBLE" ~ opt("PRECISION") ^^^ DoubleType
-      | "NUMERIC" ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => NumericType(p.toInt, s) }
-      | "JSON" ^^^ JSONType
-      | "TIMESTAMP" ~ opt("WITHOUT" ~ "TIME" ~ "ZONE") ^^^ TimestampType
-      | "TEXT" ^^^ TextType
-      | "UUID" ^^^ UUIDType
+  lazy val typ: P[Either[Type, Ident]] =
+    "BOOLEAN" ^^^ Left(BooleanType)
+      | ("INT" | "INTEGER") ^^^ Left(IntegerType)
+      | "BIGINT" ^^^ Left(BigintType)
+      | "DOUBLE" ~ opt("PRECISION") ^^^ Left(DoubleType)
+      | "NUMERIC" ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
+      | "JSON" ^^^ Left(JSONType)
+      | "TIMESTAMP" ~ opt("WITHOUT" ~ "TIME" ~ "ZONE") ^^^ Left(TimestampType)
+      | "TEXT" ^^^ Left(TextType)
+      | "UUID" ^^^ Left(UUIDType)
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt("AUTO") ~ opt("NOT" ~ "NULL") ~ opt("PRIMARY" ~ "KEY") ^^ { case c ~ t ~ a ~ n ~ p =>

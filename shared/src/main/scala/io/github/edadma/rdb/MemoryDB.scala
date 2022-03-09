@@ -9,18 +9,28 @@ import scala.language.postfixOps
 class MemoryDB(val name: String = "mem") extends DB:
 
   private val tables = new mutable.HashMap[String, MemoryTable]
+  private val types = new mutable.HashMap[String, Type]
 
   def hasTable(name: String): Boolean = tables contains name
 
   def getTable(name: String): Option[Table] = tables get name
 
   def createTable(name: String, specs: Seq[Spec]): Table =
-    if tables contains name then sys.error(s"table '$name' already exists")
-    else
-      val res = MemoryTable(name, specs)
+    require(!(tables contains name), s"table '$name' already exists")
 
-      tables(name) = res
-      res
+    val res = MemoryTable(name, specs)
+
+    tables(name) = res
+    res
+
+  def createEnum(name: String, labels: Seq[String]): Unit =
+    require(!types.contains(name), s"type $name already exists")
+
+    types(name) = EnumType(name, labels.toIndexedSeq)
+
+  def hasType(name: String): Boolean = ???
+
+  def getType(name: String): Option[Type] = ???
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 

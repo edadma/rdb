@@ -52,17 +52,29 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       val specs =
         val names = new mutable.HashSet[String]
 
-        columns map { case ColumnDesc(id @ Ident(name), typ, auto, required, pk) =>
+        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk) =>
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
+
+          val typ =
+            typeDesc match
+              case Left(primitive) => primitive
+              case Right(tid @ Ident(defined)) =>
+                db getType defined match
+                  case None    => problem(tid, s"type '$defined' is undefined")
+                  case Some(t) => t
+
           ColumnSpec(name, typ, auto, required, pk)
         }
 
       db.createTable(table, specs)
       CreateTableResult(table)
-    case CreateEnumCommand(id @ Ident(table), labels) =>
+    case CreateEnumCommand(id @ Ident(name), labels) =>
+      if db hasType name then problem(id, s"duplicate type '$name'")
 
+      db.createEnum(name, labels)
+      CreateTypeResult()
     case UpdateCommand(id @ Ident(table), sets, cond) =>
       val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val (cols, exprs) =

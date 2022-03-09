@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-case class EnumType(name: String, labels: IndexedSeq[String]) extends Type("enum"):
+case class EnumType(enumName: String, labels: IndexedSeq[String]) extends Type(enumName):
   private val labelsMap = labels.zipWithIndex toMap
 
   override def convert(v: Value): Value =
@@ -9,7 +9,7 @@ case class EnumType(name: String, labels: IndexedSeq[String]) extends Type("enum
       case _            => super.convert(v)
 
 case class EnumValue(label: Int, typ: EnumType) extends Value(typ):
-  override def toText: TextValue = TextValue()
+  override def toText: TextValue = TextValue(string)
 
   override def render: String = s"'$string'"
 

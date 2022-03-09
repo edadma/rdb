@@ -10,11 +10,13 @@ abstract class DB:
 
   def hasType(name: String): Boolean
 
-  def getTable(name: String): Option[Table]
+  infix def getTable(name: String): Option[Table]
 
-  def getType(name: String): Option[Type]
+  infix def getType(name: String): Option[Type]
 
   def createTable(name: String, specs: Seq[Spec]): Table
+
+  def createEnum(name: String, labels: Seq[String]): Unit
 
 abstract class Table extends Process:
 
