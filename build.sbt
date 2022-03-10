@@ -26,6 +26,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
       "io.github.edadma" %%% "dal" % "0.1.9",
       "io.github.edadma" %%% "datetime" % "0.1.15",
       "io.github.edadma" %%% "dllist" % "0.1.2",
+      "io.github.edadma" %%% "table" % "1.0.1",
     ),
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.1.1",

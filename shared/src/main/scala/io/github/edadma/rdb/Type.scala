@@ -11,11 +11,16 @@ trait Type(val name: String):
     if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
     else v
 
+  def isNumber: Boolean = false
+
   def init: Value = sys.error(s"type '$name' doesn't support auto")
 
-case object NumberType extends Type("number")
+case object NumberType extends Type("number"):
+  override val isNumber = true
 
 case object IntegerType extends Type("integer"):
+  override val isNumber = true
+
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DIntType, _) => n
@@ -24,6 +29,8 @@ case object IntegerType extends Type("integer"):
   override def init: Value = ONE
 
 case object BigintType extends Type("bigint"):
+  override val isNumber = true
+
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DLongType | DIntType, _) => n
@@ -32,12 +39,16 @@ case object BigintType extends Type("bigint"):
   override def init: Value = ONE
 
 case object DoubleType extends Type("double"):
+  override val isNumber = true
+
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DDoubleType | DIntType, _) => n
       case _                                          => super.convert(v)
 
 case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
+  override val isNumber = true
+
   private val mc = MathContext(precision)
   private val scaler = BigInt(10).pow(scale).toLong
 

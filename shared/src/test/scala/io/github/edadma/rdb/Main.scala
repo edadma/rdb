@@ -1,23 +1,31 @@
 package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
-import pprint.*
 
 object Main extends App:
   implicit val db: DB = MemoryDB("test")
 
-  PPrinter.BlackWhite.pprintln(
+//  PPrinter.BlackWhite.pprintln(
+  val QueryResult(res) =
     executeSQL(
       """
         |CREATE TABLE t (
-        | c1 INT AUTO PRIMARY KEY,
-        | c2 JSON
+        | id INT AUTO PRIMARY KEY,
+        | a INT,
+        | b TEXT
         |);
-        |INSERT INTO t (c2) VALUES ('{"asdf": [3, -4, -5.6]}');
-        |SELECT * FROM t;
+        |
+        |INSERT INTO t (a, b) VALUES
+        | (3, 'asdf'),
+        | (4, 'zxcv');
+        |
+        |SELECT b, b || 'wert' FROM t ORDER BY col_2 ;
         |""".trim.stripMargin,
-    ),
-  )
+    ).last
+
+  print(tableString(res))
+
+//INSERT INTO t (c2) VALUES ('{"asdf": [3, -4, -5.6]}');
 
 //  val e =
 //    db.create("e", Seq(ColumnSpec("e_id", NumberType), ColumnSpec("name", TextType), ColumnSpec("m_id", NumberType)))
