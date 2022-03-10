@@ -9,14 +9,12 @@ object Main extends App:
   PPrinter.BlackWhite.pprintln(
     executeSQL(
       """
-        |CREATE TYPE e AS ENUM ('one', 'two', 'three');
         |CREATE TABLE t (
         | c1 INT AUTO PRIMARY KEY,
-        | c2 e
+        | c2 JSON
         |);
-        |INSERT INTO t (c2) VALUES ('three');
-        |INSERT INTO t (c2) VALUES ('two');
-        |SELECT * FROM t WHERE c2 = 'three';
+        |INSERT INTO t (c2) VALUES ('{"asdf": [3, -4, -5.6]}');
+        |SELECT * FROM t;
         |""".trim.stripMargin,
     ),
   )

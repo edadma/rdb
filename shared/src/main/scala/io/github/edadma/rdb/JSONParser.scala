@@ -15,7 +15,8 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
       "{",
       "}",
       "[",
-      "]"
+      "]",
+      "-",
     )
     reserved ++= Seq("null", "true", "false")
 
@@ -67,7 +68,7 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
 
   lazy val arrayValue: P[Value] =
     positioned(
-      "[" ~> repsep(value, ",") <~ "]" ^^ (a => ArrayValue(a.toIndexedSeq))
+      "[" ~> repsep(value, ",") <~ "]" ^^ (a => ArrayValue(a.toIndexedSeq)),
     )
 
   // todo: strings are pre-unescaped by SQLParser
@@ -80,8 +81,8 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
 
   lazy val numberValue: P[Value] =
     positioned(
-      decimalLit ^^ (n => NumberValue(n.toDouble)) |
-        numericLit ^^ (n => NumberValue(n.toInt))
+      opt("-") ~ decimalLit ^^ { case m ~ n => NumberValue((if m.isDefined then -1 else 1) * n.toDouble) } |
+        opt("-") ~ numericLit ^^ { case m ~ n => NumberValue((if m.isDefined then -1 else 1) * n.toInt) },
     )
 
   lazy val stringValue: P[Value] = positioned(stringLit ^^ TextValue.apply)
