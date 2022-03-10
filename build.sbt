@@ -5,7 +5,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
   .in(file("."))
   .settings(
     name := "rdb",
-    version := "0.1.0-pre.39",
+    version := "0.1.0-pre.40",
     scalaVersion := "3.1.1",
     scalacOptions ++=
       Seq(
@@ -54,9 +54,9 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
     ),
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-//    Test / scalaJSUseMainModuleInitializer := true,
-//    Test / scalaJSUseTestModuleInitializer := false,
-    Test / scalaJSUseMainModuleInitializer := false,
-    Test / scalaJSUseTestModuleInitializer := true,
+    Test / scalaJSUseMainModuleInitializer := true,
+    Test / scalaJSUseTestModuleInitializer := false,
+//    Test / scalaJSUseMainModuleInitializer := false,
+//    Test / scalaJSUseTestModuleInitializer := true,
     scalaJSUseMainModuleInitializer := true,
   )

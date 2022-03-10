@@ -91,17 +91,8 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val disc = (row: Row) => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))
-    val groupsMap = new mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]
-
-    for (r <- input.iterator(ctx))
-      val d = disc(r)
-
-      groupsMap get d match
-        case None    => groupsMap(d) = ArrayBuffer(r)
-        case Some(g) => g += r
-
-    val groups = groupsMap.values.toSeq
+    val data = input.iterator(ctx) to mutable.ArraySeq
+    val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
 
     for (g <- groups)
       for (i <- 0 until (g.length - 1))
@@ -110,6 +101,26 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
       g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
 
     Iterator.concat(groups: _*)
+
+//    val disc = (row: Row) => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))
+//    val groupsMap = new mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]
+//
+//    for (r <- input.iterator(ctx))
+//      val d = disc(r)
+//
+//      groupsMap get d match
+//        case None    => groupsMap(d) = ArrayBuffer(r)
+//        case Some(g) => g += r
+//
+//    val groups = groupsMap.values.toSeq
+//
+//    for (g <- groups)
+//      for (i <- 0 until (g.length - 1))
+//        g(i) = g(i).copy(mode = AggregateMode.Accumulate)
+//
+//      g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
+//
+//    Iterator.concat(groups: _*)
 
 object Nulls:
   val first: Ordering[Value] =
