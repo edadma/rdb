@@ -3,7 +3,7 @@ package io.github.edadma.rdb
 import scala.collection.immutable.ArraySeq
 
 object Main extends App:
-  implicit val db: DB = MemoryDB("test")
+  implicit val db: DB = DB("test")
 
 //  PPrinter.BlackWhite.pprintln(
   val QueryResult(res) =

@@ -9,7 +9,7 @@ import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 @JSExportTopLevel("ConnectSQL")
 class ConnectSQL():
 
-  val db = new MemoryDB()
+  val db = new DB()
 
   private def toJS(v: Value): js.Any =
     v match
