@@ -6,7 +6,7 @@ import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
 
-class DB(val name: String = "mem"):
+abstract class DB(val name: String = "mem"):
 
   private val tables = new mutable.HashMap[String, Table]
   private val types = new mutable.HashMap[String, Type]
@@ -15,18 +15,23 @@ class DB(val name: String = "mem"):
 
   def getTable(name: String): Option[Table] = tables get name
 
+  def addTable(name: String, specs: Seq[Spec]): Table
+
   def createTable(name: String, specs: Seq[Spec]): Table =
     require(!(tables contains name), s"table '$name' already exists")
 
-    val res = Table(name, specs)
+    val res = addTable(name, specs)
 
     tables(name) = res
     res
+
+  def addEnum(name: String, labels: Seq[String]): Unit
 
   def createEnum(name: String, labels: Seq[String]): Unit =
     require(!types.contains(name), s"type $name already exists")
 
     types(name) = EnumType(name, labels.toIndexedSeq)
+    addEnum(name, labels)
 
   def hasType(name: String): Boolean = types contains name
 
