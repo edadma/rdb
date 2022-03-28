@@ -1,12 +1,13 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dllist.DLList
-import scala.collection.immutable.ArraySeq
 import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
 
-abstract class DB(val name: String = "mem"):
+abstract class DB:
+
+  val name: String
 
   private val tables = new mutable.HashMap[String, Table]
   private val types = new mutable.HashMap[String, Type]
@@ -39,18 +40,17 @@ abstract class DB(val name: String = "mem"):
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
-class Table(val name: String, spec: Seq[Spec]) extends Process:
+abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
 //  private class TableRow(var deleted: Boolean, val data: Array[Value])
 
-  private val columns = new ArrayBuffer[ColumnSpec]
-  private val columnMap = new mutable.HashMap[String, Int]
-  private val data = new DLList[Array[Value]]
+  protected val columns = new ArrayBuffer[ColumnSpec]
+  protected val columnMap = new mutable.HashMap[String, Int]
   private val autoMap = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
 
-  spec foreach {
-    case s: ColumnSpec => addColumn(s)
+  specs foreach {
+    case s: ColumnSpec => createColumn(s)
     case _             =>
   }
 
@@ -58,19 +58,22 @@ class Table(val name: String, spec: Seq[Spec]) extends Process:
 
   def meta: Metadata = _meta
 
-  def iterator(ctx: Seq[Row]): RowIterator =
-    data.nodeIterator map (n => Row(n.element to ArraySeq, meta, Some(updater(n.element)), Some(deleter(n))))
+  def iterator(ctx: Seq[Row]): RowIterator
 
   def hasColumn(name: String): Boolean = columnMap contains name
 
+  def addColumn(spec: ColumnSpec): Unit
+
   // (name, typ, pk, auto, required, indexed, unique, fk)
-  def addColumn(spec: ColumnSpec): Unit =
+  def createColumn(spec: ColumnSpec): Unit =
     require(!(columnMap contains spec.name), s"duplicate column '${spec.name}'")
     columnMap(spec.name) = columns.length
     columns += spec
-    _meta = Metadata(columns to ArraySeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
+    _meta = Metadata(columns to immutable.ArraySeq map (s => ColumnMetadata(Some(name), s.name, s.typ)))
+    addColumn(spec)
 
-  def rows: Int = data.length
+//
+//  def rows: Int = data.length
 
   def auto(col: String): Value =
     autoMap get col match
@@ -89,6 +92,8 @@ class Table(val name: String, spec: Seq[Spec]) extends Process:
     val (keys, values) = row.toSeq.unzip
 
     bulkInsert(keys, Seq(values))
+
+  def addRow(row: Seq[Value]): Unit
 
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value] =
     val headerSet = header.toSet
@@ -134,30 +139,9 @@ class Table(val name: String, spec: Seq[Spec]) extends Process:
             c -> v
 
       result = newAutos.toMap
-      data += arr
+      addRow(arr)
 
     result
-
-  class Updater private[Table] (row: Array[Value]) extends (Seq[(String, Value)] => Unit):
-    def apply(update: Seq[(String, Value)]): Unit =
-      for ((k, v) <- update)
-        val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
-        val spec = columns(col)
-
-        row(col) = spec.typ.convert(v)
-
-    override def toString: String = "[MemoryDB Updater]"
-
-  private def updater(row: Array[Value]) = new Updater(row)
-
-  class Deleter private[Table] (node: data.Node) extends (() => Unit):
-    def apply(): Unit = node.unlink
-
-    override def toString: String = "[MemoryDB Deleter]"
-
-  private def deleter(node: data.Node) = new Deleter(node)
-
-  override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
 
 trait Spec
 case class ColumnSpec(

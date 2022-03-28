@@ -4,6 +4,6 @@ import pprint.*
 
 trait Testing:
   def test(sql: String): String =
-    implicit val db: DB = DB("test")
+    implicit val db: DB = new MemoryDB
 
     PPrinter.BlackWhite(executeSQL(sql)).toString :+ '\n'
