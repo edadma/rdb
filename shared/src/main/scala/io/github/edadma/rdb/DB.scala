@@ -9,14 +9,14 @@ abstract class DB:
 
   val name: String
 
-  private val tables = new mutable.HashMap[String, Table]
-  private val types = new mutable.HashMap[String, Type]
+  protected val tables = new mutable.HashMap[String, Table]
+  protected val types = new mutable.HashMap[String, Type]
 
   def hasTable(name: String): Boolean = tables contains name
 
   def getTable(name: String): Option[Table] = tables get name
 
-  def addTable(name: String, specs: Seq[Spec]): Table
+  protected def addTable(name: String, specs: Seq[Spec]): Table
 
   def createTable(name: String, specs: Seq[Spec]): Table =
     require(!(tables contains name), s"table '$name' already exists")
@@ -26,13 +26,12 @@ abstract class DB:
     tables(name) = res
     res
 
-  def addEnum(name: String, labels: Seq[String]): Unit
+  protected def addEnum(name: String, labels: Seq[String]): Unit
 
   def createEnum(name: String, labels: Seq[String]): Unit =
     require(!types.contains(name), s"type $name already exists")
 
-    types(name) = EnumType(name, labels.toIndexedSeq)
-    addEnum(name, labels)
+    types(name) = addEnum(name, labels)
 
   def hasType(name: String): Boolean = types contains name
 
@@ -62,7 +61,7 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
   def hasColumn(name: String): Boolean = columnMap contains name
 
-  def addColumn(spec: ColumnSpec): Unit
+  protected def addColumn(spec: ColumnSpec): Unit
 
   // (name, typ, pk, auto, required, indexed, unique, fk)
   def createColumn(spec: ColumnSpec): Unit =
@@ -93,7 +92,7 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
     bulkInsert(keys, Seq(values))
 
-  def addRow(row: Seq[Value]): Unit
+  protected def addRow(row: Seq[Value]): Unit
 
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value] =
     val headerSet = header.toSet

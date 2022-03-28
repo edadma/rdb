@@ -1,17 +1,18 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dllist.DLList
+import io.github.edadma.bittydb.Connection
 
 import scala.collection.immutable
 
-class MemoryDB extends DB:
+class BMemDB extends DB:
   val name = "in-memory DB"
+  val db: Connection = Connection.mem()
 
-  protected def addTable(name: String, specs: Seq[Spec]) = new MemoryTable(name, specs)
+  protected def addTable(name: String, specs: Seq[Spec]) = new BMemTable(name, specs)
 
-  protected def addEnum(name: String, labels: Seq[String]): EnumType = EnumType(name, labels.toIndexedSeq)
+  protected def addEnum(name: String, labels: Seq[String]): Unit = {}
 
-class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
+class BMemTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
   private val data = new DLList[Array[Value]]
 
   protected def addColumn(spec: ColumnSpec): Unit = {}
