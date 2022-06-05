@@ -18,15 +18,15 @@ abstract class DB:
 
   protected def addTable(name: String, specs: Seq[Spec]): Table
 
-  protected def registerTable(name: String, specs: Seq[Spec]): Unit = tables(name) = res
+  protected def registerTable(name: String, table: Table): Unit = tables(name) = table
 
   def createTable(name: String, specs: Seq[Spec]): Table =
     require(!(tables contains name), s"table '$name' already exists")
 
-    val res = addTable(name, specs)
+    val table = addTable(name, specs)
 
-    registerTable(name, specs)
-    res
+    registerTable(name, table)
+    table
 
   protected def addEnum(name: String, labels: Seq[String]): Unit
 
