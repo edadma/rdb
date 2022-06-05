@@ -1,5 +1,7 @@
 package io.github.edadma.rdb
 
+import scala.language.postfixOps
+
 case class EnumType(enumName: String, labels: IndexedSeq[String]) extends Type(enumName):
   val labelsMap: Map[String, Int] = labels.zipWithIndex toMap
 

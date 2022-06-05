@@ -3,6 +3,7 @@ package io.github.edadma.rdb
 //import pprint.pprintln
 
 import scala.collection.mutable
+import scala.language.postfixOps
 
 def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
