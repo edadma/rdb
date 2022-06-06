@@ -1,13 +1,7 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dal.{
-  BasicDAL,
-  BigDecType,
-  TypedNumber,
-  DoubleType as DDoubleType,
-  IntType as DIntType,
-  Type as DType,
-}
+import io.github.edadma.dal.{BasicDAL, BigDecType, TypedNumber}
+import io.github.edadma.dal
 import io.github.edadma.datetime.Datetime
 
 import scala.util.parsing.input.{Position, Positional}
@@ -30,7 +24,7 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
 
   def next: Value = problem(pos, "can't generate next value")
 
-case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with TypedNumber:
+case class NumberValue(typ: dal.Type, value: Number) extends Value(NumberType) with TypedNumber:
   override def toText: TextValue = TextValue(value.toString)
 
   def string: String = value.toString
@@ -43,13 +37,13 @@ case class NumberValue(typ: DType, value: Number) extends Value(NumberType) with
   override def next: Value = BasicDAL.compute(PLUS, this, ONE, NumberValue.from)
 
 object NumberValue:
-  def apply(n: Int): NumberValue = NumberValue(DIntType, n)
+  def apply(n: Int): NumberValue = NumberValue(dal.IntType, n)
 
-  def apply(n: Double): NumberValue = NumberValue(DDoubleType, n)
+  def apply(n: Double): NumberValue = NumberValue(dal.DoubleType, n)
 
   def apply(n: BigDecimal): NumberValue = NumberValue(BigDecType, n)
 
-  def from(n: (DType, Number)): NumberValue = NumberValue(n._1, n._2)
+  def from(n: (dal.Type, Number)): NumberValue = NumberValue(n._1, n._2)
 
 case class NullValue() extends Value(NullType):
   override def toText: TextValue = TextValue("NULL")
