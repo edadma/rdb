@@ -61,7 +61,7 @@ case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
       case _ => super.convert(v)
 
 case object UUIDType extends Type("uuid"):
-  private val UUIDv4: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$".r
+  private val UUIDv4: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$".r
 
   def valid(id: String): Boolean = UUIDv4 matches id
 
@@ -88,9 +88,9 @@ case object TimestampType extends Type("timestamp"):
 case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
     v match
-      case _: (ArrayValue | ObjectValue) => v
-      case TextValue(json)               => JSONParser.parseJSON(json)
-      case _                             => super.convert(v)
+      case _: ArrayValue | ObjectValue => v
+      case TextValue(json)             => JSONParser.parseJSON(json)
+      case _                           => super.convert(v)
 
 case object ObjectType extends Type("object")
 
@@ -104,4 +104,4 @@ case object TableType extends Type("table")
 
 case object ArrayType extends Type("array")
 
-case object UnknownType extends Type("unknown")
+//case object UnknownType extends Type("unknown")
