@@ -1,6 +1,7 @@
 package io.github.edadma.rdb
 
 import scala.collection.immutable.ArraySeq
+import scala.language.postfixOps
 import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
@@ -531,6 +532,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       createTable |
       createType |
       update |
+      delete |
       alterTable
 
   lazy val commands: P[Seq[Command]] = rep1sep(command, ";") <~ opt(";")
