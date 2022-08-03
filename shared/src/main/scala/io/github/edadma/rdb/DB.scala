@@ -28,7 +28,7 @@ abstract class DB:
     registerTable(name, table)
     table
 
-  protected def addEnum(name: String, labels: Seq[String]): Unit
+  protected def addEnum(name: String, labels: Seq[String]): EnumType
 
   def createEnum(name: String, labels: Seq[String]): Unit =
     require(!types.contains(name), s"type $name already exists")
@@ -140,7 +140,7 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
             c -> v
 
       result = newAutos.toMap
-      addRow(arr)
+      addRow(arr to immutable.ArraySeq)
 
     result
 

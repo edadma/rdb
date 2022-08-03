@@ -15,7 +15,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |INSERT INTO t (c2) VALUES (123);
         |INSERT INTO t (c2) VALUES (456);
         |SELECT * FROM t;
-        |""".trim.stripMargin
+        |""".trim.stripMargin,
     ) shouldBe
       """
         |List(

@@ -1,12 +1,14 @@
 ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
 ThisBuild / versionScheme := Some("semver-spec")
 
-lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
+publish / skip := true
+
+lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
     name := "rdb",
-    version := "0.1.0-pre.40",
-    scalaVersion := "3.1.1",
+    version := "0.1.0-pre.41",
+    scalaVersion := "3.1.3",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -21,7 +23,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
     githubOwner := "edadma",
     githubRepository := name.value,
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
-    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.11" % "test",
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.12" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal" % "0.1.9",
       "io.github.edadma" %%% "datetime" % "0.1.15",
@@ -37,18 +39,14 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform /*, NativePlatform*/ )
   )
   .jvmSettings(
     libraryDependencies ++= Seq(
-      "com.github.scopt" %%% "scopt" % "4.0.1",
-      "com.lihaoyi" %%% "pprint" % "0.7.1",
-      "io.github.edadma" %%% "bittydb" % "0.1.0",
+      "com.github.scopt" %%% "scopt" % "4.1.0",
+      "com.lihaoyi" %%% "pprint" % "0.7.2",
     ),
     libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
   )
-//  .nativeSettings(
-//    libraryDependencies ++= Seq(
-//      "com.github.scopt" %%% "scopt" % "4.0.1"
-//    ),
-//    nativeLinkStubs := true
-//  )
+  .nativeSettings(
+    nativeLinkStubs := true,
+  )
   .jsSettings(
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "pprint" % "0.7.1" % "test",
