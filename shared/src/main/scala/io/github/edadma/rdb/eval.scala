@@ -5,6 +5,7 @@ import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
+import scala.language.postfixOps
 
 //import pprint.*
 
@@ -95,7 +96,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         }
 
         def choice: Boolean =
-          if (choices nonEmpty) {
+          if (choices.nonEmpty) {
             val ChoicePoint(nsp, npp) = choices.pop()
 
             sp = nsp

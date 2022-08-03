@@ -1,6 +1,8 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.BasicDAL
+
+import scala.language.postfixOps
 //import pprint.pprintln
 
 import scala.annotation.tailrec
@@ -57,7 +59,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
 
   val meta: Metadata =
     Metadata(fields.zipWithIndex map {
-      case (c @ ColumnExpr(Ident(name)), idx) =>
+      case (c @ ColumnExpr(Ident(name)), _) =>
         lookup(name, ctx) match
           case None             => problem(c, s"'$name' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
