@@ -89,14 +89,14 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
         autoMap(col) = next
         next
 
-  def insert(row: Map[String, Value]): Map[String, Value] =
+  def insert(row: Map[String, Value], returning: Option[Ident]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
 
-    bulkInsert(keys, Seq(values))
+    bulkInsert(keys, Seq(values), returning)
 
   protected def addRow(row: Seq[Value]): Unit
 
-  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]]): Map[String, Value] =
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident]): Map[String, Value] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
@@ -140,6 +140,13 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
             c -> v
 
       result = newAutos.toMap
+
+      if returning.isDefined then
+        val idx =
+          columnMap getOrElse (returning.get.name, problem(returning.get, s"column '${returning.get.name}' not found"))
+
+        result += (returning.get.name -> arr(idx))
+
       addRow(arr to immutable.ArraySeq)
 
     result

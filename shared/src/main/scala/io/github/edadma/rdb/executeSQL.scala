@@ -25,7 +25,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
           for (id @ Ident(c) <- columns)
             if !t.hasColumn(c) then problem(id, s"unknown column: $c")
 
-          val result = t.bulkInsert(columns map (_.name), data)
+          val result = t.bulkInsert(columns map (_.name), data, returning)
 
           val (row, metadata) =
             returning match

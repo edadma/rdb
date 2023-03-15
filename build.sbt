@@ -7,8 +7,8 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
     name := "rdb",
-    version := "0.1.0-pre.41",
-    scalaVersion := "3.1.3",
+    version := "0.1.0-pre.42",
+    scalaVersion := "3.2.2",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -23,7 +23,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     githubOwner := "edadma",
     githubRepository := name.value,
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
-    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.12" % "test",
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.15" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal" % "0.1.9",
       "io.github.edadma" %%% "datetime" % "0.1.15",
