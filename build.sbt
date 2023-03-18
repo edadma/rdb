@@ -46,6 +46,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   )
   .nativeSettings(
     nativeLinkStubs := true,
+    libraryDependencies += "io.github.edadma" %%% "libuuid" % "0.0.1",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "pprint" % "0.8.1" % "test",
     ),
