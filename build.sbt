@@ -7,7 +7,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
     name := "rdb",
-    version := "0.1.0-pre.42",
+    version := "0.1.0-pre.43",
     scalaVersion := "3.3.1",
     scalacOptions ++=
       Seq(
@@ -26,9 +26,9 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.17" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal" % "0.1.9",
-      "io.github.edadma" %%% "datetime" % "0.1.15",
-      "io.github.edadma" %%% "dllist" % "0.1.2",
-      "io.github.edadma" %%% "table" % "1.0.1",
+      "io.github.edadma" %%% "datetime" % "0.1.18",
+      "io.github.edadma" %%% "dllist" % "0.1.3",
+      "io.github.edadma" %%% "table" % "1.0.4",
     ),
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.3.0",
@@ -46,6 +46,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   )
   .nativeSettings(
     nativeLinkStubs := true,
+    libraryDependencies += "io.github.edadma" %%% "libuuid" % "0.0.1",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "pprint" % "0.8.1" % "test",
     ),

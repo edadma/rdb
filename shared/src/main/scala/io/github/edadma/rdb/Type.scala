@@ -8,7 +8,8 @@ import scala.util.matching.Regex
 
 trait Type(val name: String):
   def convert(v: Value): Value =
-    if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
+    if v.isNull then v
+    else if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
     else v
 
   def isNumber: Boolean = false
