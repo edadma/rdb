@@ -14,9 +14,9 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
     case InQueryExpr(value, op, array) => InQueryExpr(rewrite(value), op, rewrite(array))
     case TableConstructorExpr(expr)    => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
-      scalarFunction get func match
+      scalarFunction get func.toLowerCase match
         case None =>
-          aggregateFunction get func match
+          aggregateFunction get func.toLowerCase match
             case None                        => problem(id, s"unknown function '$func'")
             case Some(f) if args.length != 1 => problem(id, "aggregate function takes one argument")
             case Some(f)                     => AggregateFunctionExpr(f.instantiate, rewrite(args.head))

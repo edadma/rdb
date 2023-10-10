@@ -11,15 +11,17 @@ object Main extends App:
       """
         |CREATE TABLE t (
         | id INT AUTO PRIMARY KEY,
-        | a INT,
-        | b TEXT
+        | a TEXT,
+        | b INT
         |);
         |
         |INSERT INTO t (a, b) VALUES
-        | (3, 'asdf'),
-        | (4, 'zxcv');
+        | ('g1', 3),
+        | ('g1', 4),
+        | ('g2', 5),
+        | ('g2', 6);
         |
-        |SELECT b, b || 'wert' FROM t ORDER BY col_2 ;
+        |SELECT a, SUM(b) FROM t;
         |""".trim.stripMargin,
     ).last
 
