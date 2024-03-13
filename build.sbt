@@ -8,7 +8,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .settings(
     name := "rdb",
     version := "0.1.0-pre.43",
-    scalaVersion := "3.3.1",
+    scalaVersion := "3.4.0",
     scalacOptions ++=
       Seq(
         "-deprecation",
