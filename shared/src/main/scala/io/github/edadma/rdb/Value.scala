@@ -4,6 +4,8 @@ import io.github.edadma.dal.{BasicDAL, BigDecType, TypedNumber}
 import io.github.edadma.dal
 import io.github.edadma.datetime.Datetime
 
+import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.parsing.input.{Position, Positional}
 
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
@@ -68,7 +70,14 @@ case class TimestampValue(t: Datetime) extends Value(TimestampType):
   def string: String = t.toString
 
 object UUIDValue:
-  def generate: UUIDValue = UUIDValue(Platform.randomUUID)
+  val generated = new mutable.HashSet[String]
+  
+  @tailrec
+  def generate: UUIDValue = 
+    val uuid = Platform.randomUUID
+    
+    if generated(uuid) then generate
+    else UUIDValue(uuid)
 
 case class UUIDValue(id: String) extends Value(UUIDType):
   override def toText: TextValue = TextValue(id)
