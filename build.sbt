@@ -8,7 +8,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .settings(
     name := "rdb",
     version := "0.1.0-pre.43",
-    scalaVersion := "3.2.2",
+    scalaVersion := "3.3.1",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -23,7 +23,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     githubOwner := "edadma",
     githubRepository := name.value,
     mainClass := Some(s"${organization.value}.${name.value}.Main"),
-    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.15" % "test",
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.17" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal" % "0.1.9",
       "io.github.edadma" %%% "datetime" % "0.1.18",
@@ -31,7 +31,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "io.github.edadma" %%% "table" % "1.0.4",
     ),
     libraryDependencies ++= Seq(
-      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.1.1",
+      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.3.0",
     ),
     publishMavenStyle := true,
     Test / publishArtifact := false,
