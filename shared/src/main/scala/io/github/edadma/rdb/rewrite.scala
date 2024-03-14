@@ -28,27 +28,27 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       scalarVariable get name match
         case None    => problem(id, s"unknown variable '$name'")
         case Some(v) => VariableInstanceExpr(v.instance)
-    case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery))
+    case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery)) setType BooleanType
     case UnaryExpr(op, expr) =>
       val e = rewrite(expr)
 
-      UnaryExpr(op, e)
+      UnaryExpr(op, e) setType e.typ
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "and" | "or"), right) =>
       val l = rewrite(left)
       val r = rewrite(right)
 
 //      if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}") // todo: rewrite needs context to determine types
 
-      BinaryExpr(l, op, r)
+      BinaryExpr(l, op, r) setType l.typ
     case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), right) =>
-      BinaryExpr(rewrite(left), op, rewrite(right))
+      BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
     case BetweenExpr(value, op, lower, upper) =>
       val v = rewrite(value)
       val l = rewrite(lower)
       val r = rewrite(upper)
 
-      if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
-      else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
+      (if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
+       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))) setType BooleanType
     case SQLSelectExpr(exprs, None, where, groupBy, orderBy, offset, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause not allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
