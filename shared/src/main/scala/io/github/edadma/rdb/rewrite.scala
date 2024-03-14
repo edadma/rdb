@@ -47,11 +47,11 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))
     case SQLSelectExpr(exprs, None, where, groupBy, orderBy, offset, limit) =>
-      if where.isDefined then problem(where.get, "WHERE clause no allowed here")
-      if groupBy.isDefined then problem(where.get, "GROUP BY clause no allowed here")
-      if orderBy.isDefined then problem(where.get, "ORDER BY clause no allowed here")
-      if offset.isDefined then problem(offset.get.pos, "OFFSET clause no allowed here")
-      if limit.isDefined then problem(limit.get.pos, "LIMIT clause no allowed here")
+      if where.isDefined then problem(where.get, "WHERE clause not allowed here")
+      if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
+      if orderBy.isDefined then problem(where.get, "ORDER BY clause not allowed here")
+      if offset.isDefined then problem(offset.get.pos, "OFFSET clause not allowed here")
+      if limit.isDefined then problem(limit.get.pos, "LIMIT clause not allowed here")
 
       val rewritten_projs = exprs map rewrite
 
