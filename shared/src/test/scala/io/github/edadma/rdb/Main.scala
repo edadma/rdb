@@ -21,7 +21,7 @@ object Main extends App:
         | ('g2', 5),
         | ('g2', 6);
         |
-        |SELECT a, SUM(b) FROM t;
+        |SELECT a, SUM(b) FROM t GROUP BY a ORDER BY a DESC;
         |""".trim.stripMargin,
     ).last
 

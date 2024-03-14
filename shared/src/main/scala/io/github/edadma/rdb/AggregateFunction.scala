@@ -2,6 +2,8 @@ package io.github.edadma.rdb
 
 import io.github.edadma.dal.BasicDAL
 
+import scala.language.postfixOps
+
 // todo: input type checking
 
 abstract class AggregateFunction(val name: String):
