@@ -8,6 +8,10 @@ case class Ident(name: String) extends Positional
 trait Expr extends Positional:
   var typ: Type | Null = null
 
+  infix def setType(t: Type): Expr =
+    typ = t
+    this
+
 case class ColumnExpr(col: Ident) extends Expr
 case class VariableExpr(name: Ident) extends Expr
 case class UnaryExpr(op: String, expr: Expr) extends Expr

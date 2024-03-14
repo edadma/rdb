@@ -19,7 +19,10 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           aggregateFunction get func.toLowerCase match
             case None                        => problem(id, s"unknown function '$func'")
             case Some(f) if args.length != 1 => problem(id, "aggregate function takes one argument")
-            case Some(f)                     => AggregateFunctionExpr(f.instantiate, rewrite(args.head))
+            case Some(f) =>
+              val (instance, typ) = f.instantiate
+
+              AggregateFunctionExpr(instance, rewrite(args.head)) setType typ
         case Some(f) => ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
