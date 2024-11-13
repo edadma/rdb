@@ -7,7 +7,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
     name         := "rdb",
-    version      := "0.1.0-pre.43",
+    version      := "0.0.1",
     scalaVersion := "3.5.2",
     scalacOptions ++=
       Seq(
