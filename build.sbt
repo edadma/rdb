@@ -23,7 +23,6 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     organization                            := "io.github.edadma",
     githubOwner                             := "edadma",
     githubRepository                        := name.value,
-    mainClass                               := Some(s"${organization.value}.${name.value}.Main"),
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal"      % "0.1.10",
