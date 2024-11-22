@@ -1,5 +1,6 @@
-ThisBuild / licenses += "ISC" -> url("https://opensource.org/licenses/ISC")
-ThisBuild / versionScheme     := Some("semver-spec")
+ThisBuild / licenses += "ISC"  -> url("https://opensource.org/licenses/ISC")
+ThisBuild / versionScheme      := Some("semver-spec")
+ThisBuild / evictionErrorLevel := Level.Warn
 
 publish / skip := true
 
