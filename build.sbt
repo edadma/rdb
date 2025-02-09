@@ -8,8 +8,8 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
   .settings(
     name         := "rdb",
-    version      := "0.0.1",
-    scalaVersion := "3.5.2",
+    version      := "0.0.5",
+    scalaVersion := "3.6.3",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -26,7 +26,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal"      % "0.1.10",
-      "io.github.edadma" %%% "datetime" % "0.1.19",
+      "io.github.edadma" %%% "datetime" % "0.1.20",
       "io.github.edadma" %%% "dllist"   % "0.1.4",
       "io.github.edadma" %%% "table"    % "1.0.5",
     ),
@@ -49,6 +49,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "pprint" % "0.9.0" % "test",
     ),
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
   )
   .jsSettings(
     libraryDependencies ++= Seq(
