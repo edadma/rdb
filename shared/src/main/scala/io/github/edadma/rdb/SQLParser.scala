@@ -247,7 +247,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
     private def stringToken: Parser[Token] =
       opt('E') ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
-        StringLit(unescape(l mkString)),
+        StringLit(unescape(l mkString))
       )
 
   override val lexical: SQLLexer = new SQLLexer
@@ -479,6 +479,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       CreateTableCommand(t, cs)
     }
 
+  lazy val dropTable: P[Command] =
+    kw("DROP") ~> kw("TABLE") ~> identifier ^^ { t =>
+      DropTableCommand(t)
+    }
+
   lazy val createEnum: P[Seq[String]] = kw("ENUM") ~> ("(" ~> rep1sep(stringLit, ",") <~ ")")
 
   lazy val createType: P[Command] =
@@ -530,6 +535,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     query ^^ QueryCommand.apply |
       insert |
       createTable |
+      dropTable |
       createType |
       update |
       delete |

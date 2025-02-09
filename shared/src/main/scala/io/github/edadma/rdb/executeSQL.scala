@@ -12,7 +12,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
   cs map {
     case InsertCommand(id @ Ident(table), columns, rows, returning) =>
-      val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
+      val t    = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
       val cols = columns.length
 
       rows find (_.length != cols) match
@@ -31,7 +31,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
             returning match
               case None =>
                 val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                val metadata = Metadata(cols.toIndexedSeq)
+                val metadata    = Metadata(cols.toIndexedSeq)
 
                 (Row(seq.toIndexedSeq, metadata, None, None), metadata)
               case Some(ret @ Ident(returning)) =>
@@ -71,6 +71,10 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
       db.createTable(table, specs)
       CreateTableResult(table)
+    case DropTableCommand(id @ Ident(table)) =>
+      if (!db.hasTable(table)) problem(id, s"unknown table: $table")
+      db.dropTable(table)
+      DropTableResult(table)
     case CreateEnumCommand(id @ Ident(name), labels) =>
       if db hasType name then problem(id, s"duplicate type '$name'")
 

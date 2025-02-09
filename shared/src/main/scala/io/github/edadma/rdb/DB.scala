@@ -10,7 +10,7 @@ abstract class DB:
   val name: String
 
   protected val tables = new mutable.HashMap[String, Table]
-  protected val types = new mutable.HashMap[String, Type]
+  protected val types  = new mutable.HashMap[String, Type]
 
   def hasTable(name: String): Boolean = tables contains name
 
@@ -27,6 +27,8 @@ abstract class DB:
 
     registerTable(name, table)
     table
+
+  def dropTable(name: String): Unit = tables.remove(name)
 
   protected def addEnum(name: String, labels: Seq[String]): EnumType
 
@@ -45,9 +47,9 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
 //  private class TableRow(var deleted: Boolean, val data: Array[Value])
 
-  protected val columns = new ArrayBuffer[ColumnSpec]
-  protected val columnMap = new mutable.HashMap[String, Int]
-  private val autoMap = new mutable.HashMap[String, Value]
+  protected val columns       = new ArrayBuffer[ColumnSpec]
+  protected val columnMap     = new mutable.HashMap[String, Int]
+  private val autoMap         = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
 
   specs foreach {
@@ -107,16 +109,16 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
       for (m <- missingSet diff autoSet)
         yield
           val idx = columnMap(m)
-          val s = columns(idx)
+          val s   = columns(idx)
 
           if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
 
           if s.pk then sys.error(s"bulkInsert: column '$m' is a required primary key")
 
           (idx, s.default getOrElse NullValue())
-    val autos = autoSet intersect missingSet map (c => (c, columnMap(c)))
-    val mapping = header map (h => meta.columnMap(h)._1)
-    val specs = header map (h => columns(columnMap(h)))
+    val autos                      = autoSet intersect missingSet map (c => (c, columnMap(c)))
+    val mapping                    = header map (h => meta.columnMap(h)._1)
+    val specs                      = header map (h => columns(columnMap(h)))
     var result: Map[String, Value] = Map.empty
 
     for (r <- rows)
