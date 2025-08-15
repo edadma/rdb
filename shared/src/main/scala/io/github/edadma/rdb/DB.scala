@@ -12,9 +12,9 @@ abstract class DB:
   protected val tables = new mutable.HashMap[String, Table]
   protected val types  = new mutable.HashMap[String, Type]
 
-  def hasTable(name: String): Boolean = tables contains name
+  infix def hasTable(name: String): Boolean = tables contains name
 
-  def getTable(name: String): Option[Table] = tables get name
+  infix def getTable(name: String): Option[Table] = tables get name
 
   protected def addTable(name: String, specs: Seq[Spec]): Table
 
@@ -37,9 +37,9 @@ abstract class DB:
 
     types(name) = addEnum(name, labels)
 
-  def hasType(name: String): Boolean = types contains name
+  infix def hasType(name: String): Boolean = types contains name
 
-  def getType(name: String): Option[Type] = types get name
+  infix def getType(name: String): Option[Type] = types get name
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
@@ -105,7 +105,7 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
     require(headerSet subsetOf columnSet, s"unknown columns: ${headerSet diff columnSet mkString ", "}")
 
     val missingSet = columnSet diff headerSet
-    val missing =
+    val missing    =
       for (m <- missingSet diff autoSet)
         yield
           val idx = columnMap(m)

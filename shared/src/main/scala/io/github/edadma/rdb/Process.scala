@@ -51,7 +51,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
   @tailrec
   private def lookup(name: String, ctx: Seq[Metadata]): Option[(Type, Option[String])] =
     ctx match
-      case Nil => None
+      case Nil      => None
       case hd :: tl =>
         hd.columnMap get name match
           case None                => lookup(name, tl)
@@ -93,7 +93,7 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val data = input.iterator(ctx) to mutable.ArraySeq
+    val data   = input.iterator(ctx) to mutable.ArraySeq
     val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
 
     for (g <- groups)
@@ -102,7 +102,7 @@ case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
 
       g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
 
-    Iterator.concat(groups: _*)
+    Iterator.concat(groups*)
 
 //    val disc = (row: Row) => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))
 //    val groupsMap = new mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]
@@ -144,8 +144,8 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
 
   private final class SeqOrdering(ords: Seq[Ordering[Value]]) extends Ordering[Seq[Value]]:
     def compare(xs: Seq[Value], ys: Seq[Value]): Int =
-      val x = xs.iterator
-      val y = ys.iterator
+      val x   = xs.iterator
+      val y   = ys.iterator
       val ord = ords.iterator
 
       while (x.hasNext && y.hasNext && ord.hasNext)
@@ -156,8 +156,8 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
       0
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val data = input.iterator(ctx) to ArraySeq
-    val fs = by map { case OrderBy(f, _, _) => f }
+    val data      = input.iterator(ctx) to ArraySeq
+    val fs        = by map { case OrderBy(f, _, _) => f }
     val orderings =
       by map { case OrderBy(_, asc, nullsFirst) =>
         (asc, nullsFirst) match
@@ -166,7 +166,7 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
           case (true, false)  => Nulls.last
           case (true, true)   => Nulls.first
       }
-    val ordering = new SeqOrdering(orderings)
+    val ordering              = new SeqOrdering(orderings)
     val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(ordering)
 
     sorted.iterator

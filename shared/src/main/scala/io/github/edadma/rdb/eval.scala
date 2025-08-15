@@ -11,11 +11,11 @@ import scala.language.postfixOps
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
-    case VariableInstanceExpr(v)    => v.value
-    case TableConstructorExpr(expr) => aleval(expr, ctx, mode)
+    case VariableInstanceExpr(v)       => v.value
+    case TableConstructorExpr(expr)    => aleval(expr, ctx, mode)
     case AggregateFunctionExpr(f, arg) =>
       mode match
-        case AggregateMode.Return => f.result
+        case AggregateMode.Return     => f.result
         case AggregateMode.Accumulate =>
           f.acc(eval(arg, ctx, mode))
           NULL
@@ -39,7 +39,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       @tailrec
       def lookup(name: String, ctx: Seq[Row]): Option[Value] =
         ctx match
-          case Nil => None
+          case Nil      => None
           case hd :: tl =>
             hd.meta.columnMap get name match
               case None              => lookup(name, tl)
@@ -51,14 +51,14 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case InSeqExpr(value, op, exprs) =>
       val v = eval(value, ctx, mode)
 
-      BooleanValue((op contains "NOT") ^ (exprs exists (e => eval(e, ctx, mode) == v)))
+      BooleanValue(op.contains("NOT") ^ (exprs exists (e => eval(e, ctx, mode) == v)))
     case InQueryExpr(value, op, query) =>
-      val v = eval(value, ctx, mode)
+      val v   = eval(value, ctx, mode)
       val res = teval(query, ctx, mode)
 
       if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
 
-      BooleanValue((op contains "NOT") ^ (res.data exists (_.data.head == v)))
+      BooleanValue(op.contains("NOT") ^ (res.data exists (_.data.head == v)))
     case SubqueryExpr(query) =>
       val res = teval(query, ctx, mode)
 
@@ -67,11 +67,11 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row of one column")
 
       res.data.head.data.head
-    case ExistsExpr(expr)       => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
-    case UnaryExpr("-", expr)   => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
-    case UnaryExpr("NOT", expr) => BooleanValue(!beval(expr, ctx))
+    case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
+    case UnaryExpr("-", expr)                              => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
+    case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx))
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
-      BooleanValue((op contains "NOT") ^ eval(expr, ctx, mode).isNull)
+      BooleanValue(op.contains("NOT") ^ eval(expr, ctx, mode).isNull)
     case BinaryExpr(left, "||", right) =>
       val l = seval(left, ctx, mode)
       val r = seval(right, ctx, mode)
@@ -84,8 +84,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       else BooleanValue(beval(right, ctx))
     case BinaryExpr(left, op @ ("LIKE" | "ILIKE" | "NOT LIKE" | "NOT ILIKE"), right) =>
       def like(s: String, pattern: String, casesensitive: Boolean = true): Boolean =
-        var sp = 0
-        var pp = 0
+        var sp      = 0
+        var pp      = 0
         val choices = new mutable.Stack[ChoicePoint]
 
         case class ChoicePoint(sp: Int, pp: Int)
@@ -118,7 +118,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
                 pp += 1
               case '_' => move()
-              case c =>
+              case c   =>
                 if (c == '\\')
                   pp += 1
 
@@ -135,11 +135,11 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
         true
 
-      val s = seval(left, ctx, mode)
-      val p = seval(right, ctx, mode)
-      val res = like(s, p, op contains "ILIKE")
+      val s   = seval(left, ctx, mode)
+      val p   = seval(right, ctx, mode)
+      val res = like(s, p, op.contains("ILIKE"))
 
-      BooleanValue((op startsWith "NOT") ^ res)
+      BooleanValue(op.contains("NOT") ^ res)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
       val l = neval(left, ctx, mode)
       val r = neval(right, ctx, mode)
@@ -177,7 +177,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
         k -> eval(v, ctx, mode)
       })
-    case ArrayExpr(elems) => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
+    case ArrayExpr(elems)     => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
     case CaseExpr(whens, els) =>
       whens find { case When(when, _) => beval(when, ctx) } match
         case None =>

@@ -9,7 +9,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .settings(
     name         := "rdb",
     version      := "0.0.5",
-    scalaVersion := "3.6.3",
+    scalaVersion := "3.7.2",
     scalacOptions ++=
       Seq(
         "-deprecation",
@@ -21,14 +21,12 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         "-language:dynamics",
       ),
     organization                            := "io.github.edadma",
-    githubOwner                             := "edadma",
-    githubRepository                        := name.value,
     libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
     libraryDependencies ++= Seq(
-      "io.github.edadma" %%% "dal"      % "0.1.10",
-      "io.github.edadma" %%% "datetime" % "0.1.20",
-      "io.github.edadma" %%% "dllist"   % "0.1.4",
-      "io.github.edadma" %%% "table"    % "1.0.5",
+      "io.github.edadma" %%% "dal"      % "0.0.2",
+      "io.github.edadma" %%% "datetime" % "0.0.1",
+      "io.github.edadma" %%% "dllist"   % "0.0.6",
+      "io.github.edadma" %%% "table"    % "0.0.1",
     ),
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
@@ -45,7 +43,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
   )
   .nativeSettings(
-    libraryDependencies += "io.github.edadma" %%% "libuuid" % "0.0.2",
+    libraryDependencies += "io.github.edadma" %%% "libuuid" % "0.0.1",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "pprint" % "0.9.0" % "test",
     ),

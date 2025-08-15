@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.dllist.DLList
+import io.github.edadma.dllist.{DLListNode, DLList}
 
 import scala.collection.immutable
 
@@ -24,7 +24,7 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
   class Updater private[MemoryTable] (row: Array[Value]) extends (Seq[(String, Value)] => Unit):
     def apply(update: Seq[(String, Value)]): Unit =
       for ((k, v) <- update)
-        val col = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
+        val col  = columnMap.getOrElse(k, sys.error(s"table '$name' has no column '$k'"))
         val spec = columns(col)
 
         row(col) = spec.typ.convert(v)
@@ -33,11 +33,11 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
 
   private def updater(row: Array[Value]) = new Updater(row)
 
-  class Deleter private[MemoryTable] (node: data.Node) extends (() => Unit):
+  class Deleter private[MemoryTable] (node: DLListNode[Array[Value]]) extends (() => Unit):
     def apply(): Unit = node.unlink
 
     override def toString: String = "[MemoryDB Deleter]"
 
-  private def deleter(node: data.Node) = new Deleter(node)
+  private def deleter(node: DLListNode[Array[Value]]) = new Deleter(node)
 
   override def toString: String = s"[MemoryTable '$name': $meta; ${data map (_.toSeq)}]"
