@@ -21,6 +21,7 @@ case class ColumnDesc(
     pk: Boolean,
     unique: Boolean,
     default: Option[Expr],
+    references: Option[(Ident, Ident)],
 )
 
 trait TableAlteration
