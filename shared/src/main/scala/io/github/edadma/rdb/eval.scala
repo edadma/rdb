@@ -11,6 +11,7 @@ import scala.language.postfixOps
 
 def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
   expr match
+    case AliasExpr(expr, _)            => eval(expr, ctx, mode)
     case VariableInstanceExpr(v)       => v.value
     case TableConstructorExpr(expr)    => aleval(expr, ctx, mode)
     case AggregateFunctionExpr(f, arg) =>

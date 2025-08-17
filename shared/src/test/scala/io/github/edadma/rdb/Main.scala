@@ -30,7 +30,7 @@ object Main extends App:
       | ('g2', 6);
       |""".trim.stripMargin,
   )
-  val QueryResult(res) = executeQuery("SELECT id, a, SUM(b) FROM t GROUP BY a ORDER BY a DESC")
+  val QueryResult(res) = executeQuery("SELECT id, a, SUM(b) AS sum FROM t GROUP BY a ORDER BY a DESC")
 
   print(tableString(res))
 

@@ -275,7 +275,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val query: P[SQLSelectExpr] =
     kw(
       "SELECT",
-    ) ~ expressions ~ fromClause ~ whereClause ~ groupByClause ~ orderByClause ~ limitClause ~ offsetClause ^^ {
+    ) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ orderByClause ~ limitClause ~ offsetClause ^^ {
       case _ ~ p ~ f ~ w ~ g ~ o ~ of ~ l =>
         SQLSelectExpr(p to ArraySeq, f, w, g, o, l, of)
     }
@@ -328,7 +328,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     ident ^^ Ident.apply,
   )
 
-  lazy val expressions: P[Seq[Expr]] = rep1sep(expression | star, ",")
+  lazy val selectExpression: P[Expr] =
+    (expression | star) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+      case e ~ None    => e
+      case e ~ Some(a) => AliasExpr(e, a)
+    }
+
+  lazy val selectExpressions: P[Seq[Expr]] = rep1sep(selectExpression, ",")
+
+  lazy val expressions: P[Seq[Expr]] = rep1sep(expression, ",")
 
   lazy val booleanExpression: P[Expr] = orExpression
 

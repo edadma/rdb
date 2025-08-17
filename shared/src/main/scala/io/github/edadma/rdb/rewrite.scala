@@ -2,24 +2,23 @@ package io.github.edadma.rdb
 
 //import pprint.*
 
-import scala.collection.immutable.ArraySeq
-
 def rewrite(expr: Expr)(implicit db: DB): Expr =
   expr match
-    case _ if expr.typ != null => expr
-    case SubqueryExpr(query)   => SubqueryExpr(rewrite(query))
-    case CaseExpr(whens, els) =>
+    case _ if expr.typ != null  => expr
+    case AliasExpr(expr, alias) => AliasExpr(rewrite(expr), alias)
+    case SubqueryExpr(query)    => SubqueryExpr(rewrite(query))
+    case CaseExpr(whens, els)   =>
       CaseExpr(whens map { case When(when, expr) => When(rewrite(when), rewrite(expr)) }, els map rewrite)
-    case InSeqExpr(value, op, exprs)   => InSeqExpr(rewrite(value), op, exprs map rewrite)
-    case InQueryExpr(value, op, array) => InQueryExpr(rewrite(value), op, rewrite(array))
-    case TableConstructorExpr(expr)    => TableConstructorExpr(rewrite(expr))
+    case InSeqExpr(value, op, exprs)       => InSeqExpr(rewrite(value), op, exprs map rewrite)
+    case InQueryExpr(value, op, array)     => InQueryExpr(rewrite(value), op, rewrite(array))
+    case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
       scalarFunction get func.toLowerCase match
         case None =>
           aggregateFunction get func.toLowerCase match
             case None                        => problem(id, s"unknown function '$func'")
             case Some(f) if args.length != 1 => problem(id, "aggregate function takes one argument")
-            case Some(f) =>
+            case Some(f)                     =>
               val (instance, typ) = f.instantiate
 
               AggregateFunctionExpr(instance, rewrite(args.head)) setType typ
@@ -29,7 +28,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         case None    => problem(id, s"unknown variable '$name'")
         case Some(v) => VariableInstanceExpr(v.instance)
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery)) setType BooleanType
-    case UnaryExpr(op, expr) =>
+    case UnaryExpr(op, expr)  =>
       val e = rewrite(expr)
 
       UnaryExpr(op, e) setType e.typ
@@ -65,7 +64,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case Seq(e)  => e
           case e :: tl => CrossOperator(e, cross(tl))
 
-      val r = cross(from map rewrite)
+      val r  = cross(from map rewrite)
       val r1 =
         where match
           case Some(cond) => SelectOperator(r, rewrite(cond))
@@ -98,24 +97,24 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
           case None => r5
 
       rewrite(r6)
-    case SortOperator(rel, by)       => ProcessOperator(SortProcess(procRewrite(rel), by))
-    case GroupOperator(rel, by)      => ProcessOperator(GroupProcess(procRewrite(rel), by))
-    case OffsetOperator(rel, offset) => ProcessOperator(DropProcess(procRewrite(rel), offset))
-    case LimitOperator(rel, limit)   => ProcessOperator(TakeProcess(procRewrite(rel), limit))
+    case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
+    case GroupOperator(rel, by)            => ProcessOperator(GroupProcess(procRewrite(rel), by))
+    case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
+    case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case InnerJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
       ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
-    case TableOperator(id @ Ident(name)) =>
+    case TableOperator(id @ Ident(name))  =>
       db.getTable(name) match
         case Some(t) => ProcessOperator(t)
         case None    => problem(id, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
-      val aggregates = rewritten_projs exists aggregate
-      val columns = rewritten_projs exists column
-      val rewritten_proc = procRewrite(rel)
+      val aggregates      = rewritten_projs exists aggregate
+      val columns         = rewritten_projs exists column
+      val rewritten_proc  = procRewrite(rel)
 
       ProcessOperator(
         ProjectProcess(

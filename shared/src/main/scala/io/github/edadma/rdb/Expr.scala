@@ -12,37 +12,32 @@ trait Expr extends Positional:
     typ = t
     this
 
-case class ColumnExpr(col: Ident) extends Expr
-case class VariableExpr(name: Ident) extends Expr
-case class UnaryExpr(op: String, expr: Expr) extends Expr
-case class BinaryExpr(left: Expr, op: String, right: Expr) extends Expr
-case class BooleanExpr(b: Boolean) extends Expr { typ = BooleanType }
-case class StringExpr(s: String) extends Expr { typ = TextType }
-case class NumberExpr(n: Number) extends Expr { typ = NumberType }
-case class NullExpr() extends Expr { typ = NullType }
-
-case class ExistsExpr(subquery: Expr) extends Expr
+case class AliasExpr(expr: Expr, alias: Ident)                            extends Expr
+case class ColumnExpr(col: Ident)                                         extends Expr
+case class VariableExpr(name: Ident)                                      extends Expr
+case class UnaryExpr(op: String, expr: Expr)                              extends Expr
+case class BinaryExpr(left: Expr, op: String, right: Expr)                extends Expr
+case class BooleanExpr(b: Boolean)                                        extends Expr { typ = BooleanType }
+case class StringExpr(s: String)                                          extends Expr { typ = TextType    }
+case class NumberExpr(n: Number)                                          extends Expr { typ = NumberType  }
+case class NullExpr()                                                     extends Expr { typ = NullType    }
+case class ExistsExpr(subquery: Expr)                                     extends Expr
 case class BetweenExpr(value: Expr, op: String, lower: Expr, upper: Expr) extends Expr
-case class CaseExpr(whens: Seq[When], els: Option[Expr]) extends Expr
-case class When(when: Expr, expr: Expr)
-
-case class ApplyExpr(func: Ident, args: Seq[Expr]) extends Expr
-
-case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr]) extends Expr
+case class CaseExpr(whens: Seq[When], els: Option[Expr])                  extends Expr
+case class ApplyExpr(func: Ident, args: Seq[Expr])                        extends Expr
+case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr])         extends Expr
 case class AggregateFunctionExpr(f: AggregateFunctionInstance, arg: Expr) extends Expr
+case class VariableInstanceExpr(v: VariableInstance)                      extends Expr
+case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr])           extends Expr
+case class InQueryExpr(value: Expr, op: String, query: Expr)              extends Expr
+case class SubqueryExpr(query: Expr)                                      extends Expr
+case class StarExpr()                                                     extends Expr
+case class TableStarExpr(table: Ident)                                    extends Expr
+case class ObjectExpr(properties: Seq[(Ident, Expr)])                     extends Expr
+case class ArrayExpr(elems: Seq[Expr])                                    extends Expr
+case class TableConstructorExpr(query: Expr)                              extends Expr
 
-case class VariableInstanceExpr(v: VariableInstance) extends Expr
-
-case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr]) extends Expr
-case class InQueryExpr(value: Expr, op: String, query: Expr) extends Expr
-
-case class SubqueryExpr(query: Expr) extends Expr
-
-case class StarExpr() extends Expr
-case class TableStarExpr(table: Ident) extends Expr
-case class ObjectExpr(properties: Seq[(Ident, Expr)]) extends Expr
-case class ArrayExpr(elems: Seq[Expr]) extends Expr
-case class TableConstructorExpr(query: Expr) extends Expr
+case class When(when: Expr, expr: Expr)
 
 case class Count(pos: Position, count: Int)
 
