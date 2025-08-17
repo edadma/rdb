@@ -426,7 +426,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val jsonLiteral: P[Expr] = arrayExpression | objectExpression
 
   lazy val application: P[Expr] = positioned(
-    identifier ~ ("(" ~> expressions <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
+    identifier ~ ("(" ~> rep1sep(expression | star, ",") <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
   )
 
   lazy val column: P[ColumnExpr] = positioned(
