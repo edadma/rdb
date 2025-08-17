@@ -131,6 +131,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 def aggregate(expr: Expr): Boolean =
   expr match
     case _: AggregateFunctionExpr    => true
+    case AliasExpr(expr, _)          => aggregate(expr)
     case ScalarFunctionExpr(_, args) => args exists aggregate
     case UnaryExpr(_, expr)          => aggregate(expr)
     case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
