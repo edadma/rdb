@@ -71,13 +71,15 @@ case class TimestampValue(t: Datetime) extends Value(TimestampType):
 
 object UUIDValue:
   val generated = new mutable.HashSet[String]
-  
+
   @tailrec
-  def generate: UUIDValue = 
+  def generate: UUIDValue =
     val uuid = Platform.randomUUID
-    
+
     if generated(uuid) then generate
-    else UUIDValue(uuid)
+    else
+      generated += uuid
+      UUIDValue(uuid)
 
 case class UUIDValue(id: String) extends Value(UUIDType):
   override def toText: TextValue = TextValue(id)
@@ -97,7 +99,7 @@ case class TextValue(s: String) extends Value(TextType):
 
   override def compare(that: Value): Int =
     that match
-      case TextValue(t) => s compare t
+      case TextValue(t)    => s compare t
       case EnumValue(v, t) =>
         t.labelsMap get s match
           case None    => problem(pos, s"'$s' is not a label of enum '${t.name}'")

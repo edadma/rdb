@@ -10,7 +10,7 @@ object Main extends App:
         |-- this is a comment
         |
         |CREATE TABLE t (
-        | id INT AUTO PRIMARY KEY,
+        | id UUID AUTO PRIMARY KEY,
         | a TEXT,
         | b INT
         |);
@@ -21,7 +21,7 @@ object Main extends App:
         | ('g2', 5),
         | ('g2', 6);
         |
-        |SELECT a, SUM(b) FROM t GROUP BY a ORDER BY a DESC;
+        |SELECT id, a, SUM(b) FROM t GROUP BY a ORDER BY a DESC;
         |""".trim.stripMargin,
     ).last.asInstanceOf[QueryResult]
 
