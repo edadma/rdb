@@ -5,6 +5,7 @@ import scala.language.postfixOps
 import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
+import scala.util.parsing.input.CharSequenceReader.EofCh
 import scala.util.parsing.input.{Position, Positional}
 
 object SQLParser extends StandardTokenParsers with PackratParsers:
@@ -216,6 +217,24 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
     override def token: Parser[Token] = quotedToken | stringToken | decimalToken | super.token
+
+    // Add support for SQL comments
+    override def comment: Parser[Any] =
+      lineComment | blockComment
+
+    // Line comments: -- comment text (until end of line)
+    def lineComment: Parser[Any] =
+      '-' ~ '-' ~ rep(chrExcept('\n', '\r', EofCh)) ~ (chr('\n') | chr('\r') | chr(EofCh)) ^^^ ()
+
+    // Block comments: /* comment text */ (can be nested)
+    def blockComment: Parser[Any] =
+      '/' ~ '*' ~ nestedBlockComment
+
+    def nestedBlockComment: Parser[Any] = (
+      '*' ~ '/' ^^^ ()
+        | '/' ~ '*' ~ nestedBlockComment ~ nestedBlockComment
+        | chrExcept(EofCh) ~ nestedBlockComment
+    )
 
     private def decimalToken: Parser[Token] =
       digits ~ '.' ~ digits ~ optExponent ^^ { case intPart ~ _ ~ fracPart ~ exp =>
