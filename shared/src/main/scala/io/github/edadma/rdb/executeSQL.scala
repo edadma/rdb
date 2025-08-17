@@ -47,7 +47,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
           InsertResult(result, TableValue(Vector(row), metadata))
     case QueryCommand(query) =>
       QueryResult(eval(rewrite(query)(db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
-    case CreateTableCommand(id @ Ident(table), columns) =>
+    case CreateTableCommand(id @ Ident(table), columns, constraints) =>
       if db hasTable table then problem(id, s"duplicate table: $table")
 
       val specs =
@@ -79,6 +79,12 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
             default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)),
           )
         }
+
+      constraints.foreach {
+        case UniqueConstraint(cols) =>
+          // TODO: Store unique constraint on columns: cols.map(_.name)
+          ()
+      }
 
       db.createTable(table, specs)
       CreateTableResult(table)

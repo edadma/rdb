@@ -483,9 +483,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       InsertCommand(t, cs, rs, ret)
     }
 
+  lazy val tableConstraint: P[TableConstraint] =
+    kw("UNIQUE") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ UniqueConstraint.apply
+
   lazy val createTable: P[Command] =
-    kw("CREATE") ~> kw("TABLE") ~> identifier ~ ("(" ~> rep1sep(columnDesc, ",") <~ ")") ^^ { case t ~ cs =>
-      CreateTableCommand(t, cs)
+    kw("CREATE") ~> kw("TABLE") ~> identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
+      case t ~ items =>
+        val columns     = items.collect { case c: ColumnDesc => c }
+        val constraints = items.collect { case c: TableConstraint => c }
+        CreateTableCommand(t, columns, constraints)
     }
 
   lazy val dropTable: P[Command] =
