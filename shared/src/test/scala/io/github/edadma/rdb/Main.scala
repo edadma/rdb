@@ -4,35 +4,33 @@ object Main extends App:
   implicit val db: DB = new MemoryDB
 
 //  PPrinter.BlackWhite.pprintln(
-  val QueryResult(res) =
-    executeSQL(
-      """
-        |-- this is a comment
-        |
-        |CREATE TABLE s (
-        | id UUID AUTO PRIMARY KEY,
-        | name TEXT UNIQUE,
-        | ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        |);
-        |
-        |CREATE TABLE t (
-        | id UUID AUTO PRIMARY KEY,
-        | a TEXT,
-        | b INT
-        |);
-        |
-        |INSERT INTO s (name) VALUES
-        | ('asdf');
-        |
-        |INSERT INTO t (a, b) VALUES
-        | ((SELECT id FROM s WHERE name = 'asdf'), 3),
-        | ((SELECT id FROM s WHERE name = 'asdf'), 4),
-        | ('g2', 5),
-        | ('g2', 6);
-        |
-        |SELECT id, a, SUM(b) FROM t GROUP BY a ORDER BY a DESC;
-        |""".trim.stripMargin,
-    ).last.asInstanceOf[QueryResult]
+  executeSQL(
+    """
+      |-- this is a comment
+      |
+      |CREATE TABLE s (
+      | id UUID AUTO PRIMARY KEY,
+      | name TEXT UNIQUE,
+      | ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      |);
+      |
+      |CREATE TABLE t (
+      | id UUID AUTO PRIMARY KEY,
+      | a TEXT,
+      | b INT
+      |);
+      |
+      |INSERT INTO s (name) VALUES
+      | ('asdf');
+      |
+      |INSERT INTO t (a, b) VALUES
+      | ((SELECT id FROM s WHERE name = 'asdf'), 3),
+      | ((SELECT id FROM s WHERE name = 'asdf'), 4),
+      | ('g2', 5),
+      | ('g2', 6);
+      |""".trim.stripMargin,
+  )
+  val QueryResult(res) = executeQuery("SELECT id, a, SUM(b) FROM t GROUP BY a ORDER BY a DESC")
 
   print(tableString(res))
 
