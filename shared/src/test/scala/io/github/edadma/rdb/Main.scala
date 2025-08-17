@@ -9,15 +9,23 @@ object Main extends App:
       """
         |-- this is a comment
         |
+        |CREATE TABLE s (
+        | id UUID AUTO PRIMARY KEY,
+        | name TEXT
+        |);
+        |
         |CREATE TABLE t (
         | id UUID AUTO PRIMARY KEY,
         | a TEXT,
         | b INT
         |);
         |
+        |INSERT INTO s (name) VALUES
+        | ('asdf');
+        |
         |INSERT INTO t (a, b) VALUES
-        | ('g1', 3),
-        | ('g1', 4),
+        | ((SELECT id FROM s WHERE name = 'asdf'), 3),
+        | ((SELECT id FROM s WHERE name = 'asdf'), 4),
         | ('g2', 5),
         | ('g2', 6);
         |

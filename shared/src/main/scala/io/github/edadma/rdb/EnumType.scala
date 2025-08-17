@@ -6,9 +6,9 @@ case class EnumType(enumName: String, labels: IndexedSeq[String]) extends Type(e
   val labelsMap: Map[String, Int] = labels.zipWithIndex toMap
 
   override def convert(v: Value): Value =
-    v match
-      case TextValue(l) => EnumValue(labelsMap getOrElse (l, problem(v, s"unknown label '$l'")), this)
-      case _            => super.convert(v)
+    val textVal = v.toText
+
+    EnumValue(labelsMap getOrElse (textVal.s, problem(v, s"unknown label '${textVal.s}'")), this)
 
 case class EnumValue(value: Int, typ: EnumType) extends Value(typ):
   override def toText: TextValue = TextValue(string)
@@ -20,7 +20,7 @@ case class EnumValue(value: Int, typ: EnumType) extends Value(typ):
   override def compare(that: Value): Int =
     that match
       case EnumValue(v, `typ`) => value compare v
-      case t @ TextValue(s) =>
+      case t @ TextValue(s)    =>
         typ.labelsMap get s match
           case None    => problem(t, s"'$s' is not a label of enum '${typ.name}'")
           case Some(l) => value compare l

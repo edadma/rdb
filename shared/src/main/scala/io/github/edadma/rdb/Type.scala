@@ -50,14 +50,14 @@ case object DoubleType extends Type("double"):
 case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
   override val isNumber = true
 
-  private val mc = MathContext(precision)
+  private val mc     = MathContext(precision)
   private val scaler = BigInt(10).pow(scale).toLong
 
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(BigDecType, _)       => n
       case NumberValue(DIntType | DLongType, n) => NumberValue(BigDecimal(n.longValue * scaler, scale, mc))
-      case NumberValue(DDoubleType, n) =>
+      case NumberValue(DDoubleType, n)          =>
         NumberValue(BigDecimal(n.doubleValue, mc).setScale(scale, BigDecimal.RoundingMode.DOWN))
       case _ => super.convert(v)
 
@@ -69,29 +69,35 @@ case object UUIDType extends Type("uuid"):
   override def convert(v: Value): Value =
     v match
       case id: UUIDValue => id
-      case t @ TextValue(id) =>
-        if !valid(id) then problem(t, "invalid version 4 UUID")
-
-        UUIDValue(id)
-      case _ => super.convert(v)
+      case _             =>
+        val textVal = v.toText
+        if !valid(textVal.s) then problem(v, "invalid version 4 UUID")
+        UUIDValue(textVal.s)
 
   override def init: Value = UUIDValue.generate
 
-case object TextType extends Type("text")
+case object TextType extends Type("text"):
+  override def convert(v: Value): Value =
+    v match
+      case t: TextValue => t
+      case _            => v.toText
 
 case object TimestampType extends Type("timestamp"):
   override def convert(v: Value): Value =
     v match
       case t: TimestampValue => t
-      case TextValue(t)      => TimestampValue(Datetime.fromString(t))
-      case _                 => super.convert(v)
+      case _                 =>
+        val textVal = v.toText
+
+        TimestampValue(Datetime.fromString(textVal.s))
 
 case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
     v match
       case _: (ArrayValue | ObjectValue) => v
-      case TextValue(json)               => JSONParser.parseJSON(json)
-      case _                             => super.convert(v)
+      case _                             =>
+        val textVal = v.toText
+        JSONParser.parseJSON(textVal.s)
 
 case object ObjectType extends Type("object")
 

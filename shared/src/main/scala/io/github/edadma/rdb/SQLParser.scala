@@ -469,7 +469,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val when: P[When] =
     kw("WHEN") ~> booleanExpression ~ kw("THEN") ~ expression ^^ { case l ~ _ ~ e => When(l, e) }
 
-  lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(literal, ",") <~ ")"
+  lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(expression, ",") <~ ")"
 
   lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
