@@ -431,8 +431,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val column: P[ColumnExpr] = positioned(
     identifier ~ opt("." ~> identifier) ^^ {
-      case c ~ None                          => ColumnExpr(c)
-      case (tid @ Ident(t)) ~ Some(Ident(c)) => ColumnExpr(Ident(s"$t.$c").setPos(tid.pos))
+      case c ~ None    => ColumnExpr(None, c)
+      case t ~ Some(c) => ColumnExpr(Some(t), c)
     },
   )
 

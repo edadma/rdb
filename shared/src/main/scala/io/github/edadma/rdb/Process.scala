@@ -59,10 +59,12 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
 
   val meta: Metadata =
     Metadata(fields.zipWithIndex map {
-      case (AliasExpr(expr, alias), _)      => ColumnMetadata(None, alias.name, expr.typ)
-      case (c @ ColumnExpr(Ident(name)), _) =>
-        lookup(name, ctx) match
-          case None             => problem(c, s"'$name' not found")
+      case (AliasExpr(expr, alias), _)             => ColumnMetadata(None, alias.name, expr.typ)
+      case (c @ ColumnExpr(table, Ident(name)), _) =>
+        val lookupName = table.map(t => s"${t.name}.$name").getOrElse(name)
+
+        lookup(lookupName, ctx) match
+          case None             => problem(c, s"'$lookupName' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
       case (expr: Expr, idx) => ColumnMetadata(None, s"col_${idx + 1}", expr.typ)
     })
