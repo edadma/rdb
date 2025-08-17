@@ -10,13 +10,43 @@ case class Row(
     meta: Metadata,
     updater: Option[Seq[(String, Value)] => Unit],
     deleter: Option[() => Unit],
-    mode: AggregateMode = AggregateMode.Return
-)
+    mode: AggregateMode = AggregateMode.Return,
+) {
+  // Get value by column name
+  def apply(name: String): Value = {
+    val (idx, _, _) = meta.columnMap.getOrElse(
+      name,
+      throw new NoSuchElementException(s"Column '$name' not found"),
+    )
+    data(idx)
+  }
+
+  // String extraction
+  def getString(name: String): String               = apply(name).string
+  def getStringOption(name: String): Option[String] = {
+    val value = apply(name)
+    if (value.isNull || value.string.isEmpty) None else Some(value.string)
+  }
+
+  // Numeric extraction
+  def getLong(name: String): Long               = apply(name).asInstanceOf[NumberValue].value.longValue
+  def getLongOption(name: String): Option[Long] = {
+    val value = apply(name)
+    if (value.isNull) None else Some(value.asInstanceOf[NumberValue].value.longValue)
+  }
+
+  // Boolean extraction
+  def getBoolean(name: String): Boolean               = apply(name).asInstanceOf[BooleanValue].b
+  def getBooleanOption(name: String): Option[Boolean] = {
+    val value = apply(name)
+    if (value.isNull) None else Some(value.asInstanceOf[BooleanValue].b)
+  }
+}
 
 case class ColumnMetadata(table: Option[String], name: String, typ: Type)
 
 case class Metadata(columns: IndexedSeq[ColumnMetadata]):
-  lazy val width: Int = columns.length
+  lazy val width: Int                                          = columns.length
   lazy val columnMap: Map[String, (Int, Type, Option[String])] =
     val ambiguous = columns groupBy (_.name) map ((k, v) => k -> (v.length > 1))
 
