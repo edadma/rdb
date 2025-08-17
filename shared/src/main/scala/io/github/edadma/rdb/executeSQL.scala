@@ -17,7 +17,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
       rows find (_.length != cols) match
         case Some(row) => problem(row.head, s"row length (${row.length}) not equal to number of columns ($cols)")
-        case None =>
+        case None      =>
           val data =
             for (r <- rows)
               yield r map (e => eval(rewrite(e), Nil, AggregateMode.Disallow))
@@ -53,20 +53,20 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       val specs =
         val names = new mutable.HashSet[String]
 
-        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk) =>
+        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk, unique) =>
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
 
           val typ =
             typeDesc match
-              case Left(primitive) => primitive
+              case Left(primitive)             => primitive
               case Right(tid @ Ident(defined)) =>
                 db getType defined match
                   case None    => problem(tid, s"type '$defined' is undefined")
                   case Some(t) => t
 
-          ColumnSpec(name, typ, auto, required, pk)
+          ColumnSpec(name, typ, auto, required, pk, unique)
         }
 
       db.createTable(table, specs)
@@ -81,7 +81,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       db.createEnum(name, labels)
       CreateTypeResult(name)
     case UpdateCommand(id @ Ident(table), sets, cond) =>
-      val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
+      val t             = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val (cols, exprs) =
         sets map { case UpdateSet(id @ Ident(col), value) =>
           if !t.hasColumn(col) then problem(id, s"table $table doesn't has column '$col'")
@@ -102,7 +102,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
 
       UpdateResult(count)
     case DeleteCommand(id @ Ident(table), cond) =>
-      val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
+      val t    = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       val rows =
         cond match
           case Some(value) => FilterProcess(t, rewrite(value))

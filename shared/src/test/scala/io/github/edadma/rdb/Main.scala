@@ -11,7 +11,7 @@ object Main extends App:
         |
         |CREATE TABLE s (
         | id UUID AUTO PRIMARY KEY,
-        | name TEXT
+        | name TEXT UNIQUE
         |);
         |
         |CREATE TABLE t (
