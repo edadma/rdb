@@ -11,7 +11,8 @@ object Main extends App:
         |
         |CREATE TABLE s (
         | id UUID AUTO PRIMARY KEY,
-        | name TEXT UNIQUE
+        | name TEXT UNIQUE,
+        | ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         |);
         |
         |CREATE TABLE t (
