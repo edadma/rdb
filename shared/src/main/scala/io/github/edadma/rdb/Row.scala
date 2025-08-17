@@ -28,11 +28,18 @@ case class Row(
     if (value.isNull || value.string.isEmpty) None else Some(value.string)
   }
 
-  // Numeric extraction
+  // Long extraction
   def getLong(name: String): Long               = apply(name).asInstanceOf[NumberValue].value.longValue
   def getLongOption(name: String): Option[Long] = {
     val value = apply(name)
     if (value.isNull) None else Some(value.asInstanceOf[NumberValue].value.longValue)
+  }
+
+  // Int extraction
+  def getInt(name: String): Int               = apply(name).asInstanceOf[NumberValue].value.intValue
+  def getIntOption(name: String): Option[Int] = {
+    val value = apply(name)
+    if (value.isNull) None else Some(value.asInstanceOf[NumberValue].value.intValue)
   }
 
   // Boolean extraction
