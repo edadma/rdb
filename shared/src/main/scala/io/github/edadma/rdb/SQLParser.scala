@@ -224,7 +224,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
     // Line comments: -- comment text (until end of line)
     def lineComment: Parser[Any] =
-      '-' ~ '-' ~ rep(chrExcept('\n', '\r', EofCh)) ~ (chr('\n') | chr('\r') | chr(EofCh)) ^^^ ()
+      '-' ~ '-' ~ rep(chrExcept('\n', '\r', EofCh)) ~ (chr('\n') | chr('\r') | chr(EofCh)) ^^ { _ => ' ' }
 
     // Block comments: /* comment text */ (can be nested)
     def blockComment: Parser[Any] =

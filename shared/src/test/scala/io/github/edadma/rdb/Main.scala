@@ -1,7 +1,5 @@
 package io.github.edadma.rdb
 
-import scala.collection.immutable.ArraySeq
-
 object Main extends App:
   implicit val db: DB = new MemoryDB
 
@@ -9,6 +7,8 @@ object Main extends App:
   val QueryResult(res) =
     executeSQL(
       """
+        |-- this is a comment
+        |
         |CREATE TABLE t (
         | id INT AUTO PRIMARY KEY,
         | a TEXT,
@@ -23,7 +23,7 @@ object Main extends App:
         |
         |SELECT a, SUM(b) FROM t GROUP BY a ORDER BY a DESC;
         |""".trim.stripMargin,
-    ).last
+    ).last.asInstanceOf[QueryResult]
 
   print(tableString(res))
 
