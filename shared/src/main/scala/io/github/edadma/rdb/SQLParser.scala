@@ -219,25 +219,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     override def token: Parser[Token] = quotedToken | stringToken | decimalToken | super.token
 
     // Add support for SQL comments
-    override def whitespace: Parser[Any] = rep(
-      whitespaceChar |
-        lineComment |
-        blockComment,
-    )
-
-    // Fix the lineComment method:
-    def lineComment: Parser[Any] =
-      '-' ~ '-' ~ rep(elem("", ch => ch != '\n' && ch != '\r' && ch != EofCh)) ~
-        (elem("", ch => ch == '\n' || ch == '\r') | elem("", _ == EofCh) | success(())) ^^^ ' '
-
-    // Fix the blockComment method:
-    def blockComment: Parser[Any] =
-      '/' ~ '*' ~ nestedBlockComment ^^^ ' '
-
-    def nestedBlockComment: Parser[Any] = (
-      '*' ~ '/' ^^^ ()
-        | '/' ~ '*' ~ nestedBlockComment ~ nestedBlockComment
-        | elem("", _ != EofCh) ~ nestedBlockComment
+    override def whitespace: Parser[Any] = rep[Any](
+      whitespaceChar
+        | '/' ~ '*' ~ comment                     // Keep /* */ block comments
+        | '-' ~ '-' ~ rep(chrExcept(EofCh, '\n')) // Add -- line comments for SQL
+        | '/' ~ '*' ~ rep(elem("", _ => true)) ~> err("unclosed comment"),
     )
 
     private def decimalToken: Parser[Token] =
