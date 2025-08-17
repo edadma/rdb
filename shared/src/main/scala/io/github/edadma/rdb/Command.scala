@@ -5,7 +5,7 @@ case class UniqueConstraint(columns: Seq[Ident]) extends TableConstraint
 
 trait Command
 
-case class QueryCommand(query: Expr) extends Command
+case class QueryCommand(query: SQLSelectExpr) extends Command
 case class InsertCommand(table: Ident, columns: Seq[Ident], rows: Seq[Seq[Expr]], returning: Option[Ident])
     extends Command
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint]) extends Command

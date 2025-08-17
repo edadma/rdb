@@ -5,6 +5,11 @@ package io.github.edadma.rdb
 import scala.collection.mutable
 import scala.language.postfixOps
 
+def executeQuery(query: String)(implicit db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
+
+def executeSelect(query: SQLSelectExpr)(implicit db: DB) =
+  QueryResult(eval(rewrite(query)(using db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
+
 def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
 
@@ -45,8 +50,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
                 else problem(ret, s"'$returning' not found in result from insert")
 
           InsertResult(result, TableValue(Vector(row), metadata))
-    case QueryCommand(query) =>
-      QueryResult(eval(rewrite(query)(db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
+    case QueryCommand(query)                                         => executeSelect(query)
     case CreateTableCommand(id @ Ident(table), columns, constraints) =>
       if db hasTable table then problem(id, s"duplicate table: $table")
 
