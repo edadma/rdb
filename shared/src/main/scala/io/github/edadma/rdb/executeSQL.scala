@@ -53,7 +53,7 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       val specs =
         val names = new mutable.HashSet[String]
 
-        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk, unique) =>
+        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk, unique, default) =>
           if names contains name then problem(id, s"duplicate column name: $name")
 
           names += name
@@ -66,7 +66,17 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
                   case None    => problem(tid, s"type '$defined' is undefined")
                   case Some(t) => t
 
-          ColumnSpec(name, typ, auto, required, pk, unique)
+          ColumnSpec(
+            name,
+            typ,
+            auto,
+            required,
+            pk,
+            false,
+            unique,
+            None,
+            default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)),
+          )
         }
 
       db.createTable(table, specs)

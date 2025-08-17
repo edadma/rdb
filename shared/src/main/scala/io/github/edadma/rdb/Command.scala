@@ -20,6 +20,7 @@ case class ColumnDesc(
     required: Boolean,
     pk: Boolean,
     unique: Boolean,
+    default: Option[Expr],
 )
 
 trait TableAlteration

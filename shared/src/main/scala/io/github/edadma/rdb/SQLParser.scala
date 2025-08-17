@@ -524,12 +524,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | identifier ^^ Right.apply
 
   lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ opt(kw("AUTO")) ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("PRIMARY") ~ kw("KEY")) ~ opt(
-      kw("UNIQUE"),
-    ) ^^ {
-      case c ~ t ~ a ~ n ~ p ~ u =>
-        ColumnDesc(c, t, a.isDefined, n.isDefined, p.isDefined, u.isDefined)
-    }
+    identifier ~ typ ~ opt(kw("AUTO")) ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("PRIMARY") ~ kw("KEY")) ~
+      opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> literal) ^^ {
+        case c ~ t ~ a ~ n ~ p ~ u ~ d =>
+          ColumnDesc(c, t, a.isDefined, n.isDefined, p.isDefined, u.isDefined, d)
+      }
 
   lazy val alterTable: P[Command] =
     kw("ALTER") ~> kw("TABLE") ~> identifier ~ tableAlteration ^^ { case t ~ a =>
