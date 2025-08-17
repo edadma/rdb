@@ -84,7 +84,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
-            if count < 1 then problem(pos, s"offset should be positive: $count")
+            if count < 0 then problem(pos, s"offset should be non-negative: $count")
 
             OffsetOperator(r4, count)
           case None => r4
