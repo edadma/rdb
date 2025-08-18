@@ -472,7 +472,25 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val caseExpression: P[CaseExpr] =
-    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ { case ws ~ e => CaseExpr(ws, e) }
+    simpleCaseExpression | searchedCaseExpression
+
+  lazy val simpleCaseExpression: P[CaseExpr] =
+    kw("CASE") ~> expression ~ rep1(simpleWhen) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ {
+      case expr ~ whens ~ els =>
+        // Convert to searched CASE internally
+        val searchedWhens = whens.map { case (value, result) =>
+          When(BinaryExpr(expr, "=", value), result)
+        }
+        CaseExpr(searchedWhens, els)
+    }
+
+  lazy val searchedCaseExpression: P[CaseExpr] =
+    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ {
+      case ws ~ e => CaseExpr(ws, e)
+    }
+
+  lazy val simpleWhen: P[(Expr, Expr)] =
+    kw("WHEN") ~> expression ~ kw("THEN") ~ expression ^^ { case v ~ _ ~ r => (v, r) }
 
   lazy val when: P[When] =
     kw("WHEN") ~> booleanExpression ~ kw("THEN") ~ expression ^^ { case l ~ _ ~ e => When(l, e) }
