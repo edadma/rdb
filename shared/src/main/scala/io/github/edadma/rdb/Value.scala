@@ -90,6 +90,12 @@ case class UUIDValue(id: String) extends Value(UUIDType):
 
   override def next: Value = UUIDValue.generate
 
+  override def compare(that: Value): Int =
+    that match
+      case UUIDValue(otherId) => id compare otherId
+      case TextValue(text)    => id compare text
+      case _                  => super.compare(that)
+
 case class TextValue(s: String) extends Value(TextType):
   override def toText: TextValue = this
 
