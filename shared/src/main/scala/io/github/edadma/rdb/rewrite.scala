@@ -39,7 +39,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 //      if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}") // todo: rewrite needs context to determine types
 
       BinaryExpr(l, op, r) setType l.typ
-    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">"), right) =>
+    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
     case BetweenExpr(value, op, lower, upper) =>
       val v = rewrite(value)
