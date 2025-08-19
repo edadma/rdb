@@ -4,7 +4,7 @@
 
 ## Quick Start
 
-### JavaScript/Node.js
+### JavaScript/TypeScript/Node.js
 
 ```javascript
 const { ConnectSQL } = require('@edadma/rdb');
@@ -59,13 +59,13 @@ results.foreach(println)
 ## Core Concepts
 
 ### Database Instance
-- **JavaScript**: `new ConnectSQL()` creates an in-memory database
+- **JavaScript/TypeScript**: `new ConnectSQL()` creates an in-memory database
 - **Scala**: `new MemoryDB` creates an in-memory database
 - Each instance is isolated and independent
 - All data is stored in memory (no persistence)
 
 ### Execution Model
-- **JavaScript**: `db.execute(sql)` returns array of result objects
+- **JavaScript/TypeScript**: `db.execute(sql)` returns array of result objects
 - **Scala**: `executeSQL(sql)` returns sequence of Result objects
 - Multiple statements can be executed in one call (semicolon-separated)
 - Transactions are not explicitly supported (each statement is atomic)
@@ -450,7 +450,7 @@ SELECT name || ' - ' || category FROM products;  -- Concatenation
 
 ## API Reference
 
-### JavaScript API
+### JavaScript/TypeScript API
 
 #### ConnectSQL Class
 
@@ -522,11 +522,35 @@ case class UpdateResult(rows: Int) extends Result
 case class DeleteResult(rows: Int) extends Result
 ```
 
+#### Accessing Query Data
+
+```scala
+// Execute a query and destructure the result
+val QueryResult(table) = executeQuery("SELECT * FROM users")
+
+// Access the data field to get rows
+val rows: IndexedSeq[Row] = table.data
+
+// Iterate through rows
+for (row <- table.data) {
+  val id: Int = row.getInt("id")
+  val name: String = row.getString("name")
+  val email: Option[String] = row.getStringOption("email")
+}
+
+// Alternative: access via the result object
+val result = executeQuery("SELECT * FROM users")
+result.table.data.foreach { row =>
+  println(s"User: ${row.getString("name")}")
+}
+```
+
 #### Value Types
 
 ```scala
-// Extract values from Row
-val row: Row = // ... from query result
+// Extract values from Row (obtained from table.data)
+val QueryResult(table) = executeQuery("SELECT * FROM users")
+val row: Row = table.data.head  // First row
 
 // Type-safe extraction
 val id: Int = row.getInt("id")
@@ -925,11 +949,12 @@ tableContents.foreach(println)
 
 ## Platform-Specific Notes
 
-### JavaScript/Node.js
+### JavaScript/TypeScript/Node.js
 - Works in browsers with bundlers (webpack, rollup, etc.)
 - No external dependencies required
 - Use `process.memoryUsage()` to monitor memory
 - Consider Web Workers for large datasets in browsers
+- TypeScript definitions included for type safety
 
 ### JVM/Scala
 - Thread-safe for concurrent access
