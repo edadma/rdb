@@ -32,7 +32,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val e = rewrite(expr)
 
       UnaryExpr(op, e) setType e.typ
-    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "and" | "or"), right) =>
+    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "AND" | "OR"), right) =>
       val l = rewrite(left)
       val r = rewrite(right)
 
