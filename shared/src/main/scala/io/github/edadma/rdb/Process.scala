@@ -34,7 +34,10 @@ case class UngroupedProcess(input: Process, column: Boolean) extends Process:
   def iterator(ctx: Seq[Row]): RowIterator =
     val rows = input.iterator(ctx) to ArrayBuffer // todo: do this without buffering table
 
-    if column then
+    if rows.isEmpty then
+      // Handle empty result set - return empty iterator
+      Iterator.empty
+    else if column then
       rows
         .map(_.copy(mode = AggregateMode.Accumulate))
         .iterator ++ rows.map(_.copy(mode = AggregateMode.Return)).iterator
