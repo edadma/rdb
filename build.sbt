@@ -5,7 +5,7 @@ ThisBuild / scalaVersion           := "3.7.2"
 ThisBuild / organization           := "io.github.edadma"
 ThisBuild / organizationName       := "edadma"
 ThisBuild / organizationHomepage   := Some(url("https://github.com/edadma"))
-ThisBuild / version                := "0.0.24"
+ThisBuild / version                := "0.0.26"
 ThisBuild / sonatypeCredentialHost := "central.sonatype.com"
 
 ThisBuild / publishConfiguration := publishConfiguration.value.withOverwrite(true).withChecksums(Vector.empty)
@@ -60,7 +60,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     ),
     libraryDependencies ++= Seq(
       "org.scalatest"          %%% "scalatest"                % "3.2.19" % "test",
-      "com.lihaoyi"            %%% "pprint"                   % "0.9.3"  % "test",
+      "com.lihaoyi"            %%% "pprint"                   % "0.9.3" /*% "test"*/,
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
     ),
     publishMavenStyle      := true,

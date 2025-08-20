@@ -2,6 +2,8 @@ package io.github.edadma.rdb
 
 import scala.math.*
 
+import pprint.pprintln
+
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
 val scalarFunction: Map[String, ScalarFunction] =
@@ -10,13 +12,13 @@ val scalarFunction: Map[String, ScalarFunction] =
     ScalarFunction("table", { case Seq(TableValue(d, _)) => ArrayValue(d map (r => ArrayValue(r.data))) }, ArrayType),
     ScalarFunction("typeof", { case Seq(v) => TextValue(v.vtyp.name) }, TextType),
     // Text functions
-    ScalarFunction("lower", { case Seq(TextValue(t)) => TextValue(t.toLowerCase) }, TextType),
-    ScalarFunction("upper", { case Seq(TextValue(t)) => TextValue(t.toUpperCase) }, TextType),
-    ScalarFunction("length", { case Seq(TextValue(t)) => NumberValue(t.length) }, NumberType),
-    ScalarFunction("char_length", { case Seq(TextValue(t)) => NumberValue(t.length) }, NumberType),
-    ScalarFunction("trim", { case Seq(TextValue(t)) => TextValue(t.trim) }, TextType),
-    ScalarFunction("ltrim", { case Seq(TextValue(t)) => TextValue(t.replaceAll("^\\s+", "")) }, TextType),
-    ScalarFunction("rtrim", { case Seq(TextValue(t)) => TextValue(t.replaceAll("\\s+$", "")) }, TextType),
+    ScalarFunction("lower", { case Seq(v) => TextValue(v.string.toLowerCase) }, TextType),
+    ScalarFunction("upper", { case Seq(v) => TextValue(v.string.toUpperCase) }, TextType),
+    ScalarFunction("length", { case Seq(v) => NumberValue(v.string.length) }, NumberType),
+    ScalarFunction("array_length", { case Seq(ArrayValue(a)) => NumberValue(a.length) }, NumberType),
+    ScalarFunction("trim", { case Seq(v) => TextValue(v.string.trim) }, TextType),
+    ScalarFunction("ltrim", { case Seq(v) => TextValue(v.string.replaceAll("^\\s+", "")) }, TextType),
+    ScalarFunction("rtrim", { case Seq(v) => TextValue(v.string.replaceAll("\\s+$", "")) }, TextType),
     ScalarFunction(
       "substring",
       {
@@ -58,11 +60,7 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(TextValue(s), TextValue(search), TextValue(repl)) => TextValue(s.replace(search, repl)) },
       TextType,
     ),
-    ScalarFunction(
-      "concat",
-      { case Seq(TextValue(a), TextValue(b)) => TextValue(a + b) },
-      TextType,
-    ),
+    ScalarFunction("concat", { case Seq(a, b) => TextValue(a.string + b.string) }, TextType),
     ScalarFunction(
       "repeat",
       { case Seq(TextValue(s), NumberValue(_, nNum)) => TextValue(s * math.max(0, nNum.intValue)) },
