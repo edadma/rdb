@@ -46,6 +46,7 @@ case class SQLSelectExpr(
     from: Option[Seq[Expr]],
     where: Option[Expr],
     groupBy: Option[Seq[Expr]],
+    having: Option[Expr],
     orderBy: Option[Seq[OrderBy]],
     offset: Option[Count],
     limit: Option[Count],

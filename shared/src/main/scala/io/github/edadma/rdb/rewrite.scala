@@ -48,9 +48,10 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
 
       (if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
        else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))) setType BooleanType
-    case SQLSelectExpr(exprs, None, where, groupBy, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause not allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
+      if having.isDefined then problem(where.get, "HAVING clause not allowed here")
       if orderBy.isDefined then problem(where.get, "ORDER BY clause not allowed here")
       if offset.isDefined then problem(offset.get.pos, "OFFSET clause not allowed here")
       if limit.isDefined then problem(limit.get.pos, "LIMIT clause not allowed here")
@@ -58,7 +59,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       val rewritten_projs = exprs map rewrite
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
-    case SQLSelectExpr(exprs, Some(from), where, groupBy, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -77,10 +78,14 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
         exprs match
           case Seq(StarExpr()) => r2
           case _               => ProjectOperator(r2, exprs map rewrite)
+      val r3_having =
+        having match
+          case Some(cond) => HavingOperator(r3, rewrite(cond))
+          case None       => r3
       val r4 =
         orderBy match
-          case None     => r3
-          case Some(os) => SortOperator(r3, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+          case None     => r3_having
+          case Some(os) => SortOperator(r3_having, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
@@ -125,6 +130,7 @@ def rewrite(expr: Expr)(implicit db: DB): Expr =
       )
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
+    case HavingOperator(rel, cond) => ProcessOperator(HavingProcess(procRewrite(rel), rewrite(cond)))
     // todo: ColumnExpr, VariableExpr
     case _ => expr
 

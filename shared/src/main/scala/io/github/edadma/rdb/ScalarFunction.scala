@@ -3,6 +3,7 @@ package io.github.edadma.rdb
 import scala.math.*
 
 import pprint.pprintln
+import io.github.edadma.datetime.Datetime
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
@@ -226,4 +227,77 @@ val scalarFunction: Map[String, ScalarFunction] =
     ScalarFunction("random", { case Seq() => NumberValue(math.random) }, NumberType),
     // UUID functions
     ScalarFunction("gen_random_uuid", { case Seq() => UUIDValue.generate }, UUIDType),
+    // Null-handling functions
+    ScalarFunction(
+      "coalesce",
+      { case values =>
+        values.find(!_.isNull).getOrElse(NullValue())
+      },
+      TextType, // Return type will be adjusted based on actual data
+    ),
+    ScalarFunction(
+      "nullif",
+      { case Seq(value1, value2) =>
+        if value1.string == value2.string then NullValue() else value1
+      },
+      TextType, // Return type will be adjusted based on actual data
+    ),
+    // Additional string functions
+    ScalarFunction(
+      "split_part",
+      { case Seq(TextValue(s), TextValue(delimiter), NumberValue(_, fieldNum)) =>
+        val parts = s.split(java.util.regex.Pattern.quote(delimiter), -1)
+        val field = fieldNum.intValue
+        if field <= 0 || field > parts.length then TextValue("")
+        else TextValue(parts(field - 1))
+      },
+      TextType,
+    ),
+    ScalarFunction(
+      "reverse",
+      { case Seq(v) => TextValue(v.string.reverse) },
+      TextType,
+    ),
+    // Date/time functions
+    ScalarFunction(
+      "now",
+      { case Seq() => TimestampValue(Datetime.now()) },
+      TimestampType,
+    ),
+    ScalarFunction(
+      "current_date",
+      { case Seq() => 
+        val now = Datetime.now()
+        TimestampValue(Datetime(now.year, now.month, now.day))
+      },
+      TimestampType,
+    ),
+    ScalarFunction(
+      "date_part",
+      { case Seq(TextValue(part), TimestampValue(ts)) =>
+        part.toLowerCase match
+          case "year" => NumberValue(ts.year)
+          case "month" => NumberValue(ts.month)
+          case "day" => NumberValue(ts.day)
+          case "hour" => NumberValue(ts.hours)
+          case "minute" => NumberValue(ts.minutes)
+          case "second" => NumberValue(ts.seconds)
+          case _ => NumberValue(0)
+      },
+      NumberType,
+    ),
+    // Type conversion functions
+    ScalarFunction(
+      "to_number",
+      { case Seq(v) =>
+        try NumberValue(v.string.toDouble)
+        catch case _ => NumberValue(0)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "to_text",
+      { case Seq(v) => TextValue(v.string) },
+      TextType,
+    ),
   ).map(f => f.name -> f).toMap
