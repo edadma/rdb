@@ -6,9 +6,10 @@ object Main extends App:
   executeSQL(
     """
     CREATE TABLE test (
-      id INT AUTO PRIMARY KEY,
+      id SERIAL,
       name TEXT,
-      value INT
+      value INT,
+      PRIMARY KEY (id)
     );
 
     INSERT INTO test (name, value) VALUES
@@ -29,15 +30,17 @@ object Main extends App:
 //      |-- this is a comment
 //      |
 //      |CREATE TABLE s (
-//      | id UUID AUTO PRIMARY KEY,
+//      | id UUID DEFAULT gen_random_uuid(),
 //      | name TEXT UNIQUE,
-//      | ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+//      | ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+//      | PRIMARY KEY (id)
 //      |);
 //      |
 //      |CREATE TABLE t (
-//      | id UUID AUTO PRIMARY KEY,
+//      | id UUID DEFAULT gen_random_uuid(),
 //      | a TEXT,
-//      | b INT
+//      | b INT,
+//      | PRIMARY KEY (id)
 //      |);
 //      |
 //      |INSERT INTO s (name) VALUES

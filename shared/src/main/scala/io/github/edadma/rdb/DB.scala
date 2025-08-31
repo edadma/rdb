@@ -45,19 +45,22 @@ abstract class DB:
 
 abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
-//  private class TableRow(var deleted: Boolean, val data: Array[Value])
-
   protected val columns       = new ArrayBuffer[ColumnSpec]
   protected val columnMap     = new mutable.HashMap[String, Int]
   private val autoMap         = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
+  private var primaryKey: Option[PrimaryKeySpec] = None
+  private val constraints     = new ArrayBuffer[Spec]
 
   specs foreach {
     case s: ColumnSpec => createColumn(s)
-    case _             =>
+    case pk: PrimaryKeySpec => 
+      primaryKey = Some(pk)
+      constraints += pk
+    case constraint => constraints += constraint
   }
 
-  private val autoSet = columns filter (_.auto) map (_.name) toSet
+  private val autoSet = columns filter (c => c.typ == SerialType || c.typ == BigSerialType || c.typ == UUIDType) map (_.name) toSet
 
   def meta: Metadata = _meta
 
@@ -113,7 +116,10 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
           if s.required && s.default.isEmpty then sys.error(s"bulkInsert: column '$m' is required and has no default")
 
-          if s.pk then sys.error(s"bulkInsert: column '$m' is a required primary key")
+          // Check if this column is part of primary key
+          primaryKey match
+            case Some(pk) if pk.columns.contains(m) => sys.error(s"bulkInsert: column '$m' is part of the primary key and is required")
+            case _ =>
 
           (idx, s.default getOrElse NullValue())
     val autos                      = autoSet intersect missingSet map (c => (c, columnMap(c)))
@@ -157,11 +163,14 @@ trait Spec
 case class ColumnSpec(
     name: String,
     typ: Type,
-    auto: Boolean = false,
     required: Boolean = false,
-    pk: Boolean = false,
     indexed: Boolean = false,
     unique: Boolean = false,
     fk: Option[(String, String)] = None,
     default: Option[Value] = None,
 ) extends Spec
+
+// Table-level constraint specifications
+case class PrimaryKeySpec(columns: Seq[String], name: Option[String] = None) extends Spec
+case class UniqueSpec(columns: Seq[String], name: Option[String] = None) extends Spec  
+case class ForeignKeySpec(columns: Seq[String], referencedTable: String, referencedColumns: Seq[String], name: Option[String] = None) extends Spec

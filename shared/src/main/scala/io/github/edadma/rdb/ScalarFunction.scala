@@ -224,4 +224,6 @@ val scalarFunction: Map[String, ScalarFunction] =
     ScalarFunction("ln", { case Seq(NumberValue(_, n)) => NumberValue(math.log(n.doubleValue)) }, NumberType),
     ScalarFunction("log10", { case Seq(NumberValue(_, n)) => NumberValue(math.log10(n.doubleValue)) }, NumberType),
     ScalarFunction("random", { case Seq() => NumberValue(math.random) }, NumberType),
+    // UUID functions
+    ScalarFunction("gen_random_uuid", { case Seq() => UUIDValue.generate }, UUIDType),
   ).map(f => f.name -> f).toMap

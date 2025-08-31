@@ -54,8 +54,6 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "as",
       "ASC",
       "asc",
-      "AUTO",
-      "auto",
       "BETWEEN",
       "between",
       "BIGINT",
@@ -168,6 +166,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "primary",
       "PROCEDURE",
       "procedure",
+      "SERIAL",
+      "serial",
+      "BIGSERIAL",
+      "bigserial",
       "REFERENCES",
       "references",
       "RETURNING",
@@ -426,7 +428,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val jsonLiteral: P[Expr] = arrayExpression | objectExpression
 
   lazy val application: P[Expr] = positioned(
-    identifier ~ ("(" ~> rep1sep(expression | star, ",") <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
+    identifier ~ ("(" ~> repsep(expression | star, ",") <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
   )
 
   lazy val column: P[ColumnExpr] = positioned(
@@ -510,7 +512,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val tableConstraint: P[TableConstraint] =
-    kw("UNIQUE") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ UniqueConstraint.apply
+    opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
+      constraint(name.map(_.name))
+    }
+
+  lazy val constraintBody: P[Option[String] => TableConstraint] =
+    kw("UNIQUE") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => UniqueConstraint(name, cols) }
+      | kw("PRIMARY") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => PrimaryKeyConstraint(name, cols) }
+      | kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ~ (kw("REFERENCES") ~> identifier) ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { 
+          case cols ~ table ~ refCols => (name: Option[String]) => ForeignKeyConstraint(name, cols, table, refCols) 
+        }
 
   lazy val createTable: P[Command] =
     kw("CREATE") ~> kw("TABLE") ~> identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
@@ -547,6 +558,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     kw("BOOLEAN") ^^^ Left(BooleanType)
       | (kw("INT") | kw("INTEGER")) ^^^ Left(IntegerType)
       | kw("BIGINT") ^^^ Left(BigintType)
+      | kw("SERIAL") ^^^ Left(SerialType)
+      | kw("BIGSERIAL") ^^^ Left(BigSerialType)
       | kw("DOUBLE") ~ opt(kw("PRECISION")) ^^^ Left(DoubleType)
       | kw("NUMERIC") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
       | kw("JSON") ^^^ Left(JSONType)
@@ -556,12 +569,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | identifier ^^ Right.apply
 
   lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ opt(kw("AUTO")) ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("PRIMARY") ~ kw("KEY")) ~ opt(
-      kw("UNIQUE"),
-    ) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")")) ^^ {
-      case c ~ t ~ a ~ n ~ p ~ u ~ d ~ r =>
+    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")")) ^^ {
+      case c ~ t ~ n ~ u ~ d ~ r =>
         val refs = r.map { case table ~ column => (table, column) }
-        ColumnDesc(c, t, a.isDefined, n.isDefined, p.isDefined, u.isDefined, d, refs)
+        ColumnDesc(c, t, n.isDefined, u.isDefined, d, refs)
     }
 
   lazy val alterTable: P[Command] =
@@ -574,6 +585,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case fk ~ ref =>
         AddForeignKeyTableAlteration(fk, ref)
     }
+      | kw("ADD") ~> opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
+        constraint(name.map(_.name)) match
+          case fk: ForeignKeyConstraint => AddForeignKeyConstraintTableAlteration(fk)
+          case other => sys.error(s"Only FOREIGN KEY constraints are supported in ALTER TABLE ADD, got: $other")
+      }
 
   lazy val command: P[Command] =
     query ^^ QueryCommand.apply |

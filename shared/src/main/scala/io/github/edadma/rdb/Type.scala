@@ -39,6 +39,26 @@ case object BigintType extends Type("bigint"):
 
   override def init: Value = ONE
 
+case object SerialType extends Type("serial"):
+  override val isNumber = true
+
+  override def convert(v: Value): Value =
+    v match
+      case n @ NumberValue(DIntType, _) => n
+      case _                            => super.convert(v)
+
+  override def init: Value = ONE
+
+case object BigSerialType extends Type("bigserial"):
+  override val isNumber = true
+
+  override def convert(v: Value): Value =
+    v match
+      case n @ NumberValue(DLongType | DIntType, _) => n
+      case _                                        => super.convert(v)
+
+  override def init: Value = ONE
+
 case object DoubleType extends Type("double"):
   override val isNumber = true
 

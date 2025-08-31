@@ -54,43 +54,44 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
     case CreateTableCommand(id @ Ident(table), columns, constraints) =>
       if db hasTable table then problem(id, s"duplicate table: $table")
 
-      val specs =
-        val names = new mutable.HashSet[String]
+      val names = new mutable.HashSet[String]
+      
+      val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references) =>
+        if names contains name then problem(id, s"duplicate column name: $name")
 
-        columns map { case ColumnDesc(id @ Ident(name), typeDesc, auto, required, pk, unique, default, references) =>
-          if names contains name then problem(id, s"duplicate column name: $name")
+        names += name
 
-          names += name
+        val typ =
+          typeDesc match
+            case Left(primitive)             => primitive
+            case Right(tid @ Ident(defined)) =>
+              db getType defined match
+                case None    => problem(tid, s"type '$defined' is undefined")
+                case Some(t) => t
+        val fkTuple = references.map { case (table, col) => (table.name, col.name) }
 
-          val typ =
-            typeDesc match
-              case Left(primitive)             => primitive
-              case Right(tid @ Ident(defined)) =>
-                db getType defined match
-                  case None    => problem(tid, s"type '$defined' is undefined")
-                  case Some(t) => t
-          val fkTuple = references.map { case (table, col) => (table.name, col.name) }
-
-          ColumnSpec(
-            name,
-            typ,
-            auto,
-            required,
-            pk,
-            false,
-            unique,
-            fkTuple,
-            default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)),
-          )
-        }
-
-      constraints.foreach {
-        case UniqueConstraint(cols) =>
-          // TODO: Store unique constraint on columns: cols.map(_.name)
-          ()
+        ColumnSpec(
+          name,
+          typ,
+          required,
+          false, // indexed
+          unique,
+          fkTuple,
+          default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)),
+        )
       }
 
-      db.createTable(table, specs)
+      val constraintSpecs = constraints map {
+        case PrimaryKeyConstraint(name, cols) =>
+          PrimaryKeySpec(cols.map(_.name), name)
+        case UniqueConstraint(name, cols) =>
+          UniqueSpec(cols.map(_.name), name)  
+        case ForeignKeyConstraint(name, cols, refTable, refCols) =>
+          ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name)
+      }
+
+      val allSpecs = columnSpecs ++ constraintSpecs
+      db.createTable(table, allSpecs)
       CreateTableResult(table)
     case DropTableCommand(id @ Ident(table)) =>
       if (!db.hasTable(table)) problem(id, s"unknown table: $table")

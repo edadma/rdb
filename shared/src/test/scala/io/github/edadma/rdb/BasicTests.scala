@@ -5,12 +5,13 @@ import org.scalatest.matchers.should.Matchers
 
 class BasicTests extends AnyFreeSpec with Matchers with Testing {
 
-  "auto int" in {
+  "serial primary key" in {
     test(
       """
         |CREATE TABLE t (
-        | c1 INT AUTO PRIMARY KEY,
-        | c2 INT
+        | c1 SERIAL,
+        | c2 INT,
+        | PRIMARY KEY (c1)
         |);
         |INSERT INTO t (c2) VALUES (123);
         |INSERT INTO t (c2) VALUES (456);
@@ -21,7 +22,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |List(
         |  CreateTableResult(table = "t"),
         |  InsertResult(
-        |    obj = Map("c1" -> NumberValue(typ = IntType, value = 1)),
+        |    obj = Map("c1" -> NumberValue(typ = SerialType, value = 1)),
         |    table = TableValue(
         |      data = Vector(
         |        Row(
@@ -37,19 +38,19 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |        )
         |      ),
         |      meta = Metadata(
-        |        columns = Vector(ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType))
+        |        columns = Vector(ColumnMetadata(table = Some(value = "t"), name = "c1", typ = SerialType))
         |      )
         |    )
         |  ),
         |  InsertResult(
-        |    obj = Map("c1" -> NumberValue(typ = IntType, value = 2)),
+        |    obj = Map("c1" -> NumberValue(typ = SerialType, value = 2)),
         |    table = TableValue(
         |      data = Vector(
         |        Row(
         |          data = Vector(NumberValue(typ = IntType, value = 2)),
         |          meta = Metadata(
         |            columns = Vector(
-        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = NumberType)
+        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = SerialType)
         |            )
         |          ),
         |          updater = None,
@@ -67,12 +68,12 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |      data = ArraySeq(
         |        Row(
         |          data = ArraySeq(
-        |            NumberValue(typ = IntType, value = 1),
+        |            NumberValue(typ = SerialType, value = 1),
         |            NumberValue(typ = IntType, value = 123)
         |          ),
         |          meta = Metadata(
         |            columns = ArraySeq(
-        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = IntegerType),
+        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = SerialType),
         |              ColumnMetadata(table = Some(value = "t"), name = "c2", typ = IntegerType)
         |            )
         |          ),
@@ -82,12 +83,12 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |        ),
         |        Row(
         |          data = ArraySeq(
-        |            NumberValue(typ = IntType, value = 2),
+        |            NumberValue(typ = SerialType, value = 2),
         |            NumberValue(typ = IntType, value = 456)
         |          ),
         |          meta = Metadata(
         |            columns = ArraySeq(
-        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = IntegerType),
+        |              ColumnMetadata(table = Some(value = "t"), name = "c1", typ = SerialType),
         |              ColumnMetadata(table = Some(value = "t"), name = "c2", typ = IntegerType)
         |            )
         |          ),
@@ -98,7 +99,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |      ),
         |      meta = Metadata(
         |        columns = ArraySeq(
-        |          ColumnMetadata(table = Some(value = "t"), name = "c1", typ = IntegerType),
+        |          ColumnMetadata(table = Some(value = "t"), name = "c1", typ = SerialType),
         |          ColumnMetadata(table = Some(value = "t"), name = "c2", typ = IntegerType)
         |        )
         |      )

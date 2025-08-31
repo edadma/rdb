@@ -1,7 +1,11 @@
 package io.github.edadma.rdb
 
-trait TableConstraint
-case class UniqueConstraint(columns: Seq[Ident]) extends TableConstraint
+trait TableConstraint:
+  def name: Option[String]
+
+case class UniqueConstraint(name: Option[String], columns: Seq[Ident]) extends TableConstraint
+case class PrimaryKeyConstraint(name: Option[String], columns: Seq[Ident]) extends TableConstraint
+case class ForeignKeyConstraint(name: Option[String], columns: Seq[Ident], referencedTable: Ident, referencedColumns: Seq[Ident]) extends TableConstraint
 
 trait Command
 
@@ -19,14 +23,13 @@ case class UpdateSet(col: Ident, value: Expr)
 case class ColumnDesc(
     name: Ident,
     typ: Either[Type, Ident],
-    auto: Boolean,
     required: Boolean,
-    pk: Boolean,
     unique: Boolean,
     default: Option[Expr],
-    references: Option[(Ident, Ident)],
+    references: Option[(Ident, Ident)], // Single column foreign key: (table, column)
 )
 
 trait TableAlteration
 
 case class AddForeignKeyTableAlteration(fk: Ident, ref: Ident) extends TableAlteration
+case class AddForeignKeyConstraintTableAlteration(constraint: ForeignKeyConstraint) extends TableAlteration
