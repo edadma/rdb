@@ -93,10 +93,14 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
       val allSpecs = columnSpecs ++ constraintSpecs
       db.createTable(table, allSpecs)
       CreateTableResult(table)
-    case DropTableCommand(id @ Ident(table)) =>
-      if (!db.hasTable(table)) problem(id, s"unknown table: $table")
-      db.dropTable(table)
-      DropTableResult(table)
+    case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
+      if (!db.hasTable(table)) {
+        if (!ifExists) problem(id, s"unknown table: $table")
+        else DropTableResult(table) // IF EXISTS allows missing table
+      } else {
+        db.dropTable(table)
+        DropTableResult(table)
+      }
     case CreateEnumCommand(id @ Ident(name), labels) =>
       if db hasType name then problem(id, s"duplicate type '$name'")
 
@@ -139,5 +143,47 @@ def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
         count += 1
 
       DeleteResult(count)
-    case AlterTableCommand(table, alter) => AlterTableResult()
+    case DropIndexCommand(id @ Ident(name), ifExists) =>
+      // Index operations not implemented yet
+      if (!ifExists) problem(id, s"indexes not implemented yet")
+      DropIndexResult(name)
+    case DropTypeCommand(id @ Ident(name), ifExists, cascade) =>
+      if (!db.hasType(name)) {
+        if (!ifExists) problem(id, s"unknown type: $name")
+        else DropTypeResult(name)
+      } else {
+        db.dropType(name)
+        DropTypeResult(name)
+      }
+    case AlterTableCommand(id @ Ident(table), alter) =>
+      val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
+      alter match
+        case AddColumnTableAlteration(column) =>
+          // TODO: Implement adding columns
+          problem(id, "ALTER TABLE ADD COLUMN not implemented yet")
+        case DropColumnTableAlteration(col) =>
+          // TODO: Implement dropping columns  
+          problem(id, "ALTER TABLE DROP COLUMN not implemented yet")
+        case AlterColumnTableAlteration(col, modification) =>
+          // TODO: Implement altering columns
+          problem(id, "ALTER TABLE ALTER COLUMN not implemented yet")
+        case AddConstraintTableAlteration(constraint) =>
+          // TODO: Implement adding constraints
+          problem(id, "ALTER TABLE ADD CONSTRAINT not implemented yet")
+        case DropConstraintTableAlteration(name) =>
+          // TODO: Implement dropping constraints
+          problem(id, "ALTER TABLE DROP CONSTRAINT not implemented yet")
+        case RenameTableAlteration(newName) =>
+          // TODO: Implement table renaming
+          problem(id, "ALTER TABLE RENAME TO not implemented yet")
+        case RenameColumnTableAlteration(oldName, newName) =>
+          // TODO: Implement column renaming
+          problem(id, "ALTER TABLE RENAME COLUMN not implemented yet")
+        case AddForeignKeyTableAlteration(fk, ref) =>
+          // Legacy support - TODO: implement
+          problem(id, "ALTER TABLE ADD FOREIGN KEY not implemented yet")
+        case AddForeignKeyConstraintTableAlteration(constraint) =>
+          // Legacy support - TODO: implement
+          problem(id, "ALTER TABLE ADD CONSTRAINT (FK) not implemented yet")
+      AlterTableResult()
   }

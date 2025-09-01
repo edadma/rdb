@@ -6,7 +6,7 @@ def problem(p: Positional, msg: String): Nothing = problem(p.pos, msg)
 
 def problem(pos: Position, msg: String): Nothing =
   printError(pos, msg)
-  sys.error("error executing query or command")
+  sys.error(msg)
 
 def printError(pos: Position, msg: String): Unit =
   if (pos eq null)

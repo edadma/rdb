@@ -62,6 +62,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "boolean",
       "BY",
       "by",
+      "CASCADE",
+      "cascade",
       "CASE",
       "case",
       "CHECK",
@@ -112,7 +114,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "group",
       "HAVING",
       "having",
-      "ILIKE",
+      "IF",
+      "if",
+      "ILIKE", 
       "ilike",
       "IN",
       "in",
@@ -172,6 +176,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "bigserial",
       "REFERENCES",
       "references",
+      "RENAME",
+      "rename", 
+      "RESTRICT", 
+      "restrict",
       "RETURNING",
       "returning",
       "SELECT",
@@ -184,6 +192,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "table",
       "TEXT",
       "text",
+      "TO",
+      "to",
       "THEN",
       "then",
       "TIME",
@@ -534,9 +544,28 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val dropTable: P[Command] =
-    kw("DROP") ~> kw("TABLE") ~> identifier ^^ { t =>
-      DropTableCommand(t)
-    }
+    (kw("DROP") ~> kw("TABLE") ~> kw("IF") ~> kw("EXISTS") ~> identifier ^^ { t => 
+      DropTableCommand(t, true, false) 
+    }) |
+    (kw("DROP") ~> kw("TABLE") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
+      case t ~ cascade => DropTableCommand(t, false, cascade.contains("CASCADE"))
+    })
+
+  lazy val dropIndex: P[Command] =
+    (kw("DROP") ~> kw("INDEX") ~> kw("IF") ~> kw("EXISTS") ~> identifier ^^ { name => 
+      DropIndexCommand(name, true) 
+    }) |
+    (kw("DROP") ~> kw("INDEX") ~> identifier ^^ { name => 
+      DropIndexCommand(name, false) 
+    })
+
+  lazy val dropType: P[Command] =
+    (kw("DROP") ~> kw("TYPE") ~> kw("IF") ~> kw("EXISTS") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
+      case name ~ cascade => DropTypeCommand(name, true, cascade.contains("CASCADE"))
+    }) |
+    (kw("DROP") ~> kw("TYPE") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
+      case name ~ cascade => DropTypeCommand(name, false, cascade.contains("CASCADE"))
+    })
 
   lazy val createEnum: P[Seq[String]] = kw("ENUM") ~> ("(" ~> rep1sep(stringLit, ",") <~ ")")
 
@@ -583,14 +612,55 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val tableAlteration: P[TableAlteration] =
-    kw("ADD") ~> kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> identifier <~ ")") ~ (kw("REFERENCES") ~> identifier) ^^ {
-      case fk ~ ref =>
-        AddForeignKeyTableAlteration(fk, ref)
+    // RENAME TO (for table) - must come before ADD to avoid conflicts
+    kw("RENAME") ~> kw("TO") ~> identifier ^^ { newName =>
+      RenameTableAlteration(newName)
     }
-      | kw("ADD") ~> opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
-        constraint(name.map(_.name)) match
-          case fk: ForeignKeyConstraint => AddForeignKeyConstraintTableAlteration(fk)
-          case other => sys.error(s"Only FOREIGN KEY constraints are supported in ALTER TABLE ADD, got: $other")
+    // RENAME COLUMN - must come before ADD to avoid conflicts
+    | kw("RENAME") ~> opt(kw("COLUMN")) ~> identifier ~ kw("TO") ~ identifier ^^ { case oldName ~ _ ~ newName =>
+        RenameColumnTableAlteration(oldName, newName)
+      }
+    // ADD COLUMN
+    | kw("ADD") ~> opt(kw("COLUMN")) ~> columnDesc ^^ { col =>
+        AddColumnTableAlteration(col)
+      }
+    // ADD CONSTRAINT  
+    | kw("ADD") ~> opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
+        AddConstraintTableAlteration(constraint(name.map(_.name)))
+      }
+    // Legacy - ADD FOREIGN KEY (backward compatibility)
+    | kw("ADD") ~> kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> identifier <~ ")") ~ (kw("REFERENCES") ~> identifier) ^^ {
+        case fk ~ ref =>
+          AddForeignKeyTableAlteration(fk, ref)
+      }
+    // DROP COLUMN
+    | kw("DROP") ~> opt(kw("COLUMN")) ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { case col ~ _ =>
+        DropColumnTableAlteration(col)
+      }
+    // DROP CONSTRAINT
+    | kw("DROP") ~> kw("CONSTRAINT") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { case name ~ _ =>
+        DropConstraintTableAlteration(name)
+      }
+    // ALTER COLUMN
+    | kw("ALTER") ~> opt(kw("COLUMN")) ~> identifier ~ columnModification ^^ { case col ~ mod =>
+        AlterColumnTableAlteration(col, mod)
+      }
+
+  lazy val columnModification: P[ColumnModification] =
+    kw("TYPE") ~> typ ^^ { dataType =>
+      SetDataTypeColumnModification(dataType)
+    }
+    | kw("SET") ~> kw("NOT") ~> kw("NULL") ^^ { _ =>
+        SetNotNullColumnModification()
+      }
+    | kw("DROP") ~> kw("NOT") ~> kw("NULL") ^^ { _ =>
+        DropNotNullColumnModification()
+      }
+    | kw("SET") ~> kw("DEFAULT") ~> expression ^^ { expr =>
+        SetDefaultColumnModification(expr)
+      }
+    | kw("DROP") ~> kw("DEFAULT") ^^ { _ =>
+        DropDefaultColumnModification()
       }
 
   lazy val command: P[Command] =
@@ -598,6 +668,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       insert |
       createTable |
       dropTable |
+      dropIndex |
+      dropType |
       createType |
       update |
       delete |

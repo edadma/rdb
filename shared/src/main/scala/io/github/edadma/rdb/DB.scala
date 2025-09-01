@@ -37,6 +37,8 @@ abstract class DB:
 
     types(name) = addEnum(name, labels)
 
+  def dropType(name: String): Unit = types.remove(name)
+
   infix def hasType(name: String): Boolean = types contains name
 
   infix def getType(name: String): Option[Type] = types get name
