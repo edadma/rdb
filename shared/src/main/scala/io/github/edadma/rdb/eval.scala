@@ -7,29 +7,14 @@ import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.language.postfixOps
 
-//import pprint.*
-
-def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
+def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
-    case CastExpr(expr, targetType)    => targetType.convert(eval(expr, ctx, mode))
-    case AliasExpr(expr, _)            => eval(expr, ctx, mode)
+    case CastExpr(expr, targetType)    => targetType.convert(eval(expr, ctx))
+    case AliasExpr(expr, _)            => eval(expr, ctx)
     case VariableInstanceExpr(v)       => v.value
-    case TableConstructorExpr(expr)    => aleval(expr, ctx, mode)
-    case AggregateFunctionExpr(f, arg) =>
-      mode match
-        case AggregateMode.Return     => f.result
-        case AggregateMode.Accumulate =>
-          f.acc(eval(arg, ctx, mode))
-          NULL
-        case AggregateMode.AccumulateReturn =>
-          f.acc(eval(arg, ctx, mode))
-
-          val res = f.result
-
-          f.init()
-          res
-        case AggregateMode.Disallow => sys.error(s"aggregates not allowed here: $expr")
-    case ScalarFunctionExpr(f, args)        => f.func(args map (e => eval(e, ctx, mode)))
+    case TableConstructorExpr(expr)    => aleval(expr, ctx)
+    case AggregateFunctionExpr(_, _)   => sys.error(s"aggregate function not resolved by rewriter: $expr")
+    case ScalarFunctionExpr(f, args)        => f.func(args map (e => eval(e, ctx)))
     case ProcessOperator(proc)              => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case e @ NumberExpr(n: Int)             => NumberValue(IntType, n).setPos(e.pos)
     case e @ NumberExpr(n: Double)          => NumberValue(DoubleType, n).setPos(e.pos)
@@ -53,39 +38,39 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         case None      => problem(c, s"'$lookupName' not found")
         case Some(res) => res
     case InSeqExpr(value, op, exprs) =>
-      val v = eval(value, ctx, mode)
+      val v = eval(value, ctx)
 
-      BooleanValue(op.contains("NOT") ^ (exprs exists (e => eval(e, ctx, mode) == v)))
+      BooleanValue(op.contains("NOT") ^ (exprs exists (e => eval(e, ctx) == v)))
     case InQueryExpr(value, op, query) =>
-      val v   = eval(value, ctx, mode)
-      val res = teval(query, ctx, mode)
+      val v   = eval(value, ctx)
+      val res = teval(query, ctx)
 
       if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
 
       BooleanValue(op.contains("NOT") ^ (res.data exists (_.data.head == v)))
     case SubqueryExpr(query) =>
-      val res = teval(query, ctx, mode)
+      val res = teval(query, ctx)
 
       if res.isEmpty then problem(query, "sub-query returned empty result")
       else if res.length > 1 then problem(query, "sub-query returned more than one row")
       else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row of one column")
 
       res.data.head.data.head
-    case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
-    case UnaryExpr("-", expr)                              => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
-    case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx, mode))
+    case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx).nonEmpty)
+    case UnaryExpr("-", expr)                              => BasicDAL.negate(neval(expr, ctx), NumberValue.from)
+    case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx))
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
-      BooleanValue(op.contains("NOT") ^ eval(expr, ctx, mode).isNull)
+      BooleanValue(op.contains("NOT") ^ eval(expr, ctx).isNull)
     case BinaryExpr(left, "||", right) =>
-      val l = seval(left, ctx, mode)
-      val r = seval(right, ctx, mode)
+      val l = seval(left, ctx)
+      val r = seval(right, ctx)
 
       TextValue(l ++ r)
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
       val or = op == "OR"
 
-      if or ^ !beval(left, ctx, mode) then BooleanValue(or)
-      else BooleanValue(beval(right, ctx, mode))
+      if or ^ !beval(left, ctx) then BooleanValue(or)
+      else BooleanValue(beval(right, ctx))
     case BinaryExpr(left, op @ ("LIKE" | "ILIKE" | "NOT LIKE" | "NOT ILIKE"), right) =>
       def like(s: String, pattern: String, casesensitive: Boolean = true): Boolean =
         var sp      = 0
@@ -139,14 +124,14 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
         true
 
-      val s   = seval(left, ctx, mode)
-      val p   = seval(right, ctx, mode)
+      val s   = seval(left, ctx)
+      val p   = seval(right, ctx)
       val res = like(s, p, !op.contains("ILIKE"))
 
       BooleanValue(op.contains("NOT") ^ res)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
-      val l = neval(left, ctx, mode)
-      val r = neval(right, ctx, mode)
+      val l = neval(left, ctx)
+      val r = neval(right, ctx)
 
       op match
         case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
@@ -154,8 +139,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
         case "*" => BasicDAL.compute(TIMES, l, r, NumberValue.from)
         case "/" => BasicDAL.compute(DIVIDE, l, r, NumberValue.from)
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
-      val l = eval(left, ctx, mode)
-      val r = eval(right, ctx, mode)
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
 
       BooleanValue(
         op match
@@ -165,8 +150,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
           case ">=" => l >= r,
       )
     case BinaryExpr(left, op @ ("=" | "!="), right) =>
-      val l = eval(left, ctx, mode)
-      val r = eval(right, ctx, mode)
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
 
       BooleanValue(
         op match
@@ -179,30 +164,30 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       ObjectValue(properties map { case (id @ Ident(k), v) =>
         if keys(k) then problem(id, s"duplicate property key: $k")
 
-        k -> eval(v, ctx, mode)
+        k -> eval(v, ctx)
       })
-    case ArrayExpr(elems)     => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
+    case ArrayExpr(elems)     => ArrayValue(elems map (e => eval(e, ctx)) toIndexedSeq)
     case CaseExpr(whens, els) =>
-      whens find { case When(when, _) => beval(when, ctx, mode) } match
+      whens find { case When(when, _) => beval(when, ctx) } match
         case None =>
           els match
             case None    => NullValue()
-            case Some(e) => eval(e, ctx, mode)
-        case Some(When(_, expr)) => eval(expr, ctx, mode)
+            case Some(e) => eval(e, ctx)
+        case Some(When(_, expr)) => eval(expr, ctx)
 
-def beval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Boolean =
-  eval(expr, ctx, mode).asInstanceOf[BooleanValue].b
+def beval(expr: Expr, ctx: Seq[Row]): Boolean =
+  eval(expr, ctx).asInstanceOf[BooleanValue].b
 
-def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue =
-  val v = eval(expr, ctx, mode)
+def neval(expr: Expr, ctx: Seq[Row]): NumberValue =
+  val v = eval(expr, ctx)
 
   if v.vtyp != NumberType then problem(expr, "a number was expected")
 
   v.asInstanceOf[NumberValue]
 
-def seval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): String = eval(expr, ctx, mode).string
+def seval(expr: Expr, ctx: Seq[Row]): String = eval(expr, ctx).string
 
-def teval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): TableValue = eval(expr, ctx, mode).asInstanceOf[TableValue]
+def teval(expr: Expr, ctx: Seq[Row]): TableValue = eval(expr, ctx).asInstanceOf[TableValue]
 
-def aleval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): ArrayLikeValue =
-  eval(expr, ctx, mode).asInstanceOf[ArrayLikeValue]
+def aleval(expr: Expr, ctx: Seq[Row]): ArrayLikeValue =
+  eval(expr, ctx).asInstanceOf[ArrayLikeValue]

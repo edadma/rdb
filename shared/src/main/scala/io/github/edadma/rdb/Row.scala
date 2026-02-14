@@ -2,15 +2,11 @@ package io.github.edadma.rdb
 
 import scala.language.postfixOps
 
-enum AggregateMode:
-  case Return, Accumulate, AccumulateReturn, Disallow
-
 case class Row(
     data: IndexedSeq[Value],
     meta: Metadata,
     updater: Option[Seq[(String, Value)] => Unit],
     deleter: Option[() => Unit],
-    mode: AggregateMode = AggregateMode.Return,
 ) {
   // Get value by column name
   def apply(name: String): Value = {

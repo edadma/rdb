@@ -117,7 +117,7 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "aggregates handle empty results" in {
-      val result = test(
+      val table = query(
         """
           |CREATE TABLE empty_test (
           | id SERIAL,
@@ -127,11 +127,15 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT MIN(value), MAX(value), AVG(value), COUNT(value) FROM empty_test;
           |""".trim.stripMargin
       )
-      
-      // For empty table, the query returns no rows (data = ArraySeq()), 
-      // but metadata shows the expected column structure
-      result should include("data = ArraySeq()") // No rows returned for empty table
-      result should include("ColumnMetadata") // But metadata structure is preserved
+
+      // Standard SQL: aggregates on empty table return one row
+      // COUNT→0, MIN/MAX/AVG→NULL
+      table.data.length shouldBe 1
+      val row = table.data.head.data
+      row(0).isNull shouldBe true  // MIN
+      row(1).isNull shouldBe true  // MAX
+      row(2).isNull shouldBe true  // AVG
+      row(3) shouldBe NumberValue(DIntType, 0)  // COUNT
     }
   }
 

@@ -17,4 +17,7 @@ case class LeftJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
 case class OffsetOperator(rel: Expr, offset: Int) extends Operator
 case class LimitOperator(rel: Expr, limit: Int) extends Operator
 
+case class AggregateSpec(name: String, func: AggregateFunctionInstance, arg: Expr, typ: Type)
+case class AggregateOperator(rel: Expr, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Operator
+
 case class ProcessOperator(proc: Process) extends Operator
