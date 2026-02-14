@@ -2,8 +2,15 @@ package io.github.edadma.rdb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import java.io.{ByteArrayOutputStream, PrintStream}
 
 class DDLTests extends AnyFreeSpec with Matchers:
+
+  /** Suppresses stderr output during block execution (for expected error messages). */
+  private def suppressStderr[A](block: => A): A =
+    val devNull = new PrintStream(new ByteArrayOutputStream())
+    val oldErr = Console.err
+    Console.withErr(devNull)(block)
 
   private def test(sql: String): String =
     given DB = new MemoryDB
@@ -13,9 +20,19 @@ class DDLTests extends AnyFreeSpec with Matchers:
       case e: RuntimeException => e.getMessage
     }
 
+  private def testExpectingError(sql: String): String =
+    given DB = new MemoryDB
+    suppressStderr {
+      try {
+        executeSQL(sql).toString
+      } catch {
+        case e: RuntimeException => e.getMessage
+      }
+    }
+
   private def testExpectingException(sql: String): Unit =
     given DB = new MemoryDB
-    executeSQL(sql)
+    suppressStderr { executeSQL(sql) }
 
   private def query(sql: String): TableValue =
     given DB = new MemoryDB
@@ -48,7 +65,6 @@ class DDLTests extends AnyFreeSpec with Matchers:
       )
 
       table.data.length shouldBe 2
-      // Existing rows should have NULL for the new column
       table.data(0).data(2).isNull shouldBe true
       table.data(1).data(2).isNull shouldBe true
     }
@@ -67,6 +83,22 @@ class DDLTests extends AnyFreeSpec with Matchers:
       table.data.length shouldBe 2
       table.data(0).data(1) shouldBe TextValue("active")
       table.data(1).data(1) shouldBe TextValue("active")
+    }
+
+    "insert uses new column after add" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER);
+          |ALTER TABLE t ADD COLUMN name TEXT;
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |SELECT id, name FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(1) shouldBe TextValue("Alice")
+      table.data(1).data(1) shouldBe TextValue("Bob")
     }
 
     "fails when adding duplicate column" in {
@@ -115,6 +147,17 @@ class DDLTests extends AnyFreeSpec with Matchers:
       table.data(0).data(1) shouldBe NumberValue(10)
       table.data(1).data(0) shouldBe NumberValue(2)
       table.data(1).data(1) shouldBe NumberValue(20)
+    }
+
+    "fails when dropping primary key column" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+            |ALTER TABLE t DROP COLUMN id;
+            |""".trim.stripMargin
+        )
+      }
     }
 
     "fails when dropping non-existent column" in {
@@ -223,7 +266,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
   }
 
   "ALTER TABLE ADD/DROP CONSTRAINT" - {
-    "adds constraint" in {
+    "adds unique constraint" in {
       val result = test(
         """
           |CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));
@@ -232,6 +275,40 @@ class DDLTests extends AnyFreeSpec with Matchers:
       )
 
       result should include("AlterTableResult")
+    }
+
+    "adds primary key constraint" in {
+      val result = test(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |ALTER TABLE t ADD CONSTRAINT pk_t PRIMARY KEY (id);
+          |""".trim.stripMargin
+      )
+
+      result should include("AlterTableResult")
+    }
+
+    "adds foreign key constraint" in {
+      val result = test(
+        """
+          |CREATE TABLE parents (id INTEGER, PRIMARY KEY (id));
+          |CREATE TABLE children (id INTEGER, parent_id INTEGER);
+          |ALTER TABLE children ADD CONSTRAINT fk_parent FOREIGN KEY (parent_id) REFERENCES parents (id);
+          |""".trim.stripMargin
+      )
+
+      result should include("AlterTableResult")
+    }
+
+    "fails adding second primary key" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, PRIMARY KEY (id));
+            |ALTER TABLE t ADD CONSTRAINT pk2 PRIMARY KEY (id);
+            |""".trim.stripMargin
+        )
+      }
     }
 
     "drops constraint" in {
@@ -329,6 +406,55 @@ class DDLTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "Multiple sequential ALTER TABLE operations" - {
+    "add column then drop it" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER);
+          |INSERT INTO t (id) VALUES (1);
+          |ALTER TABLE t ADD COLUMN temp TEXT DEFAULT 'x';
+          |ALTER TABLE t DROP COLUMN temp;
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.meta.width shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+
+    "rename table then rename column then query" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |ALTER TABLE t RENAME TO t2;
+          |ALTER TABLE t2 RENAME COLUMN name TO label;
+          |SELECT id, label FROM t2;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(0).data(1) shouldBe TextValue("Alice")
+    }
+
+    "add column then alter its type" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER);
+          |INSERT INTO t (id) VALUES (1);
+          |ALTER TABLE t ADD COLUMN value INTEGER DEFAULT 42;
+          |ALTER TABLE t ALTER COLUMN value TYPE TEXT;
+          |SELECT id, value FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe TextValue("42")
+    }
+  }
+
   "DROP commands" - {
     "parses DROP TABLE syntax" in {
       val result = test(
@@ -365,7 +491,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
     }
 
     "parses DROP INDEX syntax" in {
-      val result = test(
+      val result = testExpectingError(
         """
           |DROP INDEX test_index;
           |""".trim.stripMargin

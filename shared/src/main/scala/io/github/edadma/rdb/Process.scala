@@ -3,7 +3,6 @@ package io.github.edadma.rdb
 import io.github.edadma.dal.BasicDAL
 
 import scala.language.postfixOps
-//import pprint.pprintln
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
@@ -20,42 +19,61 @@ case object SingleProcess extends Process:
   val meta: Metadata = Metadata(Vector.empty)
 
   def iterator(ctx: Seq[Row]): RowIterator = Iterator(
-    Row(Vector.empty, meta, None, None, AggregateMode.AccumulateReturn),
+    Row(Vector.empty, meta, None, None),
   )
 
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx, AggregateMode.Disallow))
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
 case class HavingProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = 
-    input.iterator(ctx).filter(row => eval(cond, row +: ctx, AggregateMode.Return).asInstanceOf[BooleanValue].b)
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
-case class UngroupedProcess(input: Process, column: Boolean) extends Process:
-  val meta: Metadata = input.meta
+case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Process:
+  val meta: Metadata =
+    val aggColumns = aggregates.map(spec => ColumnMetadata(None, spec.name, spec.typ))
+    Metadata(input.meta.columns ++ aggColumns)
 
   def iterator(ctx: Seq[Row]): RowIterator =
-    val rows = input.iterator(ctx) to ArrayBuffer // todo: do this without buffering table
+    val rows = input.iterator(ctx).toVector
 
-    if rows.isEmpty then
-      // Handle empty result set - return empty iterator
-      Iterator.empty
-    else if column then
-      rows
-        .map(_.copy(mode = AggregateMode.Accumulate))
-        .iterator ++ rows.map(_.copy(mode = AggregateMode.Return)).iterator
+    if groupBy.isEmpty then
+      // Ungrouped aggregate: treat entire input as one group
+      for spec <- aggregates do spec.func.init()
+
+      for row <- rows do
+        val rowCtx = row +: ctx
+        for spec <- aggregates do spec.func.acc(eval(spec.arg, rowCtx))
+
+      val aggValues = aggregates.map(_.func.result).toVector
+      // Even if rows is empty, emit one row (COUNT→0, SUM→0, etc.)
+      val baseData = if rows.isEmpty then Vector.fill(input.meta.width)(NULL) else rows.last.data
+      Iterator(Row(baseData ++ aggValues, meta, None, None))
     else
-      for (i <- 0 until (rows.length - 1))
-        rows(i) = rows(i).copy(mode = AggregateMode.Accumulate)
+      // Grouped aggregate
+      val grouped = mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]()
 
-      rows(rows.length - 1) = rows(rows.length - 1).copy(mode = AggregateMode.AccumulateReturn)
-      rows.iterator
+      for row <- rows do
+        val key = groupBy.map(e => eval(e, row +: ctx))
+        grouped.getOrElseUpdate(key, ArrayBuffer.empty) += row
 
-case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: Seq[Metadata]*/ ) extends Process:
-  private val ctx = Seq(input.meta) // input.meta +: metactx
+      grouped.iterator.map { case (_, group) =>
+        for spec <- aggregates do spec.func.init()
+
+        for row <- group do
+          val rowCtx = row +: ctx
+          for spec <- aggregates do spec.func.acc(eval(spec.arg, rowCtx))
+
+        val aggValues = aggregates.map(_.func.result).toVector
+        Row(group.last.data ++ aggValues, meta, None, None)
+      }
+
+case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Process:
+  private val ctx = Seq(input.meta)
 
   @tailrec
   private def lookup(name: String, ctx: Seq[Metadata]): Option[(Type, Option[String])] =
@@ -81,14 +99,9 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr] /*, metactx: 
   def iterator(ctx: Seq[Row]): RowIterator =
     input
       .iterator(ctx)
-      .flatMap(row =>
-        val projected =
-          fields
-            .map(f => eval(f, row +: ctx, row.mode))
-
-        row.mode match
-          case AggregateMode.Return | AggregateMode.AccumulateReturn => Iterator(Row(projected, meta, None, None, row.mode))
-          case _                                                     => Iterator.empty,
+      .map(row =>
+        val projected = fields.map(f => eval(f, row +: ctx))
+        Row(projected, meta, None, None),
       )
 
 case class AliasProcess(input: Process, alias: String) extends Process:
@@ -100,41 +113,6 @@ case class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
-
-case class GroupProcess(input: Process, by: Seq[Expr]) extends Process:
-  val meta: Metadata = input.meta
-
-  def iterator(ctx: Seq[Row]): RowIterator =
-    val data   = input.iterator(ctx) to mutable.ArraySeq
-    val groups = (data groupBy (row => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))) values) toSeq
-
-    for (g <- groups)
-      for (i <- 0 until (g.length - 1))
-        g(i) = g(i).copy(mode = AggregateMode.Accumulate)
-
-      g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
-
-    Iterator.concat(groups*)
-
-//    val disc = (row: Row) => by map (f => eval(f, row +: ctx, AggregateMode.Disallow))
-//    val groupsMap = new mutable.LinkedHashMap[Seq[Value], ArrayBuffer[Row]]
-//
-//    for (r <- input.iterator(ctx))
-//      val d = disc(r)
-//
-//      groupsMap get d match
-//        case None    => groupsMap(d) = ArrayBuffer(r)
-//        case Some(g) => g += r
-//
-//    val groups = groupsMap.values.toSeq
-//
-//    for (g <- groups)
-//      for (i <- 0 until (g.length - 1))
-//        g(i) = g(i).copy(mode = AggregateMode.Accumulate)
-//
-//      g(g.length - 1) = g.last.copy(mode = AggregateMode.AccumulateReturn)
-//
-//    Iterator.concat(groups: _*)
 
 object Nulls:
   val first: Ordering[Value] =
@@ -179,7 +157,7 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
           case (true, true)   => Nulls.first
       }
     val ordering              = new SeqOrdering(orderings)
-    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(using ordering)
+    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx)))(using ordering)
 
     sorted.iterator
 
@@ -208,7 +186,7 @@ case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
   def iterator(ctx: Seq[Row]): RowIterator =
     input1.iterator(ctx).flatMap { x =>
       val matches =
-        input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta, None, None)) filter (row => beval(cond, row +: ctx, AggregateMode.Disallow))
+        input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta, None, None)) filter (row => beval(cond, row +: ctx))
 
       if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta, None, None))
       else matches

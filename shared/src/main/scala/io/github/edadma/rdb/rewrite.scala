@@ -1,6 +1,70 @@
 package io.github.edadma.rdb
 
-//import pprint.*
+import scala.collection.mutable
+
+class AggregateCollector:
+  private val specs = mutable.ArrayBuffer[AggregateSpec]()
+  private val seen = mutable.Map[String, String]() // canonical key → column name
+  private var counter = 0
+
+  private def canonicalKey(funcName: String, arg: Expr): String =
+    s"$funcName(${arg.toString})"
+
+  def collect(expr: Expr): Expr =
+    expr match
+      case AggregateFunctionExpr(f, arg) =>
+        val key = canonicalKey(f.name, arg)
+        val colName = seen.getOrElseUpdate(key, {
+          counter += 1
+          val name = s"_agg_$counter"
+          specs += AggregateSpec(name, f, arg, expr.typ.asInstanceOf[Type])
+          name
+        })
+        ColumnExpr(None, Ident(colName)) setType expr.typ
+      case AliasExpr(inner, alias)       => AliasExpr(collect(inner), alias)
+      case CastExpr(inner, t)            => CastExpr(collect(inner), t) setType expr.typ
+      case UnaryExpr(op, inner)          => UnaryExpr(op, collect(inner)) setType expr.typ
+      case BinaryExpr(l, op, r)          => BinaryExpr(collect(l), op, collect(r)) setType expr.typ
+      case ScalarFunctionExpr(f, args)   => ScalarFunctionExpr(f, args.map(collect))
+      case CaseExpr(whens, els) =>
+        CaseExpr(
+          whens.map { case When(w, e) => When(collect(w), collect(e)) },
+          els.map(collect),
+        )
+      case _ => expr
+
+  def result: Seq[AggregateSpec] = specs.toSeq
+
+  def hasAggregates: Boolean = specs.nonEmpty
+
+def aggregate(expr: Expr): Boolean =
+  expr match
+    case _: AggregateFunctionExpr    => true
+    case AliasExpr(expr, _)          => aggregate(expr)
+    case CastExpr(expr, _)           => aggregate(expr)
+    case ScalarFunctionExpr(_, args) => args exists aggregate
+    case UnaryExpr(_, expr)          => aggregate(expr)
+    case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
+    case CaseExpr(whens, els) =>
+      whens.exists { case When(w, e) => aggregate(w) || aggregate(e) } ||
+        els.exists(aggregate)
+    case _                           => false
+
+def resolveAliases(expr: Expr, aliases: Map[String, Expr]): Expr =
+  expr match
+    case ColumnExpr(None, Ident(name)) =>
+      aliases.get(name) match
+        case Some(underlying) => underlying
+        case None             => expr
+    case BinaryExpr(l, op, r) =>
+      BinaryExpr(resolveAliases(l, aliases), op, resolveAliases(r, aliases)) setType expr.typ
+    case UnaryExpr(op, e) =>
+      UnaryExpr(op, resolveAliases(e, aliases)) setType expr.typ
+    case ScalarFunctionExpr(f, args) =>
+      ScalarFunctionExpr(f, args.map(a => resolveAliases(a, aliases)))
+    case CastExpr(e, t) =>
+      CastExpr(resolveAliases(e, aliases), t) setType expr.typ
+    case _ => expr
 
 def rewrite(expr: Expr)(using db: DB): Expr =
   expr match
@@ -37,8 +101,6 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val l = rewrite(left)
       val r = rewrite(right)
 
-//      if (l.typ != r.typ) sys.error(s"type mismatch: ${l.typ}, ${r.typ}") // todo: rewrite needs context to determine types
-
       BinaryExpr(l, op, r) setType l.typ
     case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
@@ -47,8 +109,13 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val l = rewrite(lower)
       val r = rewrite(upper)
 
-      (if op == "BETWEEN" then BinaryExpr(BinaryExpr(lower, "<=", value), "AND", BinaryExpr(value, "<=", upper))
-       else BinaryExpr(BinaryExpr(value, "<", lower), "OR", BinaryExpr(value, ">", upper))) setType BooleanType
+      (if op == "BETWEEN" then BinaryExpr(lower, "<=", value) setType BooleanType
+       else BinaryExpr(value, "<", lower) setType BooleanType) match
+        case leftCond =>
+          (if op == "BETWEEN" then BinaryExpr(value, "<=", upper) setType BooleanType
+           else BinaryExpr(value, ">", upper) setType BooleanType) match
+            case rightCond =>
+              BinaryExpr(leftCond, if op == "BETWEEN" then "AND" else "OR", rightCond) setType BooleanType
     case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit) =>
       if where.isDefined then problem(where.get, "WHERE clause not allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
@@ -71,44 +138,67 @@ def rewrite(expr: Expr)(using db: DB): Expr =
         where match
           case Some(cond) => SelectOperator(r, rewrite(cond))
           case None       => r
-      val r2 =
-        groupBy match
-          case None     => r1
-          case Some(es) => GroupOperator(r1, es map rewrite)
+
       val rewrittenExprs = exprs map rewrite
       val isGrouped = groupBy.isDefined || (rewrittenExprs exists aggregate)
 
       val r_ordered =
         if isGrouped then
-          // Grouped path: PROJECT → HAVING → ORDER BY (resolved against projected columns)
+          // Build alias map for resolving HAVING/ORDER BY references
+          val aliasMap: Map[String, Expr] = rewrittenExprs.collect {
+            case AliasExpr(underlying, Ident(name)) => name -> underlying
+          }.toMap
+
+          // Create collector and collect aggregates from SELECT exprs
+          val collector = new AggregateCollector
+
+          val collectedExprs = rewrittenExprs.map(collector.collect)
+
+          // Collect aggregates from HAVING (resolve aliases first)
+          val collectedHaving = having.map { cond =>
+            val rewritten = rewrite(cond)
+            val resolved = resolveAliases(rewritten, aliasMap)
+            collector.collect(resolved)
+          }
+
+          // Collect aggregates from ORDER BY (resolve aliases first)
+          val collectedOrderBy = orderBy.map { os =>
+            os.map { case OrderBy(f, d, n) =>
+              val rewritten = rewrite(f)
+              val resolved = resolveAliases(rewritten, aliasMap)
+              OrderBy(collector.collect(resolved), d, n)
+            }
+          }
+
+          val groupByExprs = groupBy.map(_.map(rewrite)).getOrElse(Nil)
+
+          // Build: source → AggregateOperator → HAVING → ORDER BY → PROJECT
+          val r2 = AggregateOperator(r1, groupByExprs, collector.result)
+          val r3 =
+            collectedHaving match
+              case Some(cond) => HavingOperator(r2, cond)
+              case None       => r2
+          val r4 =
+            collectedOrderBy match
+              case Some(os) => SortOperator(r3, os)
+              case None     => r3
+          exprs match
+            case Seq(StarExpr()) => r4
+            case _               => ProjectOperator(r4, collectedExprs)
+        else
+          // Non-grouped path: ORDER BY → PROJECT
+          val r2 =
+            orderBy match
+              case None     => r1
+              case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
           val r3 =
             exprs match
               case Seq(StarExpr()) => r2
               case _               => ProjectOperator(r2, rewrittenExprs)
-          val r3h =
-            having match
-              case Some(cond) => HavingOperator(r3, resolveHaving(rewrite(cond), rewrittenExprs))
-              case None       => r3
-          orderBy match
-            case None => r3h
-            case Some(os) =>
-              val resolved = os map { case OrderBy(f, d, n) =>
-                OrderBy(resolveOrderBy(rewrite(f), rewrittenExprs), d, n)
-              }
-              SortOperator(r3h, resolved)
-        else
-          // Non-grouped path: ORDER BY → PROJECT (sort can access all source columns)
-          val r3 =
-            orderBy match
-              case None     => r2
-              case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
-          val r4 =
-            exprs match
-              case Seq(StarExpr()) => r3
-              case _               => ProjectOperator(r3, rewrittenExprs)
           having match
-            case Some(cond) => HavingOperator(r4, rewrite(cond))
-            case None       => r4
+            case Some(cond) => HavingOperator(r3, rewrite(cond))
+            case None       => r3
+
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
@@ -127,7 +217,8 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       rewrite(r6)
 
     case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
-    case GroupOperator(rel, by)            => ProcessOperator(GroupProcess(procRewrite(rel), by))
+    case AggregateOperator(rel, groupBy, aggregates) =>
+      ProcessOperator(AggregateProcess(procRewrite(rel), groupBy, aggregates))
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case InnerJoinOperator(rel1, rel2, on) =>
@@ -141,81 +232,13 @@ def rewrite(expr: Expr)(using db: DB): Expr =
         case None    => problem(id, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
-      val aggregates      = rewritten_projs exists aggregate
-      val columns         = rewritten_projs exists column
       val rewritten_proc  = procRewrite(rel)
 
-      ProcessOperator(
-        ProjectProcess(
-          if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
-          else rewritten_proc,
-          rewritten_projs,
-        ),
-      )
+      ProcessOperator(ProjectProcess(rewritten_proc, rewritten_projs))
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     case HavingOperator(rel, cond) => ProcessOperator(HavingProcess(procRewrite(rel), rewrite(cond)))
     // todo: ColumnExpr, VariableExpr
     case _ => expr
 
-def aggregate(expr: Expr): Boolean =
-  expr match
-    case _: AggregateFunctionExpr    => true
-    case AliasExpr(expr, _)          => aggregate(expr)
-    case CastExpr(expr, _)           => aggregate(expr)
-    case ScalarFunctionExpr(_, args) => args exists aggregate
-    case UnaryExpr(_, expr)          => aggregate(expr)
-    case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
-    case _                           => false
-
-def column(expr: Expr): Boolean =
-  expr match
-    case _: (ColumnExpr | Operator)  => true
-    case CastExpr(expr, _)           => column(expr)
-    case ScalarFunctionExpr(_, args) => args exists column
-    case UnaryExpr(_, expr)          => column(expr)
-    case BinaryExpr(left, _, right)  => column(left) | column(right)
-    case _                           => false
-
 def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
-
-def exprEquiv(a: Expr, b: Expr): Boolean =
-  (a, b) match
-    case (AggregateFunctionExpr(f1, arg1), AggregateFunctionExpr(f2, arg2)) =>
-      f1.name == f2.name && exprEquiv(arg1, arg2)
-    case (_, AliasExpr(e, _))                                              => exprEquiv(a, e)
-    case (AliasExpr(e, _), _)                                              => exprEquiv(e, b)
-    case (BinaryExpr(l1, op1, r1), BinaryExpr(l2, op2, r2))               => op1 == op2 && exprEquiv(l1, l2) && exprEquiv(r1, r2)
-    case (UnaryExpr(op1, e1), UnaryExpr(op2, e2))                         => op1 == op2 && exprEquiv(e1, e2)
-    case (ScalarFunctionExpr(f1, args1), ScalarFunctionExpr(f2, args2)) =>
-      f1 == f2 && args1.length == args2.length && args1.zip(args2).forall((a, b) => exprEquiv(a, b))
-    case (CastExpr(e1, t1), CastExpr(e2, t2)) => t1 == t2 && exprEquiv(e1, e2)
-    case _                                     => a == b
-
-def resolveOrderBy(orderExpr: Expr, projExprs: IndexedSeq[Expr]): Expr =
-  projExprs.zipWithIndex
-    .collectFirst {
-      case (proj, idx) if exprEquiv(orderExpr, proj) =>
-        val colName = proj match
-          case AliasExpr(_, Ident(name))  => name
-          case ColumnExpr(_, Ident(name)) => name
-          case _                          => s"col_${idx + 1}"
-        ColumnExpr(None, Ident(colName))
-    }
-    .getOrElse(orderExpr)
-
-def resolveHaving(expr: Expr, projExprs: IndexedSeq[Expr]): Expr =
-  expr match
-    case _: AggregateFunctionExpr => resolveOrderBy(expr, projExprs)
-    case BinaryExpr(left, op, right) =>
-      BinaryExpr(resolveHaving(left, projExprs), op, resolveHaving(right, projExprs)) setType expr.typ
-    case UnaryExpr(op, e) =>
-      UnaryExpr(op, resolveHaving(e, projExprs)) setType expr.typ
-    case ScalarFunctionExpr(f, args) =>
-      ScalarFunctionExpr(f, args map (a => resolveHaving(a, projExprs)))
-    case CastExpr(e, t) =>
-      CastExpr(resolveHaving(e, projExprs), t) setType expr.typ
-    case _ => expr
-
-// todo: case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
-// todo: grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))

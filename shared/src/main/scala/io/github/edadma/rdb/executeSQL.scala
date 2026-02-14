@@ -8,7 +8,7 @@ import scala.language.postfixOps
 def executeQuery(query: String)(using db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
 
 def executeSelect(query: SQLSelectExpr)(using db: DB) =
-  QueryResult(eval(rewrite(query), Nil, AggregateMode.Return).asInstanceOf[TableValue])
+  QueryResult(eval(rewrite(query), Nil).asInstanceOf[TableValue])
 
 def executeSQL(sql: String)(using db: DB): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
@@ -25,7 +25,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
         case None      =>
           val data =
             for (r <- rows)
-              yield r map (e => eval(rewrite(e), Nil, AggregateMode.Disallow))
+              yield r map (e => eval(rewrite(e), Nil))
 
           for (id @ Ident(c) <- columns)
             if !t.hasColumn(c) then problem(id, s"unknown column: $c")
@@ -55,7 +55,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
       if db hasTable table then problem(id, s"duplicate table: $table")
 
       val names = new mutable.HashSet[String]
-      
+
       val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references) =>
         if names contains name then problem(id, s"duplicate column name: $name")
 
@@ -77,7 +77,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
           false, // indexed
           unique,
           fkTuple,
-          default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)),
+          default.map(expr => eval(rewrite(expr), Nil)),
         )
       }
 
@@ -85,7 +85,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
         case PrimaryKeyConstraint(name, cols) =>
           PrimaryKeySpec(cols.map(_.name), name)
         case UniqueConstraint(name, cols) =>
-          UniqueSpec(cols.map(_.name), name)  
+          UniqueSpec(cols.map(_.name), name)
         case ForeignKeyConstraint(name, cols, refTable, refCols) =>
           ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name)
       }
@@ -123,7 +123,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
       for (r <- rows.iterator(Nil))
         r.updater match
           case None    => problem(id, "not updatable")
-          case Some(u) => u(cols zip (exprs map (e => eval(e, Seq(r), AggregateMode.Disallow))))
+          case Some(u) => u(cols zip (exprs map (e => eval(e, Seq(r)))))
         count += 1
 
       UpdateResult(count)
@@ -164,8 +164,8 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             case Left(primitive) => primitive
             case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(problem(tid, s"type '$defined' is undefined"))
           val fk = references.map { case (tbl, col) => (tbl.name, col.name) }
-          val defaultValue = default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)).getOrElse(NullValue())
-          val spec = ColumnSpec(colName, typ, required, false, unique, fk, default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)))
+          val defaultValue = default.map(expr => eval(rewrite(expr), Nil)).getOrElse(NullValue())
+          val spec = ColumnSpec(colName, typ, required, false, unique, fk, default.map(expr => eval(rewrite(expr), Nil)))
           t.addColumnToTable(spec, defaultValue)
         case DropColumnTableAlteration(cid @ Ident(colName)) =>
           if !t.hasColumn(colName) then problem(cid, s"column '$colName' not found")
@@ -179,7 +179,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
                 case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(problem(tid, s"type '$defined' is undefined"))
               t.alterColumnType(colName, typ)
             case SetDefaultColumnModification(expr) =>
-              t.alterColumnSetDefault(colName, eval(rewrite(expr), Nil, AggregateMode.Disallow))
+              t.alterColumnSetDefault(colName, eval(rewrite(expr), Nil))
             case DropDefaultColumnModification() =>
               t.alterColumnDropDefault(colName)
             case SetNotNullColumnModification() =>

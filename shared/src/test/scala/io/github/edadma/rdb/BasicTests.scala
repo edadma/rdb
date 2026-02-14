@@ -29,8 +29,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |          data = Vector(NumberValue(typ = IntType, value = 1)),
         |          meta = Metadata(Vector(ColumnMetadata(table = Some("t"), name = "c1", typ = NumberType))),
         |          updater = None,
-        |          deleter = None,
-        |          mode = Return
+        |          deleter = None
         |        )
         |      ),
         |      meta = Metadata(Vector(ColumnMetadata(table = Some("t"), name = "c1", typ = NumberType)))
@@ -44,8 +43,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |          data = Vector(NumberValue(typ = IntType, value = 2)),
         |          meta = Metadata(Vector(ColumnMetadata(table = Some("t"), name = "c1", typ = NumberType))),
         |          updater = None,
-        |          deleter = None,
-        |          mode = Return
+        |          deleter = None
         |        )
         |      ),
         |      meta = Metadata(Vector(ColumnMetadata(table = Some("t"), name = "c1", typ = NumberType)))
@@ -66,8 +64,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |            )
         |          ),
         |          updater = Some([MemoryDB Updater]),
-        |          deleter = Some([MemoryDB Deleter]),
-        |          mode = Return
+        |          deleter = Some([MemoryDB Deleter])
         |        ),
         |        Row(
         |          data = ArraySeq(
@@ -81,8 +78,7 @@ class BasicTests extends AnyFreeSpec with Matchers with Testing {
         |            )
         |          ),
         |          updater = Some([MemoryDB Updater]),
-        |          deleter = Some([MemoryDB Deleter]),
-        |          mode = Return
+        |          deleter = Some([MemoryDB Deleter])
         |        )
         |      ),
         |      meta = Metadata(
