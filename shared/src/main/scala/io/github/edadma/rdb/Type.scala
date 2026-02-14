@@ -1,6 +1,7 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.datetime.Datetime
+import java.time.{LocalDate, LocalDateTime}
+import java.time.format.{DateTimeFormatter, DateTimeParseException}
 import io.github.edadma.dal.{BigDecType, DoubleType as DDoubleType, IntType as DIntType, LongType as DLongType}
 
 import java.math.MathContext
@@ -25,7 +26,11 @@ case object IntegerType extends Type("integer"):
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DIntType, _) => n
-      case _                            => super.convert(v)
+      case NumberValue(_, n)            => NumberValue(n.intValue)
+      case TextValue(s) =>
+        try NumberValue(s.trim.toInt)
+        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to integer")
+      case _ => super.convert(v)
 
   override def init: Value = ONE
 
@@ -35,7 +40,11 @@ case object BigintType extends Type("bigint"):
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DLongType | DIntType, _) => n
-      case _                                        => super.convert(v)
+      case NumberValue(_, n)                        => NumberValue(DLongType, n.longValue)
+      case TextValue(s) =>
+        try NumberValue(DLongType, s.trim.toLong)
+        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to bigint")
+      case _ => super.convert(v)
 
   override def init: Value = ONE
 
@@ -65,7 +74,11 @@ case object DoubleType extends Type("double"):
   override def convert(v: Value): Value =
     v match
       case n @ NumberValue(DDoubleType | DIntType, _) => n
-      case _                                          => super.convert(v)
+      case NumberValue(_, n)                          => NumberValue(n.doubleValue)
+      case TextValue(s) =>
+        try NumberValue(s.trim.toDouble)
+        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to double")
+      case _ => super.convert(v)
 
 case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
   override val isNumber = true
@@ -109,7 +122,7 @@ case object TimestampType extends Type("timestamp"):
       case _                 =>
         val textVal = v.toText
 
-        TimestampValue(Datetime.fromString(textVal.s))
+        TimestampValue(parseTimestamp(textVal.s))
 
 case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
@@ -132,3 +145,14 @@ case object TableType extends Type("table")
 case object ArrayType extends Type("array")
 
 //case object UnknownType extends Type("unknown")
+
+private val spaceTimestampFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+
+private def parseTimestamp(s: String): LocalDateTime =
+  try LocalDateTime.parse(s)
+  catch
+    case _: DateTimeParseException =>
+      try LocalDateTime.parse(s, spaceTimestampFormat)
+      catch
+        case _: DateTimeParseException =>
+          LocalDate.parse(s).atStartOfDay

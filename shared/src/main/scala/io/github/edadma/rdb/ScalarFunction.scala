@@ -2,8 +2,7 @@ package io.github.edadma.rdb
 
 import scala.math.*
 
-import pprint.pprintln
-import io.github.edadma.datetime.Datetime
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
@@ -261,43 +260,26 @@ val scalarFunction: Map[String, ScalarFunction] =
     // Date/time functions
     ScalarFunction(
       "now",
-      { case Seq() => TimestampValue(Datetime.now()) },
+      { case Seq() => TimestampValue(LocalDateTime.now(ZoneOffset.UTC)) },
       TimestampType,
     ),
     ScalarFunction(
       "current_date",
-      { case Seq() => 
-        val now = Datetime.now()
-        TimestampValue(Datetime(now.year, now.month, now.day))
-      },
+      { case Seq() => TimestampValue(LocalDate.now(ZoneOffset.UTC).atStartOfDay) },
       TimestampType,
     ),
     ScalarFunction(
       "date_part",
       { case Seq(TextValue(part), TimestampValue(ts)) =>
         part.toLowerCase match
-          case "year" => NumberValue(ts.year)
-          case "month" => NumberValue(ts.month)
-          case "day" => NumberValue(ts.day)
-          case "hour" => NumberValue(ts.hours)
-          case "minute" => NumberValue(ts.minutes)
-          case "second" => NumberValue(ts.seconds)
-          case _ => NumberValue(0)
+          case "year"   => NumberValue(ts.getYear)
+          case "month"  => NumberValue(ts.getMonthValue)
+          case "day"    => NumberValue(ts.getDayOfMonth)
+          case "hour"   => NumberValue(ts.getHour)
+          case "minute" => NumberValue(ts.getMinute)
+          case "second" => NumberValue(ts.getSecond)
+          case _        => NumberValue(0)
       },
       NumberType,
-    ),
-    // Type conversion functions
-    ScalarFunction(
-      "to_number",
-      { case Seq(v) =>
-        try NumberValue(v.string.toDouble)
-        catch case _ => NumberValue(0)
-      },
-      NumberType,
-    ),
-    ScalarFunction(
-      "to_text",
-      { case Seq(v) => TextValue(v.string) },
-      TextType,
     ),
   ).map(f => f.name -> f).toMap

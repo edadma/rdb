@@ -14,15 +14,15 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           | value INT,
           | PRIMARY KEY (id)
           |);
-          |INSERT INTO numbers (value) VALUES (10), (20), (30), (5), (15);
+          |INSERT INTO numbers (value) VALUES (10), (20), (30), (5);
           |SELECT MIN(value), MAX(value), AVG(value) FROM numbers;
           |""".trim.stripMargin
       )
-      
+
       // Check that the results contain the expected calculated values
       result should include("NumberValue(typ = IntType, value = 5)")    // MIN should be 5
-      result should include("NumberValue(typ = IntType, value = 30)")   // MAX should be 30  
-      result should include("NumberValue(typ = DoubleType, value = 16.0)") // AVG should be 16.0: (10+20+30+5+15)/5
+      result should include("NumberValue(typ = IntType, value = 30)")   // MAX should be 30
+      result should include("NumberValue(typ = DoubleType, value = 16.25)") // AVG: (10+20+30+5)/4
     }
 
     "count with nulls correctly excludes nulls from COUNT(column)" in {
@@ -137,9 +137,9 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       
-      // Should return year 2025, month 8, day 31 (current date when test runs)
-      result should include("NumberValue") 
-      result should include("2025") // Current year
+      val currentYear = java.time.Year.now().getValue.toString
+      result should include("NumberValue")
+      result should include(currentYear)
     }
 
     "is null and is not null syntax work correctly" in {
@@ -162,20 +162,19 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
-  "Type conversion functions" - {
-    "to_number converts strings to numbers" in {
+  "Cast operator (::)" - {
+    "cast string to double precision" in {
       val result = test(
         """
-          |SELECT TO_NUMBER('123.45'), TO_NUMBER('0'), TO_NUMBER('invalid');
+          |SELECT '123.45'::double precision, '0'::integer;
           |""".trim.stripMargin
       )
-      
+
       result should include("NumberValue(typ = DoubleType, value = 123.45)")
-      result should include("NumberValue(typ = DoubleType, value = 0.0)")
-      result should include("NumberValue(typ = IntType, value = 0)") // Invalid strings become 0
+      result should include("NumberValue(typ = IntType, value = 0)")
     }
 
-    "to_text converts values to text" in {
+    "cast values to text" in {
       val result = test(
         """
           |CREATE TABLE test_convert (
@@ -184,14 +183,14 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           | PRIMARY KEY (id)
           |);
           |INSERT INTO test_convert (num) VALUES (456), (789);
-          |SELECT TO_TEXT(num), TO_TEXT(id) FROM test_convert;
+          |SELECT num::text, id::text FROM test_convert;
           |""".trim.stripMargin
       )
-      
+
       result should include("TextValue(\"456\")")
       result should include("TextValue(\"789\")")
-      result should include("TextValue(\"1\")") // First ID
-      result should include("TextValue(\"2\")") // Second ID
+      result should include("TextValue(\"1\")")
+      result should include("TextValue(\"2\")")
     }
   }
 

@@ -34,6 +34,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "@",
       "{",
       "}",
+      "::",
       ":",
       "[",
       "]",
@@ -417,11 +418,21 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val multiplicative: P[Expr] = positioned(
     positioned(
-      multiplicative ~ ("*" | "/") ~ primary ^^ { case l ~ o ~ r =>
+      multiplicative ~ ("*" | "/") ~ castExpression ^^ { case l ~ o ~ r =>
         BinaryExpr(l, o, r)
       } |
-        primary,
+        castExpression,
     ),
+  )
+
+  lazy val castType: P[Type] = typ ^? (
+    { case Left(t) => t },
+    _ => "cannot cast to custom type",
+  )
+
+  lazy val castExpression: P[Expr] = positioned(
+    primary ~ "::" ~ castType ^^ { case e ~ _ ~ t => CastExpr(e, t) }
+      | primary,
   )
 
   lazy val pair: P[(Ident, Expr)] =

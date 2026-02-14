@@ -4,7 +4,8 @@ package io.github.edadma.rdb
 
 def rewrite(expr: Expr)(implicit db: DB): Expr =
   expr match
-    case _ if expr.typ != null  => expr
+    case _ if expr.typ != null              => expr
+    case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
     case AliasExpr(expr, alias) => AliasExpr(rewrite(expr), alias)
     case SubqueryExpr(query)    => SubqueryExpr(rewrite(query))
     case CaseExpr(whens, els)   =>
@@ -138,6 +139,7 @@ def aggregate(expr: Expr): Boolean =
   expr match
     case _: AggregateFunctionExpr    => true
     case AliasExpr(expr, _)          => aggregate(expr)
+    case CastExpr(expr, _)           => aggregate(expr)
     case ScalarFunctionExpr(_, args) => args exists aggregate
     case UnaryExpr(_, expr)          => aggregate(expr)
     case BinaryExpr(left, _, right)  => aggregate(left) | aggregate(right)
@@ -146,6 +148,7 @@ def aggregate(expr: Expr): Boolean =
 def column(expr: Expr): Boolean =
   expr match
     case _: (ColumnExpr | Operator)  => true
+    case CastExpr(expr, _)           => column(expr)
     case ScalarFunctionExpr(_, args) => args exists column
     case UnaryExpr(_, expr)          => column(expr)
     case BinaryExpr(left, _, right)  => column(left) | column(right)
