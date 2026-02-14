@@ -7,14 +7,14 @@
 ### JavaScript/TypeScript/Node.js
 
 ```javascript
-const { ConnectSQL } = require('@edadma/rdb');
+import { ConnectSQL } from '@edadma/rdb';
 
 const db = new ConnectSQL();
 
 // Create and populate a table
 db.execute(`
   CREATE TABLE users (
-    id INT AUTO PRIMARY KEY,
+    id SERIAL,
     name TEXT NOT NULL,
     email TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -41,7 +41,7 @@ implicit val db: DB = new MemoryDB
 
 val results = executeSQL("""
   CREATE TABLE products (
-    id UUID AUTO PRIMARY KEY,
+    id UUID DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     price NUMERIC(10,2)
   );
@@ -76,13 +76,16 @@ results.foreach(println)
 
 ```sql
 -- Integer types
-INT / INTEGER          -- 32-bit signed integer
-BIGINT                 -- 64-bit signed integer  
-DOUBLE                 -- Double-precision floating point
+INT / INTEGER              -- 32-bit signed integer
+SERIAL                     -- Auto-incrementing 32-bit integer
+BIGINT                     -- 64-bit signed integer
+BIGSERIAL                  -- Auto-incrementing 64-bit integer
+DOUBLE                     -- Double-precision floating point
 NUMERIC(precision, scale)  -- Fixed-precision decimal
 
 -- Examples
 CREATE TABLE numbers (
+  id SERIAL,
   small_int INT,
   big_int BIGINT,
   decimal_val NUMERIC(10,2),
@@ -96,9 +99,9 @@ CREATE TABLE numbers (
 TEXT                   -- Variable-length string
 UUID                   -- Universally unique identifier
 
--- Examples  
+-- Examples
 CREATE TABLE content (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT
 );
@@ -111,7 +114,7 @@ TIMESTAMP              -- Date and time values
 
 -- Examples
 CREATE TABLE events (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -120,13 +123,13 @@ CREATE TABLE events (
 
 ```sql
 JSON                   -- JSON objects and arrays
-ENUM('val1', 'val2')   -- Custom enumerated types
+ENUM                   -- Custom enumerated types (via CREATE TYPE)
 
 -- Examples
 CREATE TYPE status AS ENUM ('active', 'inactive', 'pending');
 
 CREATE TABLE records (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   metadata JSON,
   status status
 );
@@ -138,19 +141,22 @@ CREATE TABLE records (
 BOOLEAN                -- True/false values
 
 CREATE TABLE flags (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   is_enabled BOOLEAN DEFAULT FALSE
 );
 ```
 
 ## Column Modifiers
 
-### AUTO Increment
+### Auto-Generated Values
 
 ```sql
--- Automatically generates values
-id INT AUTO PRIMARY KEY,           -- 1, 2, 3, ...
-uuid_id UUID AUTO PRIMARY KEY,    -- Generated UUIDs
+-- Auto-incrementing integers
+id SERIAL,                               -- 1, 2, 3, ...
+id BIGSERIAL,                            -- 64-bit auto-increment
+
+-- Auto-generated UUIDs
+id UUID DEFAULT gen_random_uuid(),       -- Random UUID per row
 ```
 
 ### Constraints
@@ -159,8 +165,8 @@ uuid_id UUID AUTO PRIMARY KEY,    -- Generated UUIDs
 -- NOT NULL constraint
 name TEXT NOT NULL,
 
--- PRIMARY KEY  
-id INT AUTO PRIMARY KEY,
+-- PRIMARY KEY
+id SERIAL PRIMARY KEY,
 
 -- UNIQUE constraint
 email TEXT UNIQUE,
@@ -178,11 +184,13 @@ customer_id INT REFERENCES customers(id)
 ### CREATE TABLE
 
 ```sql
+CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
+
 CREATE TABLE orders (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   customer_name TEXT NOT NULL,
   amount NUMERIC(10,2),
-  status ENUM('pending', 'shipped', 'delivered') DEFAULT 'pending',
+  status order_status DEFAULT 'pending',
   metadata JSON,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -197,7 +205,7 @@ CREATE TYPE user_role AS ENUM ('admin', 'moderator', 'user');
 
 -- Use in table definitions
 CREATE TABLE tasks (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   title TEXT NOT NULL,
   priority priority DEFAULT 'medium'
 );
@@ -491,10 +499,33 @@ class ConnectSQL {
   rows: 3  // Number of affected rows
 }
 
-// DELETE result  
+// DELETE result
 {
-  command: "delete", 
+  command: "delete",
   rows: 1  // Number of deleted rows
+}
+
+// DROP TABLE result
+{
+  command: "drop table",
+  table: "orders"
+}
+
+// CREATE TYPE result
+{
+  command: "create type",
+  type: "order_status"
+}
+
+// DROP TYPE result
+{
+  command: "drop type",
+  type: "order_status"
+}
+
+// ALTER TABLE result
+{
+  command: "alter table"
 }
 ```
 
@@ -516,10 +547,15 @@ def executeQuery(query: String)(implicit db: DB): QueryResult
 ```scala
 sealed trait Result
 case class QueryResult(table: TableValue) extends Result
-case class InsertResult(obj: Map[String, Value], table: TableValue) extends Result  
+case class InsertResult(obj: Map[String, Value], table: TableValue) extends Result
 case class CreateTableResult(table: String) extends Result
+case class DropTableResult(table: String) extends Result
+case class CreateTypeResult(typ: String) extends Result
+case class DropTypeResult(name: String) extends Result
+case class DropIndexResult(name: String) extends Result
 case class UpdateResult(rows: Int) extends Result
 case class DeleteResult(rows: Int) extends Result
+case class AlterTableResult() extends Result
 ```
 
 #### Accessing Query Data
@@ -569,13 +605,13 @@ val value: Value = row("column_name")
 ```sql
 -- Product catalog
 CREATE TABLE categories (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   name TEXT NOT NULL UNIQUE,
   description TEXT
 );
 
 CREATE TABLE products (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(10,2) NOT NULL,
@@ -588,7 +624,7 @@ CREATE TABLE products (
 CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
 
 CREATE TABLE orders (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   customer_email TEXT NOT NULL,
   status order_status DEFAULT 'pending',
   total_amount NUMERIC(10,2),
@@ -596,7 +632,7 @@ CREATE TABLE orders (
 );
 
 CREATE TABLE order_items (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   order_id INT REFERENCES orders(id),
   product_id UUID REFERENCES products(id),
   quantity INT NOT NULL,
@@ -644,7 +680,7 @@ ORDER BY o.created_at DESC;
 ```sql
 -- Time-series data
 CREATE TABLE page_views (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   page_url TEXT NOT NULL,
   user_id TEXT,
   session_id TEXT,
@@ -680,7 +716,7 @@ LIMIT 10;
 CREATE TYPE user_role AS ENUM ('admin', 'moderator', 'user', 'guest');
 
 CREATE TABLE users (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   username TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
   role user_role DEFAULT 'user',
@@ -690,7 +726,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE user_sessions (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id),
   token TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMP NOT NULL,
@@ -835,7 +871,7 @@ tableContents.foreach(println)
    ```sql
    -- Good: Specific types
    CREATE TABLE orders (
-     id UUID AUTO PRIMARY KEY,
+     id UUID DEFAULT gen_random_uuid(),
      amount NUMERIC(10,2),
      created_at TIMESTAMP
    );
@@ -846,7 +882,7 @@ tableContents.foreach(println)
 2. **Define constraints**
    ```sql
    CREATE TABLE users (
-     id INT AUTO PRIMARY KEY,
+     id SERIAL,
      email TEXT NOT NULL UNIQUE,
      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
