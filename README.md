@@ -26,7 +26,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb" % "0.0.1"
+libraryDependencies += "io.github.edadma" %%% "rdb" % "0.0.29"
 ```
 
 ## Basic Usage
