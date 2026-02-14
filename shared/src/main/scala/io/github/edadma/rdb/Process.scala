@@ -26,7 +26,7 @@ case object SingleProcess extends Process:
 case class FilterProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
-  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx, AggregateMode.Disallow))
 
 case class HavingProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
@@ -208,7 +208,7 @@ case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
   def iterator(ctx: Seq[Row]): RowIterator =
     input1.iterator(ctx).flatMap { x =>
       val matches =
-        input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta, None, None)) filter (row => beval(cond, row +: ctx))
+        input2.iterator(ctx) map (y => Row(x.data ++ y.data, meta, None, None)) filter (row => beval(cond, row +: ctx, AggregateMode.Disallow))
 
       if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta, None, None))
       else matches

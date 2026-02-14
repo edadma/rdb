@@ -73,7 +73,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       res.data.head.data.head
     case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx, mode).nonEmpty)
     case UnaryExpr("-", expr)                              => BasicDAL.negate(neval(expr, ctx, mode), NumberValue.from)
-    case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx))
+    case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx, mode))
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
       BooleanValue(op.contains("NOT") ^ eval(expr, ctx, mode).isNull)
     case BinaryExpr(left, "||", right) =>
@@ -84,8 +84,8 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
       val or = op == "OR"
 
-      if or ^ !beval(left, ctx) then BooleanValue(or)
-      else BooleanValue(beval(right, ctx))
+      if or ^ !beval(left, ctx, mode) then BooleanValue(or)
+      else BooleanValue(beval(right, ctx, mode))
     case BinaryExpr(left, op @ ("LIKE" | "ILIKE" | "NOT LIKE" | "NOT ILIKE"), right) =>
       def like(s: String, pattern: String, casesensitive: Boolean = true): Boolean =
         var sp      = 0
@@ -183,14 +183,15 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
       })
     case ArrayExpr(elems)     => ArrayValue(elems map (e => eval(e, ctx, mode)) toIndexedSeq)
     case CaseExpr(whens, els) =>
-      whens find { case When(when, _) => beval(when, ctx) } match
+      whens find { case When(when, _) => beval(when, ctx, mode) } match
         case None =>
           els match
             case None    => NullValue()
             case Some(e) => eval(e, ctx, mode)
         case Some(When(_, expr)) => eval(expr, ctx, mode)
 
-def beval(expr: Expr, ctx: Seq[Row]): Boolean = eval(expr, ctx, AggregateMode.Disallow).asInstanceOf[BooleanValue].b
+def beval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Boolean =
+  eval(expr, ctx, mode).asInstanceOf[BooleanValue].b
 
 def neval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): NumberValue =
   val v = eval(expr, ctx, mode)

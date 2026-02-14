@@ -75,25 +75,47 @@ def rewrite(expr: Expr)(using db: DB): Expr =
         groupBy match
           case None     => r1
           case Some(es) => GroupOperator(r1, es map rewrite)
-      val r3 =
-        orderBy match
-          case None     => r2
-          case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
-      val r4 =
-        exprs match
-          case Seq(StarExpr()) => r3
-          case _               => ProjectOperator(r3, exprs map rewrite)
-      val r4_having =
-        having match
-          case Some(cond) => HavingOperator(r4, rewrite(cond))
-          case None       => r4
+      val rewrittenExprs = exprs map rewrite
+      val isGrouped = groupBy.isDefined || (rewrittenExprs exists aggregate)
+
+      val r_ordered =
+        if isGrouped then
+          // Grouped path: PROJECT → HAVING → ORDER BY (resolved against projected columns)
+          val r3 =
+            exprs match
+              case Seq(StarExpr()) => r2
+              case _               => ProjectOperator(r2, rewrittenExprs)
+          val r3h =
+            having match
+              case Some(cond) => HavingOperator(r3, resolveHaving(rewrite(cond), rewrittenExprs))
+              case None       => r3
+          orderBy match
+            case None => r3h
+            case Some(os) =>
+              val resolved = os map { case OrderBy(f, d, n) =>
+                OrderBy(resolveOrderBy(rewrite(f), rewrittenExprs), d, n)
+              }
+              SortOperator(r3h, resolved)
+        else
+          // Non-grouped path: ORDER BY → PROJECT (sort can access all source columns)
+          val r3 =
+            orderBy match
+              case None     => r2
+              case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+          val r4 =
+            exprs match
+              case Seq(StarExpr()) => r3
+              case _               => ProjectOperator(r3, rewrittenExprs)
+          having match
+            case Some(cond) => HavingOperator(r4, rewrite(cond))
+            case None       => r4
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
             if count < 0 then problem(pos, s"offset should be non-negative: $count")
 
-            OffsetOperator(r4_having, count)
-          case None => r4_having
+            OffsetOperator(r_ordered, count)
+          case None => r_ordered
       val r6 =
         limit match
           case Some(Count(pos, count)) =>
@@ -123,15 +145,9 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val columns         = rewritten_projs exists column
       val rewritten_proc  = procRewrite(rel)
 
-      def hasGroupOperator(e: Expr): Boolean =
-        e match
-          case _: GroupOperator       => true
-          case SortOperator(inner, _) => hasGroupOperator(inner)
-          case _                      => false
-
       ProcessOperator(
         ProjectProcess(
-          if aggregates && !hasGroupOperator(rel) then UngroupedProcess(rewritten_proc, columns)
+          if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
           else rewritten_proc,
           rewritten_projs,
         ),
@@ -162,6 +178,44 @@ def column(expr: Expr): Boolean =
     case _                           => false
 
 def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
+
+def exprEquiv(a: Expr, b: Expr): Boolean =
+  (a, b) match
+    case (AggregateFunctionExpr(f1, arg1), AggregateFunctionExpr(f2, arg2)) =>
+      f1.name == f2.name && exprEquiv(arg1, arg2)
+    case (_, AliasExpr(e, _))                                              => exprEquiv(a, e)
+    case (AliasExpr(e, _), _)                                              => exprEquiv(e, b)
+    case (BinaryExpr(l1, op1, r1), BinaryExpr(l2, op2, r2))               => op1 == op2 && exprEquiv(l1, l2) && exprEquiv(r1, r2)
+    case (UnaryExpr(op1, e1), UnaryExpr(op2, e2))                         => op1 == op2 && exprEquiv(e1, e2)
+    case (ScalarFunctionExpr(f1, args1), ScalarFunctionExpr(f2, args2)) =>
+      f1 == f2 && args1.length == args2.length && args1.zip(args2).forall((a, b) => exprEquiv(a, b))
+    case (CastExpr(e1, t1), CastExpr(e2, t2)) => t1 == t2 && exprEquiv(e1, e2)
+    case _                                     => a == b
+
+def resolveOrderBy(orderExpr: Expr, projExprs: IndexedSeq[Expr]): Expr =
+  projExprs.zipWithIndex
+    .collectFirst {
+      case (proj, idx) if exprEquiv(orderExpr, proj) =>
+        val colName = proj match
+          case AliasExpr(_, Ident(name))  => name
+          case ColumnExpr(_, Ident(name)) => name
+          case _                          => s"col_${idx + 1}"
+        ColumnExpr(None, Ident(colName))
+    }
+    .getOrElse(orderExpr)
+
+def resolveHaving(expr: Expr, projExprs: IndexedSeq[Expr]): Expr =
+  expr match
+    case _: AggregateFunctionExpr => resolveOrderBy(expr, projExprs)
+    case BinaryExpr(left, op, right) =>
+      BinaryExpr(resolveHaving(left, projExprs), op, resolveHaving(right, projExprs)) setType expr.typ
+    case UnaryExpr(op, e) =>
+      UnaryExpr(op, resolveHaving(e, projExprs)) setType expr.typ
+    case ScalarFunctionExpr(f, args) =>
+      ScalarFunctionExpr(f, args map (a => resolveHaving(a, projExprs)))
+    case CastExpr(e, t) =>
+      CastExpr(resolveHaving(e, projExprs), t) setType expr.typ
+    case _ => expr
 
 // todo: case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
 // todo: grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))
