@@ -161,4 +161,156 @@ describe("ConnectSQL", () => {
       assert.equal(res.result[0][0], null);
     });
   });
+
+  describe("error handling", () => {
+    it("throws on invalid SQL syntax", () => {
+      assert.throws(() => db.execute("SELEKT * FROM t1"), /error|expected/i);
+    });
+
+    it("throws on unknown table", () => {
+      assert.throws(() => db.execute("SELECT * FROM nonexistent"), /unknown|not found/i);
+    });
+
+    it("throws on unknown column in INSERT", () => {
+      assert.throws(() => db.execute("INSERT INTO t1 (bogus) VALUES (1)"), /unknown|not found|bogus/i);
+    });
+
+    it("error is catchable with try/catch", () => {
+      let caught = false;
+      try {
+        db.execute("NOT VALID SQL");
+      } catch {
+        caught = true;
+      }
+      assert.ok(caught);
+    });
+  });
+
+  describe("multiple statements", () => {
+    it("returns one result per statement", () => {
+      const results = db.execute(`
+        CREATE TABLE multi_a (id INT);
+        CREATE TABLE multi_b (id INT)
+      `);
+      assert.equal(results.length, 2);
+      assert.equal(results[0].command, "create table");
+      assert.equal(results[0].table, "multi_a");
+      assert.equal(results[1].command, "create table");
+      assert.equal(results[1].table, "multi_b");
+    });
+
+    it("mixed statement types return correct results", () => {
+      const results = db.execute(`
+        INSERT INTO multi_a (id) VALUES (1);
+        SELECT * FROM multi_a;
+        DELETE FROM multi_a WHERE id = 1
+      `);
+      assert.equal(results.length, 3);
+      assert.equal(results[0].command, "insert");
+      assert.equal(results[1].command, "select");
+      assert.equal(results[2].command, "delete");
+    });
+  });
+
+  describe("empty results", () => {
+    it("SELECT with no matching rows returns empty array", () => {
+      db.execute("CREATE TABLE empty_t (id INT, name TEXT)");
+      const [res] = db.execute("SELECT * FROM empty_t");
+      assert.equal(res.command, "select");
+      assert.ok(Array.isArray(res.result));
+      assert.equal(res.result.length, 0);
+    });
+
+    it("UPDATE affecting zero rows returns rows = 0", () => {
+      const [res] = db.execute("UPDATE empty_t SET name = 'x' WHERE id = 999");
+      assert.equal(res.command, "update");
+      assert.equal(res.rows, 0);
+    });
+
+    it("DELETE affecting zero rows returns rows = 0", () => {
+      const [res] = db.execute("DELETE FROM empty_t WHERE id = 999");
+      assert.equal(res.command, "delete");
+      assert.equal(res.rows, 0);
+    });
+  });
+
+  describe("INSERT result contents", () => {
+    it("SERIAL value appears in insert result", () => {
+      db.execute("CREATE TABLE serial_t (id SERIAL, name TEXT)");
+      const [res] = db.execute("INSERT INTO serial_t (name) VALUES ('first')");
+      assert.equal(typeof res.result.id, "number");
+      assert.equal(res.result.id, 1);
+    });
+
+    it("SERIAL auto-increments", () => {
+      const [r1] = db.execute("INSERT INTO serial_t (name) VALUES ('second')");
+      const [r2] = db.execute("INSERT INTO serial_t (name) VALUES ('third')");
+      assert.ok(r2.result.id > r1.result.id);
+    });
+
+    it("UUID value appears in insert result", () => {
+      db.execute("CREATE TABLE uuid_t (id UUID DEFAULT gen_random_uuid(), name TEXT)");
+      const [res] = db.execute("INSERT INTO uuid_t (name) VALUES ('test')");
+      assert.equal(typeof res.result.id, "string");
+      assert.match(res.result.id, /^[0-9a-f-]{36}$/);
+    });
+  });
+
+  describe("instance isolation", () => {
+    it("two instances do not share tables", () => {
+      const db1 = new ConnectSQL();
+      const db2 = new ConnectSQL();
+      db1.execute("CREATE TABLE isolated (id INT)");
+      assert.throws(() => db2.execute("SELECT * FROM isolated"), /unknown|not found/i);
+    });
+
+    it("two instances do not share data", () => {
+      const db1 = new ConnectSQL();
+      const db2 = new ConnectSQL();
+      db1.execute("CREATE TABLE shared_name (id INT, val TEXT)");
+      db2.execute("CREATE TABLE shared_name (id INT, val TEXT)");
+      db1.execute("INSERT INTO shared_name (id, val) VALUES (1, 'from db1')");
+      const [res] = db2.execute("SELECT * FROM shared_name");
+      assert.equal(res.result.length, 0);
+    });
+  });
+
+  describe("value edge cases", () => {
+    before(() => {
+      db.execute("CREATE TABLE edges (id SERIAL, int_col INT, bigint_col BIGINT, num_col NUMERIC(10,2), text_col TEXT)");
+    });
+
+    it("zero", () => {
+      db.execute("INSERT INTO edges (int_col) VALUES (0)");
+      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = 0");
+      assert.equal(res.result[0][0], 0);
+      assert.equal(typeof res.result[0][0], "number");
+    });
+
+    it("negative numbers", () => {
+      db.execute("INSERT INTO edges (int_col) VALUES (-42)");
+      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = -42");
+      assert.equal(res.result[0][0], -42);
+    });
+
+    it("empty string", () => {
+      db.execute("INSERT INTO edges (text_col) VALUES ('')");
+      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col = ''");
+      assert.equal(res.result[0][0], "");
+      assert.equal(typeof res.result[0][0], "string");
+    });
+
+    it("unicode text", () => {
+      db.execute("INSERT INTO edges (text_col) VALUES ('\u00e9\u2603\ud83d\ude80')");
+      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col LIKE '\u00e9%'");
+      assert.equal(res.result[0][0], "\u00e9\u2603\ud83d\ude80");
+    });
+
+    it("NUMERIC preserves decimal precision", () => {
+      db.execute("INSERT INTO edges (num_col) VALUES (100.10)");
+      const [res] = db.execute("SELECT num_col FROM edges WHERE num_col = 100.10");
+      assert.equal(res.result[0][0], 100.1);
+      assert.equal(typeof res.result[0][0], "number");
+    });
+  });
 });
