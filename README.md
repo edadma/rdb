@@ -34,14 +34,14 @@ libraryDependencies += "io.github.edadma" %%% "rdb" % "0.0.29"
 ### JavaScript/TypeScript
 
 ```javascript
-const { ConnectSQL } = require('@edadma/rdb');
+import { ConnectSQL } from '@edadma/rdb';
 
 const db = new ConnectSQL();
 
 // Create a table
 db.execute(`
   CREATE TABLE users (
-    id INT AUTO PRIMARY KEY,
+    id SERIAL,
     name TEXT NOT NULL,
     email TEXT,
     created_at TIMESTAMP
@@ -68,7 +68,7 @@ implicit val db: DB = new MemoryDB
 
 val results = executeSQL("""
   CREATE TABLE products (
-    id INT AUTO PRIMARY KEY,
+    id SERIAL,
     name TEXT NOT NULL,
     price NUMERIC(10,2),
     category TEXT
@@ -92,14 +92,16 @@ results.foreach(println)
 
 ### Data Types
 
-- **INT/INTEGER** - 32-bit integers with optional AUTO increment
+- **INT/INTEGER** - 32-bit integers
+- **SERIAL** - Auto-incrementing 32-bit integer
 - **BIGINT** - 64-bit integers
+- **BIGSERIAL** - Auto-incrementing 64-bit integer
 - **DOUBLE** - Double-precision floating point
 - **NUMERIC(precision, scale)** - Fixed-precision decimal numbers
 - **TEXT** - Variable-length strings
 - **BOOLEAN** - True/false values
 - **TIMESTAMP** - Date and time values
-- **UUID** - Universally unique identifiers with AUTO generation
+- **UUID** - Universally unique identifiers (use `DEFAULT gen_random_uuid()` for auto-generation)
 - **JSON** - Structured JSON objects and arrays
 - **ENUM** - Custom enumerated types
 
@@ -107,17 +109,17 @@ results.foreach(println)
 
 #### DDL (Data Definition Language)
 ```sql
+-- Create custom types
+CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
+
 -- Create tables with constraints
 CREATE TABLE orders (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   customer_name TEXT NOT NULL,
   amount NUMERIC(10,2),
-  status ENUM('pending', 'shipped', 'delivered'),
+  status order_status,
   metadata JSON
 );
-
--- Create custom types
-CREATE TYPE status_type AS ENUM ('active', 'inactive', 'pending');
 
 -- Drop tables
 DROP TABLE orders;
@@ -252,7 +254,7 @@ case class DeleteResult(rows: Int) extends Result
 ```sql
 -- Create product catalog
 CREATE TABLE products (
-  id UUID AUTO PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(10,2) NOT NULL,
@@ -261,9 +263,9 @@ CREATE TABLE products (
   created_at TIMESTAMP
 );
 
--- Create orders table  
+-- Create orders table
 CREATE TABLE orders (
-  id INT AUTO PRIMARY KEY,
+  id SERIAL,
   product_id UUID NOT NULL,
   quantity INT NOT NULL,
   total_amount NUMERIC(10,2),
@@ -326,7 +328,7 @@ ORDER BY sale_date DESC;
 ## Platform-Specific Notes
 
 ### JavaScript/Node.js
-- Compatible with Node.js 14+
+- Compatible with Node.js 19+
 - Works in browsers with bundlers (webpack, rollup, etc.)
 - No external dependencies required
 

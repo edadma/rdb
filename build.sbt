@@ -81,7 +81,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     //    Test / scalaJSUseTestModuleInitializer := false,
     Test / scalaJSUseMainModuleInitializer      := false,
     Test / scalaJSUseTestModuleInitializer      := true,
-    scalaJSUseMainModuleInitializer             := true,
+    scalaJSUseMainModuleInitializer             := false,
     libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
   )
 
