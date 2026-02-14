@@ -5,12 +5,12 @@ package io.github.edadma.rdb
 import scala.collection.mutable
 import scala.language.postfixOps
 
-def executeQuery(query: String)(implicit db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
+def executeQuery(query: String)(using db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
 
-def executeSelect(query: SQLSelectExpr)(implicit db: DB) =
-  QueryResult(eval(rewrite(query)(using db), Nil, AggregateMode.Return).asInstanceOf[TableValue])
+def executeSelect(query: SQLSelectExpr)(using db: DB) =
+  QueryResult(eval(rewrite(query), Nil, AggregateMode.Return).asInstanceOf[TableValue])
 
-def executeSQL(sql: String)(implicit db: DB): Seq[Result] =
+def executeSQL(sql: String)(using db: DB): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
 
   // pprintln(com)

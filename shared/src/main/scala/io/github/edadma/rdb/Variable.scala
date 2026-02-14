@@ -1,6 +1,6 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.datetime.Datetime
+import java.time.{LocalDateTime, ZoneOffset}
 
 abstract class Variable(var name: String):
   def instance: VariableInstance
@@ -12,7 +12,7 @@ class CurrentTimestamp extends Variable("CURRENT_TIMESTAMP"):
   def instance: VariableInstance = new CurrentTimestampInstance
 
 class CurrentTimestampInstance extends VariableInstance:
-  lazy val value: TimestampValue = TimestampValue(Datetime.now())
+  lazy val value: TimestampValue = TimestampValue(LocalDateTime.now(ZoneOffset.UTC))
 
 val scalarVariable: Map[String, Variable] =
   List(

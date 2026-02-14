@@ -1,12 +1,14 @@
+import xerial.sbt.Sonatype.sonatypeCentralHost
+
 ThisBuild / licenses               := Seq("ISC" -> url("https://opensource.org/licenses/ISC"))
 ThisBuild / versionScheme          := Some("semver-spec")
 ThisBuild / evictionErrorLevel     := Level.Warn
-ThisBuild / scalaVersion           := "3.7.2"
+ThisBuild / scalaVersion           := "3.8.1"
 ThisBuild / organization           := "io.github.edadma"
 ThisBuild / organizationName       := "edadma"
 ThisBuild / organizationHomepage   := Some(url("https://github.com/edadma"))
-ThisBuild / version                := "0.0.27"
-ThisBuild / sonatypeCredentialHost := "central.sonatype.com"
+ThisBuild / version                := "0.0.28"
+ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
 ThisBuild / publishConfiguration := publishConfiguration.value.withOverwrite(true).withChecksums(Vector.empty)
 ThisBuild / resolvers += Resolver.mavenLocal
@@ -30,13 +32,10 @@ ThisBuild / developers := List(
   ),
 )
 
-ThisBuild / homepage := Some(url("https://github.com/edadma/rdb"))
+ThisBuild / homepage    := Some(url("https://github.com/edadma/rdb"))
+ThisBuild / description := "Project description here"
 
-ThisBuild / publishTo := {
-  val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
-  if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
-  else localStaging.value
-}
+ThisBuild / publishTo := sonatypePublishToBundle.value
 
 lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("."))
@@ -53,14 +52,14 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         "-language:dynamics",
       ),
     libraryDependencies ++= Seq(
-      "io.github.edadma" %%% "dal"      % "0.0.2",
-      "io.github.edadma" %%% "datetime" % "0.0.1",
-      "io.github.edadma" %%% "dllist"   % "0.0.6",
-      "io.github.edadma" %%% "table"    % "0.0.1",
+      "io.github.edadma"  %%% "dal"             % "0.0.10",
+      "io.github.edadma"  %%% "dllist"          % "0.0.6",
+      "io.github.edadma"  %%% "table"           % "0.0.3",
+      "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
     ),
     libraryDependencies ++= Seq(
       "org.scalatest"          %%% "scalatest"                % "3.2.19" % "test",
-      "com.lihaoyi"            %%% "pprint"                   % "0.9.3" /*% "test"*/,
+      "com.lihaoyi"            %%% "pprint"                   % "0.9.3"  % "test",
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
     ),
     publishMavenStyle      := true,
@@ -83,7 +82,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     Test / scalaJSUseMainModuleInitializer      := false,
     Test / scalaJSUseTestModuleInitializer      := true,
     scalaJSUseMainModuleInitializer             := true,
-    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
+    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
   )
 
 lazy val root = project

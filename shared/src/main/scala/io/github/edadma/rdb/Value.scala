@@ -2,7 +2,8 @@ package io.github.edadma.rdb
 
 import io.github.edadma.dal.{BasicDAL, BigDecType, TypedNumber}
 import io.github.edadma.dal
-import io.github.edadma.datetime.Datetime
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -55,14 +56,12 @@ case class NullValue() extends Value(NullType):
 case class StarValue() extends Value(StarType):
   def string: String = "*"
 
-case class TimestampValue(t: Datetime) extends Value(TimestampType):
-  t.timestamp
-
+case class TimestampValue(t: LocalDateTime) extends Value(TimestampType):
   override def toText: TextValue = TextValue(t.toString)
 
   override def compare(that: Value): Int =
     that match
-      case TimestampValue(u) => t compare u
+      case TimestampValue(u) => t.compareTo(u)
       case _                 => super.compare(that)
 
   override def render: String = s"'$t'"
@@ -113,7 +112,7 @@ case class TextValue(s: String) extends Value(TextType):
       case _ => super.compare(that)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType):
-  override def toText: TextValue = TextValue(if b then "TURE" else "FALSE")
+  override def toText: TextValue = TextValue(if b then "TRUE" else "FALSE")
 
   def string: String = if b then "true" else "false"
 

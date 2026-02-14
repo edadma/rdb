@@ -1,5 +1,6 @@
 package io.github.edadma.rdb
 
+import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -7,7 +8,7 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
 
   "Aggregate functions" - {
     "min, max, avg compute correct values" in {
-      val result = test(
+      val table = query(
         """
           |CREATE TABLE numbers (
           | id SERIAL,
@@ -19,10 +20,10 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
 
-      // Check that the results contain the expected calculated values
-      result should include("NumberValue(typ = IntType, value = 5)")    // MIN should be 5
-      result should include("NumberValue(typ = IntType, value = 30)")   // MAX should be 30
-      result should include("NumberValue(typ = DoubleType, value = 16.25)") // AVG: (10+20+30+5)/4
+      val row = table.data.head.data
+      row(0) shouldBe NumberValue(DIntType, 5)
+      row(1) shouldBe NumberValue(DIntType, 30)
+      row(2) shouldBe NumberValue(DDoubleType, 16.25)
     }
 
     "count with nulls correctly excludes nulls from COUNT(column)" in {
@@ -41,6 +42,57 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
       // COUNT(value) should be 3 (excludes NULLs), COUNT(*) should be 5 (includes NULLs)
       result should include("NumberValue(typ = IntType, value = 3)") // COUNT(value) - excludes NULLs
       result should include("NumberValue(typ = IntType, value = 5)") // COUNT(*) - includes NULLs
+    }
+
+    "sum computes correct total" in {
+      val table = query(
+        """
+          |CREATE TABLE items (
+          | id SERIAL,
+          | price INT,
+          | PRIMARY KEY (id)
+          |);
+          |INSERT INTO items (price) VALUES (100), (200), (300);
+          |SELECT SUM(price) FROM items;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe NumberValue(DIntType, 600)
+    }
+
+    "aggregates with GROUP BY" in {
+      val table = query(
+        """
+          |CREATE TABLE emp (
+          | id SERIAL,
+          | department TEXT,
+          | salary INT,
+          | PRIMARY KEY (id)
+          |);
+          |INSERT INTO emp (department, salary) VALUES
+          |  ('Engineering', 75000), ('Sales', 65000),
+          |  ('Engineering', 80000), ('Marketing', 70000);
+          |SELECT department, COUNT(*), SUM(salary) FROM emp GROUP BY department ORDER BY department;
+          |""".trim.stripMargin
+      )
+
+      val rows = table.data.map(_.data)
+      rows.length shouldBe 3
+
+      // Engineering: count=2, sum=155000
+      rows(0)(0) shouldBe TextValue("Engineering")
+      rows(0)(1) shouldBe NumberValue(DIntType, 2)
+      rows(0)(2) shouldBe NumberValue(DIntType, 155000)
+
+      // Marketing: count=1, sum=70000
+      rows(1)(0) shouldBe TextValue("Marketing")
+      rows(1)(1) shouldBe NumberValue(DIntType, 1)
+      rows(1)(2) shouldBe NumberValue(DIntType, 70000)
+
+      // Sales: count=1, sum=65000
+      rows(2)(0) shouldBe TextValue("Sales")
+      rows(2)(1) shouldBe NumberValue(DIntType, 1)
+      rows(2)(2) shouldBe NumberValue(DIntType, 65000)
     }
 
     "aggregates handle empty results" in {

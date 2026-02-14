@@ -9,7 +9,7 @@ import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 @JSExportTopLevel("ConnectSQL")
 class ConnectSQL():
 
-  val db = new MemoryDB()
+  given db: DB = new MemoryDB()
 
   private def toJS(v: Value): js.Any =
     v match
@@ -23,7 +23,7 @@ class ConnectSQL():
 
   @JSExport
   def execute(sql: String): js.Array[js.Any] =
-    executeSQL(sql)(db) map {
+    executeSQL(sql) map {
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
       case InsertResult(obj, _) =>

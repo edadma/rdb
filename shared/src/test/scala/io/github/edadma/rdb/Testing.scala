@@ -4,6 +4,11 @@ import pprint.*
 
 trait Testing:
   def test(sql: String): String =
-    implicit val db: DB = new MemoryDB
+    given DB = new MemoryDB
 
     PPrinter.BlackWhite(executeSQL(sql)).toString :+ '\n'
+
+  def query(sql: String): TableValue =
+    given DB = new MemoryDB
+
+    executeSQL(sql).collect { case QueryResult(t) => t }.last

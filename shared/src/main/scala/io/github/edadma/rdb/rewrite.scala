@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 //import pprint.*
 
-def rewrite(expr: Expr)(implicit db: DB): Expr =
+def rewrite(expr: Expr)(using db: DB): Expr =
   expr match
     case _ if expr.typ != null              => expr
     case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
@@ -154,7 +154,7 @@ def column(expr: Expr): Boolean =
     case BinaryExpr(left, _, right)  => column(left) | column(right)
     case _                           => false
 
-def procRewrite(expr: Expr)(implicit db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
+def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
 
 // todo: case SelectOperator(CrossOperator(rel1, rel2), cond) => // optimize
 // todo: grouped: case ProjectOperator(rel, projs) => ProcessOperator(ProjectProcess(procRewrite(rel), projs map rewrite))

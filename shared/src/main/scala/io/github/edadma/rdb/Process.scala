@@ -179,7 +179,7 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
           case (true, true)   => Nulls.first
       }
     val ordering              = new SeqOrdering(orderings)
-    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(ordering)
+    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx, AggregateMode.Disallow)))(using ordering)
 
     sorted.iterator
 

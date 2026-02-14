@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 class DDLTests extends AnyFreeSpec with Matchers:
 
   private def test(sql: String): String =
-    implicit val db: DB = new MemoryDB
+    given DB = new MemoryDB
     try {
       executeSQL(sql).toString
     } catch {
@@ -14,7 +14,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
     }
   
   private def testExpectingException(sql: String): Unit =
-    implicit val db: DB = new MemoryDB
+    given DB = new MemoryDB
     executeSQL(sql)
 
   "ALTER TABLE command" - {
