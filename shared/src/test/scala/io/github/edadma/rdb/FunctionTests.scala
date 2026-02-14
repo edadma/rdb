@@ -95,6 +95,27 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
       rows(2)(2) shouldBe NumberValue(DIntType, 65000)
     }
 
+    "ungrouped aggregates over whole table" in {
+      val table = query(
+        """
+          |CREATE TABLE staff (
+          | id SERIAL,
+          | salary INT,
+          | PRIMARY KEY (id)
+          |);
+          |INSERT INTO staff (salary) VALUES (50000), (60000), (70000), (80000);
+          |SELECT COUNT(*), MIN(salary), MAX(salary), SUM(salary), AVG(salary) FROM staff;
+          |""".trim.stripMargin
+      )
+
+      val row = table.data.head.data
+      row(0) shouldBe NumberValue(DIntType, 4)
+      row(1) shouldBe NumberValue(DIntType, 50000)
+      row(2) shouldBe NumberValue(DIntType, 80000)
+      row(3) shouldBe NumberValue(DIntType, 260000)
+      row(4) shouldBe NumberValue(DDoubleType, 65000.0)
+    }
+
     "aggregates handle empty results" in {
       val result = test(
         """

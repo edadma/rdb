@@ -141,7 +141,7 @@ def eval(expr: Expr, ctx: Seq[Row], mode: AggregateMode): Value =
 
       val s   = seval(left, ctx, mode)
       val p   = seval(right, ctx, mode)
-      val res = like(s, p, op.contains("ILIKE"))
+      val res = like(s, p, !op.contains("ILIKE"))
 
       BooleanValue(op.contains("NOT") ^ res)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>

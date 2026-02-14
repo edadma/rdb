@@ -12,3 +12,8 @@ trait Testing:
     given DB = new MemoryDB
 
     executeSQL(sql).collect { case QueryResult(t) => t }.last
+
+  def results(sql: String): Seq[io.github.edadma.rdb.Result] =
+    given DB = new MemoryDB
+
+    executeSQL(sql)

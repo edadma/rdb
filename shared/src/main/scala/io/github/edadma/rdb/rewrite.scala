@@ -76,24 +76,24 @@ def rewrite(expr: Expr)(using db: DB): Expr =
           case None     => r1
           case Some(es) => GroupOperator(r1, es map rewrite)
       val r3 =
-        exprs match
-          case Seq(StarExpr()) => r2
-          case _               => ProjectOperator(r2, exprs map rewrite)
-      val r3_having =
-        having match
-          case Some(cond) => HavingOperator(r3, rewrite(cond))
-          case None       => r3
-      val r4 =
         orderBy match
-          case None     => r3_having
-          case Some(os) => SortOperator(r3_having, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+          case None     => r2
+          case Some(os) => SortOperator(r2, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+      val r4 =
+        exprs match
+          case Seq(StarExpr()) => r3
+          case _               => ProjectOperator(r3, exprs map rewrite)
+      val r4_having =
+        having match
+          case Some(cond) => HavingOperator(r4, rewrite(cond))
+          case None       => r4
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
             if count < 0 then problem(pos, s"offset should be non-negative: $count")
 
-            OffsetOperator(r4, count)
-          case None => r4
+            OffsetOperator(r4_having, count)
+          case None => r4_having
       val r6 =
         limit match
           case Some(Count(pos, count)) =>
@@ -103,6 +103,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
           case None => r5
 
       rewrite(r6)
+
     case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
     case GroupOperator(rel, by)            => ProcessOperator(GroupProcess(procRewrite(rel), by))
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
@@ -122,9 +123,15 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val columns         = rewritten_projs exists column
       val rewritten_proc  = procRewrite(rel)
 
+      def hasGroupOperator(e: Expr): Boolean =
+        e match
+          case _: GroupOperator       => true
+          case SortOperator(inner, _) => hasGroupOperator(inner)
+          case _                      => false
+
       ProcessOperator(
         ProjectProcess(
-          if aggregates && !rel.isInstanceOf[GroupOperator] then UngroupedProcess(rewritten_proc, columns)
+          if aggregates && !hasGroupOperator(rel) then UngroupedProcess(rewritten_proc, columns)
           else rewritten_proc,
           rewritten_projs,
         ),
