@@ -12,46 +12,229 @@ class DDLTests extends AnyFreeSpec with Matchers:
     } catch {
       case e: RuntimeException => e.getMessage
     }
-  
+
   private def testExpectingException(sql: String): Unit =
     given DB = new MemoryDB
     executeSQL(sql)
 
-  "ALTER TABLE command" - {
-    "parses ADD COLUMN syntax" in {
+  private def query(sql: String): TableValue =
+    given DB = new MemoryDB
+    executeSQL(sql).collect { case QueryResult(t) => t }.last
+
+  "ALTER TABLE ADD COLUMN" - {
+    "adds column to empty table" in {
       val result = test(
         """
           |CREATE TABLE users (id SERIAL, PRIMARY KEY (id));
           |ALTER TABLE users ADD COLUMN name TEXT;
+          |INSERT INTO users (name) VALUES ('Alice');
+          |SELECT name FROM users;
           |""".trim.stripMargin
       )
-      
-      result should include("ALTER TABLE ADD COLUMN not implemented yet")
+
+      result should include("AlterTableResult")
+      result should include("Alice")
     }
 
-    "parses ADD CONSTRAINT syntax" in {
+    "adds column to table with existing data" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |ALTER TABLE t ADD COLUMN age INTEGER;
+          |SELECT id, name, age FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      // Existing rows should have NULL for the new column
+      table.data(0).data(2).isNull shouldBe true
+      table.data(1).data(2).isNull shouldBe true
+    }
+
+    "adds column with default value populating existing rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER);
+          |INSERT INTO t (id) VALUES (1);
+          |INSERT INTO t (id) VALUES (2);
+          |ALTER TABLE t ADD COLUMN status TEXT DEFAULT 'active';
+          |SELECT id, status FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(1) shouldBe TextValue("active")
+      table.data(1).data(1) shouldBe TextValue("active")
+    }
+
+    "fails when adding duplicate column" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |ALTER TABLE t ADD COLUMN name TEXT;
+            |""".trim.stripMargin
+        )
+      }
+    }
+  }
+
+  "ALTER TABLE DROP COLUMN" - {
+    "drops column from table" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT, email TEXT);
+          |INSERT INTO t (id, name, email) VALUES (1, 'Alice', 'alice@test.com');
+          |ALTER TABLE t DROP COLUMN email;
+          |SELECT id, name FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.meta.width shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(0).data(1) shouldBe TextValue("Alice")
+    }
+
+    "drops middle column preserving data" in {
+      val table = query(
+        """
+          |CREATE TABLE t (a INTEGER, b TEXT, c INTEGER);
+          |INSERT INTO t (a, b, c) VALUES (1, 'x', 10);
+          |INSERT INTO t (a, b, c) VALUES (2, 'y', 20);
+          |ALTER TABLE t DROP COLUMN b;
+          |SELECT a, c FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.meta.width shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(0).data(1) shouldBe NumberValue(10)
+      table.data(1).data(0) shouldBe NumberValue(2)
+      table.data(1).data(1) shouldBe NumberValue(20)
+    }
+
+    "fails when dropping non-existent column" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |ALTER TABLE t DROP COLUMN nonexistent;
+            |""".trim.stripMargin
+        )
+      }
+    }
+  }
+
+  "ALTER TABLE ALTER COLUMN" - {
+    "changes column type with data conversion" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, value INTEGER);
+          |INSERT INTO t (id, value) VALUES (1, 42);
+          |ALTER TABLE t ALTER COLUMN value TYPE TEXT;
+          |SELECT id, value FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe TextValue("42")
+    }
+
+    "sets default value" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, status TEXT);
+          |ALTER TABLE t ALTER COLUMN status SET DEFAULT 'active';
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT id, status FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe TextValue("active")
+    }
+
+    "drops default value" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, status TEXT DEFAULT 'active');
+          |ALTER TABLE t ALTER COLUMN status DROP DEFAULT;
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT id, status FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(1).isNull shouldBe true
+    }
+
+    "sets NOT NULL constraint" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |ALTER TABLE t ALTER COLUMN name SET NOT NULL;
+            |INSERT INTO t (id) VALUES (1);
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "SET NOT NULL fails when column has existing nulls" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |INSERT INTO t (id) VALUES (1);
+            |ALTER TABLE t ALTER COLUMN name SET NOT NULL;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "drops NOT NULL constraint" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT NOT NULL);
+          |ALTER TABLE t ALTER COLUMN name DROP NOT NULL;
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT id, name FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(1).isNull shouldBe true
+    }
+
+    "fails on non-existent column" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |ALTER TABLE t ALTER COLUMN nonexistent TYPE TEXT;
+            |""".trim.stripMargin
+        )
+      }
+    }
+  }
+
+  "ALTER TABLE ADD/DROP CONSTRAINT" - {
+    "adds constraint" in {
       val result = test(
         """
           |CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));
           |ALTER TABLE users ADD CONSTRAINT unique_name UNIQUE (name);
           |""".trim.stripMargin
       )
-      
-      result should include("ALTER TABLE ADD CONSTRAINT not implemented yet")
+
+      result should include("AlterTableResult")
     }
 
-    "parses DROP COLUMN syntax" in {
-      val result = test(
-        """
-          |CREATE TABLE users (id SERIAL, name TEXT, email TEXT, PRIMARY KEY (id));
-          |ALTER TABLE users DROP COLUMN email;
-          |""".trim.stripMargin
-      )
-      
-      result should include("ALTER TABLE DROP COLUMN not implemented yet")
-    }
-
-    "parses DROP CONSTRAINT syntax" in {
+    "drops constraint" in {
       val result = test(
         """
           |CREATE TABLE users (
@@ -63,63 +246,86 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |ALTER TABLE users DROP CONSTRAINT unique_name;
           |""".trim.stripMargin
       )
-      
-      result should include("ALTER TABLE DROP CONSTRAINT not implemented yet")
+
+      result should include("AlterTableResult")
     }
 
-    "parses ALTER COLUMN TYPE syntax" in {
-      val result = test(
-        """
-          |CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));
-          |ALTER TABLE users ALTER COLUMN name TYPE TEXT;
-          |""".trim.stripMargin
-      )
-      
-      result should include("ALTER TABLE ALTER COLUMN not implemented yet")
+    "fails dropping non-existent constraint" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |ALTER TABLE t DROP CONSTRAINT nonexistent;
+            |""".trim.stripMargin
+        )
+      }
     }
+  }
 
-    "parses ALTER COLUMN SET DEFAULT syntax" in {
-      val result = test(
+  "ALTER TABLE RENAME TO" - {
+    "renames table" in {
+      val table = query(
         """
-          |CREATE TABLE users (id SERIAL, status TEXT, PRIMARY KEY (id));
-          |ALTER TABLE users ALTER COLUMN status SET DEFAULT 'active';
-          |""".trim.stripMargin
-      )
-      
-      result should include("ALTER TABLE ALTER COLUMN not implemented yet")
-    }
-
-    "parses ALTER COLUMN DROP DEFAULT syntax" in {
-      val result = test(
-        """
-          |CREATE TABLE users (id SERIAL, status TEXT DEFAULT 'inactive', PRIMARY KEY (id));
-          |ALTER TABLE users ALTER COLUMN status DROP DEFAULT;
-          |""".trim.stripMargin
-      )
-      
-      result should include("ALTER TABLE ALTER COLUMN not implemented yet")
-    }
-
-    "parses RENAME TO syntax" in {
-      val result = test(
-        """
-          |CREATE TABLE users (id SERIAL, PRIMARY KEY (id));
+          |CREATE TABLE users (id INTEGER, name TEXT);
+          |INSERT INTO users (id, name) VALUES (1, 'Alice');
           |ALTER TABLE users RENAME TO customers;
+          |SELECT id, name FROM customers;
           |""".trim.stripMargin
       )
-      
-      result should include("ALTER TABLE RENAME TO not implemented yet")
+
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe TextValue("Alice")
     }
 
-    "parses RENAME COLUMN syntax" in {
-      val result = test(
+    "old name no longer works after rename" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE users (id INTEGER);
+            |ALTER TABLE users RENAME TO customers;
+            |SELECT * FROM users;
+            |""".trim.stripMargin
+        )
+      }
+    }
+  }
+
+  "ALTER TABLE RENAME COLUMN" - {
+    "renames column" in {
+      val table = query(
         """
-          |CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));
-          |ALTER TABLE users RENAME COLUMN name TO full_name;
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |ALTER TABLE t RENAME COLUMN name TO full_name;
+          |SELECT id, full_name FROM t;
           |""".trim.stripMargin
       )
-      
-      result should include("ALTER TABLE RENAME COLUMN not implemented yet")
+
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe TextValue("Alice")
+    }
+
+    "old column name no longer works after rename" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |ALTER TABLE t RENAME COLUMN name TO full_name;
+            |SELECT name FROM t;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "fails on non-existent column" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |ALTER TABLE t RENAME COLUMN nonexistent TO new_name;
+            |""".trim.stripMargin
+        )
+      }
     }
   }
 
@@ -131,7 +337,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TABLE test_table;
           |""".trim.stripMargin
       )
-      
+
       result should include("CreateTableResult")
       result should include("DropTableResult")
     }
@@ -142,7 +348,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TABLE IF EXISTS nonexistent_table;
           |""".trim.stripMargin
       )
-      
+
       result should include("DropTableResult")
     }
 
@@ -153,7 +359,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TABLE test_table CASCADE;
           |""".trim.stripMargin
       )
-      
+
       result should include("CreateTableResult")
       result should include("DropTableResult")
     }
@@ -164,7 +370,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP INDEX test_index;
           |""".trim.stripMargin
       )
-      
+
       result should include("indexes not implemented yet")
     }
 
@@ -174,7 +380,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP INDEX IF EXISTS nonexistent_index;
           |""".trim.stripMargin
       )
-      
+
       result should include("DropIndexResult")
     }
 
@@ -185,7 +391,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TYPE color;
           |""".trim.stripMargin
       )
-      
+
       result should include("CreateTypeResult")
       result should include("DropTypeResult")
     }
@@ -196,7 +402,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TYPE IF EXISTS nonexistent_type;
           |""".trim.stripMargin
       )
-      
+
       result should include("DropTypeResult")
     }
 
@@ -207,7 +413,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |DROP TYPE status CASCADE;
           |""".trim.stripMargin
       )
-      
+
       result should include("CreateTypeResult")
       result should include("DropTypeResult")
     }

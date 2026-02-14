@@ -158,32 +158,53 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
     case AlterTableCommand(id @ Ident(table), alter) =>
       val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
       alter match
-        case AddColumnTableAlteration(column) =>
-          // TODO: Implement adding columns
-          problem(id, "ALTER TABLE ADD COLUMN not implemented yet")
-        case DropColumnTableAlteration(col) =>
-          // TODO: Implement dropping columns  
-          problem(id, "ALTER TABLE DROP COLUMN not implemented yet")
-        case AlterColumnTableAlteration(col, modification) =>
-          // TODO: Implement altering columns
-          problem(id, "ALTER TABLE ALTER COLUMN not implemented yet")
+        case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references)) =>
+          if t.hasColumn(colName) then problem(cid, s"column '$colName' already exists")
+          val typ = typeDesc match
+            case Left(primitive) => primitive
+            case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(problem(tid, s"type '$defined' is undefined"))
+          val fk = references.map { case (tbl, col) => (tbl.name, col.name) }
+          val defaultValue = default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)).getOrElse(NullValue())
+          val spec = ColumnSpec(colName, typ, required, false, unique, fk, default.map(expr => eval(rewrite(expr), Nil, AggregateMode.Disallow)))
+          t.addColumnToTable(spec, defaultValue)
+        case DropColumnTableAlteration(cid @ Ident(colName)) =>
+          if !t.hasColumn(colName) then problem(cid, s"column '$colName' not found")
+          t.dropColumnFromTable(colName)
+        case AlterColumnTableAlteration(cid @ Ident(colName), mod) =>
+          if !t.hasColumn(colName) then problem(cid, s"column '$colName' not found")
+          mod match
+            case SetDataTypeColumnModification(typeDesc) =>
+              val typ = typeDesc match
+                case Left(primitive) => primitive
+                case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(problem(tid, s"type '$defined' is undefined"))
+              t.alterColumnType(colName, typ)
+            case SetDefaultColumnModification(expr) =>
+              t.alterColumnSetDefault(colName, eval(rewrite(expr), Nil, AggregateMode.Disallow))
+            case DropDefaultColumnModification() =>
+              t.alterColumnDropDefault(colName)
+            case SetNotNullColumnModification() =>
+              t.alterColumnSetNotNull(colName)
+            case DropNotNullColumnModification() =>
+              t.alterColumnDropNotNull(colName)
         case AddConstraintTableAlteration(constraint) =>
-          // TODO: Implement adding constraints
-          problem(id, "ALTER TABLE ADD CONSTRAINT not implemented yet")
-        case DropConstraintTableAlteration(name) =>
-          // TODO: Implement dropping constraints
-          problem(id, "ALTER TABLE DROP CONSTRAINT not implemented yet")
-        case RenameTableAlteration(newName) =>
-          // TODO: Implement table renaming
-          problem(id, "ALTER TABLE RENAME TO not implemented yet")
-        case RenameColumnTableAlteration(oldName, newName) =>
-          // TODO: Implement column renaming
-          problem(id, "ALTER TABLE RENAME COLUMN not implemented yet")
+          val spec = constraint match
+            case UniqueConstraint(cname, cols) => UniqueSpec(cols.map(_.name), cname)
+            case PrimaryKeyConstraint(cname, cols) => PrimaryKeySpec(cols.map(_.name), cname)
+            case ForeignKeyConstraint(cname, cols, refTable, refCols) =>
+              ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), cname)
+          t.addConstraintToTable(spec)
+        case DropConstraintTableAlteration(cid @ Ident(constraintName)) =>
+          t.dropConstraintFromTable(constraintName)
+        case RenameTableAlteration(Ident(newName)) =>
+          db.renameTable(table, newName)
+        case RenameColumnTableAlteration(cid @ Ident(oldName), Ident(newName)) =>
+          if !t.hasColumn(oldName) then problem(cid, s"column '$oldName' not found")
+          t.renameColumnInTable(oldName, newName)
         case AddForeignKeyTableAlteration(fk, ref) =>
-          // Legacy support - TODO: implement
-          problem(id, "ALTER TABLE ADD FOREIGN KEY not implemented yet")
+          val spec = ForeignKeySpec(Seq(fk.name), ref.name, Seq(fk.name), None)
+          t.addConstraintToTable(spec)
         case AddForeignKeyConstraintTableAlteration(constraint) =>
-          // Legacy support - TODO: implement
-          problem(id, "ALTER TABLE ADD CONSTRAINT (FK) not implemented yet")
+          val spec = ForeignKeySpec(constraint.columns.map(_.name), constraint.referencedTable.name, constraint.referencedColumns.map(_.name), constraint.name)
+          t.addConstraintToTable(spec)
       AlterTableResult()
   }

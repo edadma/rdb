@@ -16,6 +16,29 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
 
   protected def addColumn(spec: ColumnSpec): Unit = {}
 
+  protected def addColumnData(defaultValue: Value): Unit =
+    for (node <- data.nodeIterator)
+      val old = node.element
+      val arr = new Array[Value](old.length + 1)
+      System.arraycopy(old, 0, arr, 0, old.length)
+      arr(old.length) = defaultValue
+      node.element = arr
+
+  protected def dropColumnData(index: Int): Unit =
+    for (node <- data.nodeIterator)
+      val old = node.element
+      val arr = new Array[Value](old.length - 1)
+      System.arraycopy(old, 0, arr, 0, index)
+      System.arraycopy(old, index + 1, arr, index, old.length - index - 1)
+      node.element = arr
+
+  protected def convertColumnData(index: Int, newType: Type): Unit =
+    for (node <- data.nodeIterator)
+      node.element(index) = newType.convert(node.element(index))
+
+  protected def hasNullInColumn(index: Int): Boolean =
+    data.nodeIterator.exists(_.element(index).isNull)
+
   def iterator(ctx: Seq[Row]): RowIterator =
     data.nodeIterator map (n => Row(n.element to immutable.ArraySeq, meta, Some(updater(n.element)), Some(deleter(n))))
 

@@ -30,6 +30,11 @@ abstract class DB:
 
   def dropTable(name: String): Unit = tables.remove(name)
 
+  def renameTable(oldName: String, newName: String): Unit =
+    val table = tables.remove(oldName).getOrElse(sys.error(s"table '$oldName' not found"))
+    table.name = newName
+    tables(newName) = table
+
   protected def addEnum(name: String, labels: Seq[String]): EnumType
 
   def createEnum(name: String, labels: Seq[String]): Unit =
@@ -45,7 +50,7 @@ abstract class DB:
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
-abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
+abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   protected val columns       = new ArrayBuffer[ColumnSpec]
   protected val columnMap     = new mutable.HashMap[String, Int]
@@ -95,6 +100,93 @@ abstract class Table(val name: String, specs: Seq[Spec]) extends Process:
 
         autoMap(col) = next
         next
+
+  // Abstract storage methods for subclasses to implement
+  protected def addColumnData(defaultValue: Value): Unit
+  protected def dropColumnData(index: Int): Unit
+  protected def convertColumnData(index: Int, newType: Type): Unit
+  protected def hasNullInColumn(index: Int): Boolean
+
+  protected def rebuildMeta(): Unit =
+    _meta = Metadata(columns.to(immutable.ArraySeq).map(s => ColumnMetadata(Some(name), s.name, s.typ)))
+
+  def addColumnToTable(spec: ColumnSpec, defaultValue: Value): Unit =
+    createColumn(spec)
+    addColumnData(defaultValue)
+
+  def dropColumnFromTable(colName: String): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    // Check if column is part of primary key
+    primaryKey match
+      case Some(pk) if pk.columns.contains(colName) =>
+        sys.error(s"cannot drop column '$colName': part of primary key")
+      case _ =>
+    dropColumnData(idx)
+    columns.remove(idx)
+    columnMap.remove(colName)
+    // Shift indices for columns after the removed one
+    for ((cn, ci) <- columnMap)
+      if ci > idx then columnMap(cn) = ci - 1
+    rebuildMeta()
+
+  def renameColumnInTable(oldName: String, newName: String): Unit =
+    val idx = columnMap.getOrElse(oldName, sys.error(s"column '$oldName' not found"))
+    columnMap.remove(oldName)
+    columnMap(newName) = idx
+    columns(idx) = columns(idx).copy(name = newName)
+    // Update constraint references
+    for (i <- constraints.indices)
+      constraints(i) = constraints(i) match
+        case pk: PrimaryKeySpec => pk.copy(columns = pk.columns.map(c => if c == oldName then newName else c))
+        case u: UniqueSpec => u.copy(columns = u.columns.map(c => if c == oldName then newName else c))
+        case fk: ForeignKeySpec => fk.copy(columns = fk.columns.map(c => if c == oldName then newName else c))
+        case other => other
+    primaryKey = primaryKey.map(pk => pk.copy(columns = pk.columns.map(c => if c == oldName then newName else c)))
+    rebuildMeta()
+
+  def alterColumnType(colName: String, newType: Type): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    columns(idx) = columns(idx).copy(typ = newType)
+    convertColumnData(idx, newType)
+    rebuildMeta()
+
+  def alterColumnSetDefault(colName: String, default: Value): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    columns(idx) = columns(idx).copy(default = Some(default))
+
+  def alterColumnDropDefault(colName: String): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    columns(idx) = columns(idx).copy(default = None)
+
+  def alterColumnSetNotNull(colName: String): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    if hasNullInColumn(idx) then sys.error(s"column '$colName' contains null values")
+    columns(idx) = columns(idx).copy(required = true)
+
+  def alterColumnDropNotNull(colName: String): Unit =
+    val idx = columnMap.getOrElse(colName, sys.error(s"column '$colName' not found"))
+    columns(idx) = columns(idx).copy(required = false)
+
+  def addConstraintToTable(spec: Spec): Unit =
+    spec match
+      case pk: PrimaryKeySpec =>
+        if primaryKey.isDefined then sys.error("table already has a primary key")
+        primaryKey = Some(pk)
+      case _ =>
+    constraints += spec
+
+  def dropConstraintFromTable(constraintName: String): Unit =
+    val idx = constraints.indexWhere {
+      case pk: PrimaryKeySpec => pk.name.contains(constraintName)
+      case u: UniqueSpec => u.name.contains(constraintName)
+      case fk: ForeignKeySpec => fk.name.contains(constraintName)
+      case _ => false
+    }
+    if idx < 0 then sys.error(s"constraint '$constraintName' not found")
+    constraints(idx) match
+      case _: PrimaryKeySpec => primaryKey = None
+      case _ =>
+    constraints.remove(idx)
 
   def insert(row: Map[String, Value], returning: Option[Ident]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
