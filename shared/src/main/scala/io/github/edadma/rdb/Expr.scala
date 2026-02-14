@@ -51,4 +51,5 @@ case class SQLSelectExpr(
     orderBy: Option[Seq[OrderBy]],
     offset: Option[Count],
     limit: Option[Count],
+    distinct: Boolean = false,
 ) extends Expr

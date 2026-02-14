@@ -313,4 +313,35 @@ describe("ConnectSQL", () => {
       assert.equal(typeof res.result[0][0], "number");
     });
   });
+
+  describe("DISTINCT", () => {
+    before(() => {
+      db.execute(`
+        CREATE TABLE colors (id SERIAL, color TEXT);
+        INSERT INTO colors (color) VALUES ('red');
+        INSERT INTO colors (color) VALUES ('blue');
+        INSERT INTO colors (color) VALUES ('red');
+        INSERT INTO colors (color) VALUES ('green');
+        INSERT INTO colors (color) VALUES ('blue')
+      `);
+    });
+
+    it("removes duplicate values", () => {
+      const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color");
+      assert.equal(res.result.length, 3);
+      assert.equal(res.result[0][0], "blue");
+      assert.equal(res.result[1][0], "green");
+      assert.equal(res.result[2][0], "red");
+    });
+
+    it("without DISTINCT returns all rows", () => {
+      const [res] = db.execute("SELECT color FROM colors ORDER BY color");
+      assert.equal(res.result.length, 5);
+    });
+
+    it("works with LIMIT", () => {
+      const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color LIMIT 2");
+      assert.equal(res.result.length, 2);
+    });
+  });
 });

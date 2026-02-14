@@ -288,9 +288,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val query: P[SQLSelectExpr] =
     kw(
       "SELECT",
-    ) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ~ orderByClause ~ limitClause ~ offsetClause ^^ {
-      case _ ~ p ~ f ~ w ~ g ~ h ~ o ~ l ~ of =>
-        SQLSelectExpr(p to ArraySeq, f, w, g, h, o, of, l)
+    ) ~ opt(kw("DISTINCT")) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ~ orderByClause ~ limitClause ~ offsetClause ^^ {
+      case _ ~ d ~ p ~ f ~ w ~ g ~ h ~ o ~ l ~ of =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, o, of, l, distinct = d.isDefined)
     }
 
   lazy val fromClause: P[Option[Seq[Expr]]] = opt(kw("FROM") ~> rep1sep(sources, ","))

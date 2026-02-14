@@ -116,7 +116,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
            else BinaryExpr(value, ">", upper) setType BooleanType) match
             case rightCond =>
               BinaryExpr(leftCond, if op == "BETWEEN" then "AND" else "OR", rightCond) setType BooleanType
-    case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit, _) =>
       if where.isDefined then problem(where.get, "WHERE clause not allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
       if having.isDefined then problem(where.get, "HAVING clause not allowed here")
@@ -127,7 +127,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val rewritten_projs = exprs map rewrite
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
-    case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit) =>
+    case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit, distinct) =>
       def cross(es: Seq[Expr]): Expr =
         es match
           case Seq(e)  => e
@@ -199,13 +199,14 @@ def rewrite(expr: Expr)(using db: DB): Expr =
             case Some(cond) => HavingOperator(r3, rewrite(cond))
             case None       => r3
 
+      val r_distinct = if distinct then DistinctOperator(r_ordered) else r_ordered
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
             if count < 0 then problem(pos, s"offset should be non-negative: $count")
 
-            OffsetOperator(r_ordered, count)
-          case None => r_ordered
+            OffsetOperator(r_distinct, count)
+          case None => r_distinct
       val r6 =
         limit match
           case Some(Count(pos, count)) =>
@@ -221,6 +222,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       ProcessOperator(AggregateProcess(procRewrite(rel), groupBy, aggregates))
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
+    case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))
     case InnerJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
