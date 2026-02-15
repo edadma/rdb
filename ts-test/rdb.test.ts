@@ -1,7 +1,7 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
-const { ConnectSQL } = await import("../js/target/scala-3.8.1/rdb-fastopt/main.js");
+const { ConnectSQL } = await import("../js/target/scala-3.8.1/rdb-opt/main.js");
 
 describe("ConnectSQL", () => {
   let db: any;

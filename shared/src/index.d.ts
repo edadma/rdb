@@ -1,67 +1,67 @@
-interface ConnectSQLOptions {
+export interface ConnectSQLOptions {
     rowMode?: 'object' | 'array';
 }
 
-interface ExecuteOptions {
+export interface ExecuteOptions {
     rowMode?: 'object' | 'array';
 }
 
-interface FieldInfo {
+export interface FieldInfo {
     name: string;
     dataType: string;
 }
 
-interface CreateTableResult {
+export interface CreateTableResult {
     command: 'create table';
     table: string;
 }
 
-interface DropTableResult {
+export interface DropTableResult {
     command: 'drop table';
     table: string;
 }
 
-interface CreateTypeResult {
+export interface CreateTypeResult {
     command: 'create type';
     type: string;
 }
 
-interface DropTypeResult {
+export interface DropTypeResult {
     command: 'drop type';
     type: string;
 }
 
-interface DropIndexResult {
+export interface DropIndexResult {
     command: 'drop index';
     index: string;
 }
 
-interface AlterTableResult {
+export interface AlterTableResult {
     command: 'alter table';
 }
 
-interface InsertResult {
+export interface InsertResult {
     command: 'insert';
     result: Record<string, any>;
 }
 
-interface SelectResult<T = Record<string, any>> {
+export interface SelectResult<T = Record<string, any>> {
     command: 'select';
     rows: T[];
     fields: FieldInfo[];
 }
 
-interface UpdateResult {
+export interface UpdateResult {
     command: 'update';
     rows: number;
 }
 
-interface DeleteResult {
+export interface DeleteResult {
     command: 'delete';
     rows: number;
 }
 
-type ExecuteResult =
+export type ExecuteResult =
     | CreateTableResult
     | DropTableResult
     | CreateTypeResult

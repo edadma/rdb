@@ -1,5 +1,5 @@
 #!/bin/bash
 set -e
 
-sbt rdbJS/fastOptJS
+sbt rdbJS/fullOptJS
 node --experimental-strip-types --test ts-test/rdb.test.ts

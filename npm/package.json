@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "description": "In-memory SQL database engine",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./main.js"
+    }
+  },
   "main": "main.js",
   "types": "index.d.ts",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "files": [
+    "main.js",
+    "index.d.ts",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/edadma/rdb.git"
@@ -16,11 +24,10 @@
     "SQL",
     "in-memory",
     "database",
-    "scala",
     "javascript",
     "typescript"
   ],
-  "author": "",
+  "author": "Edward A. Maxedon, Sr.",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/edadma/rdb/issues"
