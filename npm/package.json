@@ -1,8 +1,10 @@
 {
   "name": "@edadma/rdb",
-  "version": "0.1.0-pre.40",
-  "description": "In-memory database",
+  "version": "0.1.0",
+  "description": "In-memory SQL database engine",
+  "type": "module",
   "main": "main.js",
+  "types": "index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

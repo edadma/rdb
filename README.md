@@ -26,7 +26,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb" % "0.0.29"
+libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.0"
 ```
 
 ## Basic Usage
@@ -50,13 +50,18 @@ db.execute(`
 
 // Insert data
 db.execute(`
-  INSERT INTO users (name, email, created_at) 
+  INSERT INTO users (name, email, created_at)
   VALUES ('John Doe', 'john@example.com', CURRENT_TIMESTAMP)
 `);
 
-// Query data
-const results = db.execute('SELECT * FROM users');
-console.log(results);
+// Query data — rows are objects by default
+const [{ rows, fields }] = db.execute('SELECT * FROM users');
+console.log(fields); // [{ name: 'id', dataType: 'serial' }, ...]
+console.log(rows);   // [{ id: 1, name: 'John Doe', ... }]
+
+// Or use array mode
+const arrayDb = new ConnectSQL({ rowMode: 'array' });
+// Can also override per-call: db.execute(sql, { rowMode: 'array' })
 ```
 
 ### Scala
@@ -183,6 +188,7 @@ WHERE metadata->>'category' = 'electronics';
 - **Common Table Expressions (CTEs)** - WITH clauses
 - **Case Expressions** - Conditional logic in SELECT
 - **Pattern Matching** - LIKE and ILIKE operators
+- **DISTINCT** - Remove duplicate rows from results
 - **Set Operations** - UNION, INTERSECT, EXCEPT
 - **Null Handling** - IS NULL, IS NOT NULL, COALESCE
 
@@ -191,42 +197,49 @@ WHERE metadata->>'category' = 'electronics';
 ### JavaScript/TypeScript API
 
 ```typescript
+interface ConnectSQLOptions {
+  rowMode?: 'object' | 'array';  // default: 'object'
+}
+
+interface ExecuteOptions {
+  rowMode?: 'object' | 'array';  // overrides constructor default
+}
+
 class ConnectSQL {
-  constructor()
-  
-  /**
-   * Execute one or more SQL statements
-   * @param sql - SQL string (can contain multiple statements separated by ;)
-   * @returns Array of result objects
-   */
-  execute(sql: string): any[]
+  constructor(options?: ConnectSQLOptions)
+  execute(sql: string, options?: ExecuteOptions): ExecuteResult[]
 }
 ```
 
 #### Result Types
 
 ```javascript
-// CREATE TABLE result
-{
-  command: "create table",
-  table: "table_name"
-}
+// CREATE TABLE / DROP TABLE
+{ command: "create table", table: "table_name" }
+{ command: "drop table", table: "table_name" }
 
-// INSERT result  
-{
-  command: "insert",
-  result: { id: 1, auto_column: "generated_value" }
-}
+// CREATE TYPE / DROP TYPE
+{ command: "create type", type: "type_name" }
+{ command: "drop type", type: "type_name" }
 
-// SELECT result
-{
-  command: "select", 
-  result: [
-    [value1, value2, ...], // Row 1
-    [value3, value4, ...], // Row 2
-    // ...
-  ]
-}
+// DROP INDEX
+{ command: "drop index", index: "index_name" }
+
+// ALTER TABLE
+{ command: "alter table" }
+
+// INSERT — result contains generated/default column values
+{ command: "insert", result: { id: 1, uuid_col: "..." } }
+
+// SELECT — object mode (default)
+{ command: "select", rows: [{ id: 1, name: "Alice" }, ...], fields: [{ name: "id", dataType: "serial" }, ...] }
+
+// SELECT — array mode
+{ command: "select", rows: [[1, "Alice"], ...], fields: [{ name: "id", dataType: "serial" }, ...] }
+
+// UPDATE / DELETE
+{ command: "update", rows: 3 }
+{ command: "delete", rows: 1 }
 ```
 
 ### Scala API
