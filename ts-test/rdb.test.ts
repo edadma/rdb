@@ -67,10 +67,54 @@ describe("ConnectSQL", () => {
   });
 
   describe("SELECT results", () => {
-    it("returns rows as arrays", () => {
+    it("returns rows as objects by default", () => {
       const [res] = db.execute("SELECT * FROM t1");
       assert.equal(res.command, "select");
-      assert.ok(Array.isArray(res.result));
+      assert.ok(Array.isArray(res.rows));
+      assert.ok(Array.isArray(res.fields));
+      if (res.rows.length > 0) {
+        assert.equal(typeof res.rows[0], "object");
+        assert.ok(!Array.isArray(res.rows[0]));
+        assert.ok("name" in res.rows[0]);
+      }
+    });
+
+    it("returns fields with name and dataType", () => {
+      const [res] = db.execute("SELECT * FROM t1");
+      assert.ok(res.fields.length > 0);
+      for (const field of res.fields) {
+        assert.equal(typeof field.name, "string");
+        assert.equal(typeof field.dataType, "string");
+      }
+    });
+
+    it("returns rows as arrays with rowMode option", () => {
+      const [res] = db.execute("SELECT * FROM t1", { rowMode: "array" });
+      assert.equal(res.command, "select");
+      assert.ok(Array.isArray(res.rows));
+      if (res.rows.length > 0) {
+        assert.ok(Array.isArray(res.rows[0]));
+      }
+    });
+  });
+
+  describe("constructor rowMode", () => {
+    it("defaults to array mode when set in constructor", () => {
+      const arrayDb = new ConnectSQL({ rowMode: "array" });
+      arrayDb.execute("CREATE TABLE ctest (id INT, name TEXT)");
+      arrayDb.execute("INSERT INTO ctest (id, name) VALUES (1, 'a')");
+      const [res] = arrayDb.execute("SELECT * FROM ctest");
+      assert.ok(Array.isArray(res.rows[0]));
+    });
+
+    it("per-call option overrides constructor default", () => {
+      const arrayDb = new ConnectSQL({ rowMode: "array" });
+      arrayDb.execute("CREATE TABLE ctest2 (id INT, name TEXT)");
+      arrayDb.execute("INSERT INTO ctest2 (id, name) VALUES (1, 'a')");
+      const [res] = arrayDb.execute("SELECT * FROM ctest2", { rowMode: "object" });
+      assert.ok(!Array.isArray(res.rows[0]));
+      assert.equal(typeof res.rows[0], "object");
+      assert.equal(res.rows[0].name, "a");
     });
   });
 
@@ -99,66 +143,72 @@ describe("ConnectSQL", () => {
     });
 
     it("INT converts to number", () => {
-      const [res] = db.execute("SELECT int_col FROM conversions");
-      assert.equal(res.result[0][0], 42);
-      assert.equal(typeof res.result[0][0], "number");
+      const [res] = db.execute("SELECT int_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 42);
+      assert.equal(typeof res.rows[0][0], "number");
     });
 
     it("DOUBLE converts to number", () => {
-      const [res] = db.execute("SELECT double_col FROM conversions");
-      assert.equal(res.result[0][0], 3.14);
-      assert.equal(typeof res.result[0][0], "number");
+      const [res] = db.execute("SELECT double_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 3.14);
+      assert.equal(typeof res.rows[0][0], "number");
     });
 
     it("NUMERIC converts to number", () => {
-      const [res] = db.execute("SELECT numeric_col FROM conversions");
-      assert.equal(res.result[0][0], 99.95);
-      assert.equal(typeof res.result[0][0], "number");
+      const [res] = db.execute("SELECT numeric_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 99.95);
+      assert.equal(typeof res.rows[0][0], "number");
     });
 
     it("TEXT converts to string", () => {
-      const [res] = db.execute("SELECT text_col FROM conversions");
-      assert.equal(res.result[0][0], "hello");
-      assert.equal(typeof res.result[0][0], "string");
+      const [res] = db.execute("SELECT text_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "hello");
+      assert.equal(typeof res.rows[0][0], "string");
     });
 
     it("BOOLEAN converts to boolean", () => {
-      const [res] = db.execute("SELECT bool_col FROM conversions");
-      assert.equal(res.result[0][0], true);
-      assert.equal(typeof res.result[0][0], "boolean");
+      const [res] = db.execute("SELECT bool_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], true);
+      assert.equal(typeof res.rows[0][0], "boolean");
     });
 
     it("UUID converts to string", () => {
-      const [res] = db.execute("SELECT uuid_col FROM conversions");
-      assert.equal(typeof res.result[0][0], "string");
-      assert.match(res.result[0][0], /^[0-9a-f-]{36}$/);
+      const [res] = db.execute("SELECT uuid_col FROM conversions", { rowMode: "array" });
+      assert.equal(typeof res.rows[0][0], "string");
+      assert.match(res.rows[0][0], /^[0-9a-f-]{36}$/);
     });
 
     it("TIMESTAMP converts to Date", () => {
-      const [res] = db.execute("SELECT ts_col FROM conversions");
-      assert.ok(res.result[0][0] instanceof Date);
+      const [res] = db.execute("SELECT ts_col FROM conversions", { rowMode: "array" });
+      assert.ok(res.rows[0][0] instanceof Date);
     });
 
     it("ENUM converts to string label", () => {
-      const [res] = db.execute("SELECT enum_col FROM conversions");
-      assert.equal(res.result[0][0], "red");
-      assert.equal(typeof res.result[0][0], "string");
+      const [res] = db.execute("SELECT enum_col FROM conversions", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "red");
+      assert.equal(typeof res.rows[0][0], "string");
     });
 
     it("JSON array converts to Array", () => {
-      const [res] = db.execute("SELECT json_arr FROM conversions");
-      assert.deepEqual(res.result[0][0], [1, 2, 3]);
+      const [res] = db.execute("SELECT json_arr FROM conversions", { rowMode: "array" });
+      assert.deepEqual(res.rows[0][0], [1, 2, 3]);
     });
 
     it("JSON object converts to Object", () => {
-      const [res] = db.execute("SELECT json_obj FROM conversions");
-      assert.deepEqual(res.result[0][0], { key: "value" });
+      const [res] = db.execute("SELECT json_obj FROM conversions", { rowMode: "array" });
+      assert.deepEqual(res.rows[0][0], { key: "value" });
     });
 
     it("NULL converts to null", () => {
       db.execute("INSERT INTO conversions (int_col) VALUES (1)");
-      const [res] = db.execute("SELECT text_col FROM conversions WHERE int_col = 1");
-      assert.equal(res.result[0][0], null);
+      const [res] = db.execute("SELECT text_col FROM conversions WHERE int_col = 1", { rowMode: "array" });
+      assert.equal(res.rows[0][0], null);
+    });
+
+    it("values accessible by column name in object mode", () => {
+      const [res] = db.execute("SELECT int_col, text_col FROM conversions WHERE int_col = 42");
+      assert.equal(res.rows[0].int_col, 42);
+      assert.equal(res.rows[0].text_col, "hello");
     });
   });
 
@@ -217,8 +267,8 @@ describe("ConnectSQL", () => {
       db.execute("CREATE TABLE empty_t (id INT, name TEXT)");
       const [res] = db.execute("SELECT * FROM empty_t");
       assert.equal(res.command, "select");
-      assert.ok(Array.isArray(res.result));
-      assert.equal(res.result.length, 0);
+      assert.ok(Array.isArray(res.rows));
+      assert.equal(res.rows.length, 0);
     });
 
     it("UPDATE affecting zero rows returns rows = 0", () => {
@@ -271,7 +321,7 @@ describe("ConnectSQL", () => {
       db2.execute("CREATE TABLE shared_name (id INT, val TEXT)");
       db1.execute("INSERT INTO shared_name (id, val) VALUES (1, 'from db1')");
       const [res] = db2.execute("SELECT * FROM shared_name");
-      assert.equal(res.result.length, 0);
+      assert.equal(res.rows.length, 0);
     });
   });
 
@@ -282,35 +332,35 @@ describe("ConnectSQL", () => {
 
     it("zero", () => {
       db.execute("INSERT INTO edges (int_col) VALUES (0)");
-      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = 0");
-      assert.equal(res.result[0][0], 0);
-      assert.equal(typeof res.result[0][0], "number");
+      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = 0", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 0);
+      assert.equal(typeof res.rows[0][0], "number");
     });
 
     it("negative numbers", () => {
       db.execute("INSERT INTO edges (int_col) VALUES (-42)");
-      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = -42");
-      assert.equal(res.result[0][0], -42);
+      const [res] = db.execute("SELECT int_col FROM edges WHERE int_col = -42", { rowMode: "array" });
+      assert.equal(res.rows[0][0], -42);
     });
 
     it("empty string", () => {
       db.execute("INSERT INTO edges (text_col) VALUES ('')");
-      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col = ''");
-      assert.equal(res.result[0][0], "");
-      assert.equal(typeof res.result[0][0], "string");
+      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col = ''", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "");
+      assert.equal(typeof res.rows[0][0], "string");
     });
 
     it("unicode text", () => {
       db.execute("INSERT INTO edges (text_col) VALUES ('\u00e9\u2603\ud83d\ude80')");
-      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col LIKE '\u00e9%'");
-      assert.equal(res.result[0][0], "\u00e9\u2603\ud83d\ude80");
+      const [res] = db.execute("SELECT text_col FROM edges WHERE text_col LIKE '\u00e9%'", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "\u00e9\u2603\ud83d\ude80");
     });
 
     it("NUMERIC preserves decimal precision", () => {
       db.execute("INSERT INTO edges (num_col) VALUES (100.10)");
-      const [res] = db.execute("SELECT num_col FROM edges WHERE num_col = 100.10");
-      assert.equal(res.result[0][0], 100.1);
-      assert.equal(typeof res.result[0][0], "number");
+      const [res] = db.execute("SELECT num_col FROM edges WHERE num_col = 100.10", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 100.1);
+      assert.equal(typeof res.rows[0][0], "number");
     });
   });
 
@@ -327,21 +377,21 @@ describe("ConnectSQL", () => {
     });
 
     it("removes duplicate values", () => {
-      const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color");
-      assert.equal(res.result.length, 3);
-      assert.equal(res.result[0][0], "blue");
-      assert.equal(res.result[1][0], "green");
-      assert.equal(res.result[2][0], "red");
+      const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color", { rowMode: "array" });
+      assert.equal(res.rows.length, 3);
+      assert.equal(res.rows[0][0], "blue");
+      assert.equal(res.rows[1][0], "green");
+      assert.equal(res.rows[2][0], "red");
     });
 
     it("without DISTINCT returns all rows", () => {
       const [res] = db.execute("SELECT color FROM colors ORDER BY color");
-      assert.equal(res.result.length, 5);
+      assert.equal(res.rows.length, 5);
     });
 
     it("works with LIMIT", () => {
       const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color LIMIT 2");
-      assert.equal(res.result.length, 2);
+      assert.equal(res.rows.length, 2);
     });
   });
 });

@@ -7,9 +7,12 @@ import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
 @JSExportTopLevel("ConnectSQL")
-class ConnectSQL():
+class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   given db: DB = new MemoryDB()
+
+  private val defaultRowMode: String =
+    options.toOption.flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption).getOrElse("object")
 
   private def toJS(v: Value): js.Any =
     v match
@@ -25,8 +28,49 @@ class ConnectSQL():
       case ObjectValue(properties)     => (properties map { case (k, v) => k -> toJS(v) } toMap) toJSDictionary
       case TimestampValue(t)           => new js.Date(t.toString)
 
+  private def typeString(typ: Type): String =
+    typ match
+      case SerialType        => "serial"
+      case BigSerialType     => "bigserial"
+      case IntegerType       => "int"
+      case BigintType        => "bigint"
+      case DoubleType        => "double"
+      case NumericType(_, _) => "numeric"
+      case TextType          => "text"
+      case BooleanType       => "boolean"
+      case UUIDType          => "uuid"
+      case TimestampType     => "timestamp"
+      case JSONType          => "json"
+      case ArrayType         => "array"
+      case _: EnumType       => "enum"
+      case NumberType        => "number"
+      case _                 => "unknown"
+
+  private def buildQueryResult(table: TableValue, rowMode: String): js.Any =
+    val columns = table.meta.columns
+    val fields = columns.map(col =>
+      js.Dynamic.literal(name = col.name, dataType = typeString(col.typ))
+    ).toJSArray
+
+    val rows = rowMode match
+      case "array" =>
+        table.data.map(row => (row.data map toJS toJSArray): js.Any).toJSArray
+      case _ =>
+        table.data.map { row =>
+          val obj = js.Dynamic.literal()
+          for ((col, i) <- columns.zipWithIndex)
+            obj.updateDynamic(col.name)(toJS(row.data(i)))
+          obj: js.Any
+        }.toJSArray
+
+    js.Dynamic.literal(command = "select", rows = rows, fields = fields)
+
   @JSExport
-  def execute(sql: String): js.Array[js.Any] =
+  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+    val rowMode = options.toOption
+      .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
+      .getOrElse(defaultRowMode)
+
     executeSQL(sql) map {
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
@@ -35,9 +79,7 @@ class ConnectSQL():
 
         js.Dynamic.literal(command = "insert", result = res)
       case QueryResult(table) =>
-        val res = table.data map (_.data map toJS toJSArray) toJSArray
-
-        js.Dynamic.literal(command = "select", result = res)
+        buildQueryResult(table, rowMode)
       case UpdateResult(rows) =>
         js.Dynamic.literal(command = "update", rows = rows)
       case DeleteResult(rows) =>
