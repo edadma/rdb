@@ -217,6 +217,39 @@ def rewrite(expr: Expr)(using db: DB): Expr =
 
       rewrite(r6)
 
+    case SetOperationExpr(op, left, right) =>
+      val l = rewrite(left)
+      val r = rewrite(right)
+      op match
+        case "UNION"     => rewrite(UnionOperator(l, r, all = false))
+        case "UNION ALL" => rewrite(UnionOperator(l, r, all = true))
+        case "INTERSECT" => rewrite(IntersectOperator(l, r))
+        case "EXCEPT"    => rewrite(ExceptOperator(l, r))
+    case CompoundQueryExpr(inner, orderBy, offset, limit) =>
+      val r = rewrite(inner)
+      val r1 =
+        orderBy match
+          case None     => r
+          case Some(os) => SortOperator(r, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+      val r2 =
+        offset match
+          case Some(Count(pos, count)) =>
+            if count < 0 then problem(pos, s"offset should be non-negative: $count")
+            OffsetOperator(r1, count)
+          case None => r1
+      val r3 =
+        limit match
+          case Some(Count(pos, count)) =>
+            if count < 1 then problem(pos, s"limit should be positive: $count")
+            LimitOperator(r2, count)
+          case None => r2
+      rewrite(r3)
+    case UnionOperator(rel1, rel2, all) =>
+      ProcessOperator(UnionProcess(procRewrite(rel1), procRewrite(rel2), all))
+    case IntersectOperator(rel1, rel2) =>
+      ProcessOperator(IntersectProcess(procRewrite(rel1), procRewrite(rel2)))
+    case ExceptOperator(rel1, rel2) =>
+      ProcessOperator(ExceptProcess(procRewrite(rel1), procRewrite(rel2)))
     case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
     case AggregateOperator(rel, groupBy, aggregates) =>
       ProcessOperator(AggregateProcess(procRewrite(rel), groupBy, aggregates))

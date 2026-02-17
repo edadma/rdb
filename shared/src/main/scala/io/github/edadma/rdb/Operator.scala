@@ -23,4 +23,8 @@ case class DistinctOperator(rel: Expr) extends Operator
 case class AggregateSpec(name: String, func: AggregateFunctionInstance, arg: Expr, typ: Type)
 case class AggregateOperator(rel: Expr, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Operator
 
+case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator
+case class IntersectOperator(rel1: Expr, rel2: Expr) extends Operator
+case class ExceptOperator(rel1: Expr, rel2: Expr) extends Operator
+
 case class ProcessOperator(proc: Process) extends Operator

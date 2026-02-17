@@ -171,6 +171,27 @@ class DropProcess(input: Process, n: Int) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) drop n
 
+case class UnionProcess(input1: Process, input2: Process, all: Boolean) extends Process:
+  val meta: Metadata = input1.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val combined = input1.iterator(ctx) ++ input2.iterator(ctx).map(row => Row(row.data, meta, None, None))
+    if all then combined else combined.distinctBy(_.data)
+
+case class IntersectProcess(input1: Process, input2: Process) extends Process:
+  val meta: Metadata = input1.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rightSet = input2.iterator(ctx).map(_.data).toSet
+    input1.iterator(ctx).filter(row => rightSet.contains(row.data)).distinctBy(_.data)
+
+case class ExceptProcess(input1: Process, input2: Process) extends Process:
+  val meta: Metadata = input1.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rightSet = input2.iterator(ctx).map(_.data).toSet
+    input1.iterator(ctx).filter(row => !rightSet.contains(row.data)).distinctBy(_.data)
+
 case class CrossProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 

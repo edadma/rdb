@@ -215,6 +215,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "type",
       "UNION",
       "union",
+      "INTERSECT",
+      "intersect",
+      "EXCEPT",
+      "except",
       "UNIQUE",
       "unique",
       "UPDATE",
@@ -293,12 +297,36 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
-  lazy val query: P[SQLSelectExpr] =
+  lazy val selectCore: P[Expr] =
     kw(
       "SELECT",
-    ) ~ opt(kw("DISTINCT")) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ~ orderByClause ~ limitClause ~ offsetClause ^^ {
-      case _ ~ d ~ p ~ f ~ w ~ g ~ h ~ o ~ l ~ of =>
-        SQLSelectExpr(p to ArraySeq, f, w, g, h, o, of, l, distinct = d.isDefined)
+    ) ~ opt(kw("DISTINCT")) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ^^ {
+      case _ ~ d ~ p ~ f ~ w ~ g ~ h =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = d.isDefined)
+    } | "(" ~> compoundSelect <~ ")"
+
+  lazy val intersectSelect: P[Expr] =
+    intersectSelect ~ kw("INTERSECT") ~ selectCore ^^ { case l ~ _ ~ r =>
+      SetOperationExpr("INTERSECT", l, r)
+    } | selectCore
+
+  lazy val compoundSelect: P[Expr] =
+    compoundSelect ~ kw("UNION") ~ kw("ALL") ~ intersectSelect ^^ { case l ~ _ ~ _ ~ r =>
+      SetOperationExpr("UNION ALL", l, r)
+    } |
+      compoundSelect ~ kw("UNION") ~ intersectSelect ^^ { case l ~ _ ~ r =>
+        SetOperationExpr("UNION", l, r)
+      } |
+      compoundSelect ~ kw("EXCEPT") ~ intersectSelect ^^ { case l ~ _ ~ r =>
+        SetOperationExpr("EXCEPT", l, r)
+      } |
+      intersectSelect
+
+  lazy val query: P[Expr] =
+    compoundSelect ~ orderByClause ~ limitClause ~ offsetClause ^^ {
+      case (s: SQLSelectExpr) ~ o ~ l ~ of            => s.copy(orderBy = o, limit = l, offset = of)
+      case s ~ None ~ None ~ None                     => s
+      case s ~ o ~ l ~ of                             => CompoundQueryExpr(s, o, of, l)
     }
 
   lazy val fromClause: P[Option[Seq[Expr]]] = opt(kw("FROM") ~> rep1sep(sources, ","))
@@ -713,7 +741,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case Failure(error, rest) => problem(rest.pos, error)
       case Error(error, rest)   => problem(rest.pos, error)
 
-  def parseQuery(input: String): SQLSelectExpr = parse(input, query)
+  def parseQuery(input: String): Expr = parse(input, query)
 
   def parseCommand(input: String): Command = parse(input, command)
 

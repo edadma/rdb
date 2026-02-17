@@ -7,7 +7,7 @@ import scala.language.postfixOps
 
 def executeQuery(query: String)(using db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
 
-def executeSelect(query: SQLSelectExpr)(using db: DB) =
+def executeSelect(query: Expr)(using db: DB) =
   QueryResult(eval(rewrite(query), Nil).asInstanceOf[TableValue])
 
 def executeSQL(sql: String)(using db: DB): Seq[Result] =
