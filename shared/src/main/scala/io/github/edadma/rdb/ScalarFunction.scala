@@ -3,6 +3,8 @@ package io.github.edadma.rdb
 import scala.math.*
 
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
@@ -345,4 +347,266 @@ val scalarFunction: Map[String, ScalarFunction] =
       },
       ByteaType,
     ),
+    // greatest / least
+    ScalarFunction(
+      "greatest",
+      { case values if values.nonEmpty =>
+        values.filterNot(_.isNull) match
+          case Seq() => NullValue()
+          case vs    => vs.reduce((a, b) => if a.compare(b) >= 0 then a else b)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "least",
+      { case values if values.nonEmpty =>
+        values.filterNot(_.isNull) match
+          case Seq() => NullValue()
+          case vs    => vs.reduce((a, b) => if a.compare(b) <= 0 then a else b)
+      },
+      NumberType,
+    ),
+    // concat_ws(separator, val1, val2, ...)
+    ScalarFunction(
+      "concat_ws",
+      { case TextValue(sep) +: values =>
+        val nonNull = values.filterNot(_.isNull).map(_.string)
+        TextValue(nonNull.mkString(sep))
+      },
+      TextType,
+    ),
+    // initcap
+    ScalarFunction(
+      "initcap",
+      { case Seq(v) =>
+        val s = v.string
+        val sb = new StringBuilder(s.length)
+        var capitalizeNext = true
+        for c <- s do
+          if c.isWhitespace then
+            sb += c
+            capitalizeNext = true
+          else if capitalizeNext then
+            sb += c.toUpper
+            capitalizeNext = false
+          else
+            sb += c.toLower
+        TextValue(sb.toString)
+      },
+      TextType,
+    ),
+    // char_length / character_length (aliases for length)
+    ScalarFunction("char_length", { case Seq(v) => NumberValue(v.string.length) }, NumberType),
+    ScalarFunction("character_length", { case Seq(v) => NumberValue(v.string.length) }, NumberType),
+    // ascii / chr
+    ScalarFunction(
+      "ascii",
+      { case Seq(v) =>
+        val s = v.string
+        NumberValue(if s.isEmpty then 0 else s.charAt(0).toInt)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "chr",
+      { case Seq(NumberValue(_, n)) => TextValue(n.intValue.toChar.toString) },
+      TextType,
+    ),
+    // regexp_replace(text, pattern, replacement)
+    ScalarFunction(
+      "regexp_replace",
+      {
+        // regexp_replace(text, pattern, replacement) - first match only
+        case Seq(TextValue(s), TextValue(pattern), TextValue(replacement)) =>
+          TextValue(s.replaceFirst(pattern, replacement))
+        // regexp_replace(text, pattern, replacement, flags) - 'g' for global
+        case Seq(TextValue(s), TextValue(pattern), TextValue(replacement), TextValue(flags)) =>
+          if flags.contains("g") then TextValue(s.replaceAll(pattern, replacement))
+          else TextValue(s.replaceFirst(pattern, replacement))
+      },
+      TextType,
+    ),
+    // regexp_match(text, pattern) - returns first match as array
+    ScalarFunction(
+      "regexp_match",
+      { case Seq(TextValue(s), TextValue(pattern)) =>
+        val m = java.util.regex.Pattern.compile(pattern).matcher(s)
+        if m.find() then
+          if m.groupCount() > 0 then
+            ArrayValue((1 to m.groupCount()).map(i => Option(m.group(i)).map(TextValue(_)).getOrElse(NullValue()): Value).toIndexedSeq)
+          else ArrayValue(IndexedSeq(TextValue(m.group(0))))
+        else NullValue()
+      },
+      ArrayType,
+    ),
+    // date_trunc(field, timestamp)
+    ScalarFunction(
+      "date_trunc",
+      {
+        case Seq(TextValue(field), TimestampValue(ts)) =>
+          TimestampValue(field.toLowerCase match
+            case "year"    => LocalDateTime.of(ts.getYear, 1, 1, 0, 0, 0)
+            case "quarter" =>
+              val q = (ts.getMonthValue - 1) / 3 * 3 + 1
+              LocalDateTime.of(ts.getYear, q, 1, 0, 0, 0)
+            case "month"   => LocalDateTime.of(ts.getYear, ts.getMonthValue, 1, 0, 0, 0)
+            case "week"    =>
+              val d = ts.toLocalDate
+              val dow = d.getDayOfWeek.getValue // Monday=1
+              LocalDateTime.of(d.minusDays(dow - 1), LocalTime.MIDNIGHT)
+            case "day"     => LocalDateTime.of(ts.toLocalDate, LocalTime.MIDNIGHT)
+            case "hour"    => ts.truncatedTo(ChronoUnit.HOURS)
+            case "minute"  => ts.truncatedTo(ChronoUnit.MINUTES)
+            case "second"  => ts.truncatedTo(ChronoUnit.SECONDS)
+            case _         => ts)
+        case Seq(TextValue(field), DateValue(d)) =>
+          DateValue(field.toLowerCase match
+            case "year"    => LocalDate.of(d.getYear, 1, 1)
+            case "quarter" =>
+              val q = (d.getMonthValue - 1) / 3 * 3 + 1
+              LocalDate.of(d.getYear, q, 1)
+            case "month"   => LocalDate.of(d.getYear, d.getMonthValue, 1)
+            case "week"    =>
+              val dow = d.getDayOfWeek.getValue
+              d.minusDays(dow - 1)
+            case _         => d)
+      },
+      TimestampType,
+    ),
+    // age(timestamp, timestamp) -> interval
+    ScalarFunction(
+      "age",
+      {
+        case Seq(TimestampValue(t1), TimestampValue(t2)) =>
+          IntervalValue(Duration.between(t2, t1))
+        case Seq(DateValue(d1), DateValue(d2)) =>
+          IntervalValue(Duration.ofDays(ChronoUnit.DAYS.between(d2, d1)))
+        // age(timestamp) = age(now, timestamp)
+        case Seq(TimestampValue(t)) =>
+          IntervalValue(Duration.between(t, LocalDateTime.now(ZoneOffset.UTC)))
+        case Seq(DateValue(d)) =>
+          IntervalValue(Duration.ofDays(ChronoUnit.DAYS.between(d, LocalDate.now(ZoneOffset.UTC))))
+      },
+      IntervalType,
+    ),
+    // to_char(value, format)
+    ScalarFunction(
+      "to_char",
+      {
+        case Seq(TimestampValue(ts), TextValue(fmt)) =>
+          TextValue(ts.format(sqlToJavaDateFormat(fmt)))
+        case Seq(DateValue(d), TextValue(fmt)) =>
+          TextValue(d.format(sqlToJavaDateFormat(fmt)))
+        case Seq(TimeValue(t), TextValue(fmt)) =>
+          TextValue(t.format(sqlToJavaDateFormat(fmt)))
+        case Seq(NumberValue(_, n), TextValue(fmt)) =>
+          TextValue(formatNumber(n, fmt))
+      },
+      TextType,
+    ),
+    // to_date(text, format)
+    ScalarFunction(
+      "to_date",
+      { case Seq(TextValue(s), TextValue(fmt)) =>
+        DateValue(LocalDate.parse(s, sqlToJavaDateFormat(fmt)))
+      },
+      DateType,
+    ),
+    // to_timestamp(text, format)
+    ScalarFunction(
+      "to_timestamp",
+      { case Seq(TextValue(s), TextValue(fmt)) =>
+        TimestampValue(LocalDateTime.parse(s, sqlToJavaDateFormat(fmt)))
+      },
+      TimestampType,
+    ),
+    // math constants and functions
+    ScalarFunction("pi", { case Seq() => NumberValue(math.Pi) }, NumberType),
+    ScalarFunction(
+      "log",
+      {
+        // log(value) = log base 10
+        case Seq(NumberValue(_, n)) => NumberValue(math.log10(n.doubleValue))
+        // log(base, value)
+        case Seq(NumberValue(_, b), NumberValue(_, n)) =>
+          NumberValue(math.log(n.doubleValue) / math.log(b.doubleValue))
+      },
+      NumberType,
+    ),
+    ScalarFunction("degrees", { case Seq(NumberValue(_, n)) => NumberValue(math.toDegrees(n.doubleValue)) }, NumberType),
+    ScalarFunction("radians", { case Seq(NumberValue(_, n)) => NumberValue(math.toRadians(n.doubleValue)) }, NumberType),
+    // trig functions
+    ScalarFunction("sin", { case Seq(NumberValue(_, n)) => NumberValue(math.sin(n.doubleValue)) }, NumberType),
+    ScalarFunction("cos", { case Seq(NumberValue(_, n)) => NumberValue(math.cos(n.doubleValue)) }, NumberType),
+    ScalarFunction("tan", { case Seq(NumberValue(_, n)) => NumberValue(math.tan(n.doubleValue)) }, NumberType),
+    ScalarFunction("asin", { case Seq(NumberValue(_, n)) => NumberValue(math.asin(n.doubleValue)) }, NumberType),
+    ScalarFunction("acos", { case Seq(NumberValue(_, n)) => NumberValue(math.acos(n.doubleValue)) }, NumberType),
+    ScalarFunction("atan", { case Seq(NumberValue(_, n)) => NumberValue(math.atan(n.doubleValue)) }, NumberType),
+    ScalarFunction(
+      "atan2",
+      { case Seq(NumberValue(_, y), NumberValue(_, x)) => NumberValue(math.atan2(y.doubleValue, x.doubleValue)) },
+      NumberType,
+    ),
+    // string_to_array / array_to_string
+    ScalarFunction(
+      "string_to_array",
+      { case Seq(TextValue(s), TextValue(delimiter)) =>
+        ArrayValue(s.split(java.util.regex.Pattern.quote(delimiter), -1).map(TextValue(_): Value).toIndexedSeq)
+      },
+      ArrayType,
+    ),
+    ScalarFunction(
+      "array_to_string",
+      { case Seq(ArrayValue(elems), TextValue(sep)) =>
+        TextValue(elems.filterNot(_.isNull).map(_.string).mkString(sep))
+      },
+      TextType,
+    ),
+    // array_remove / array_position / array_contains
+    ScalarFunction(
+      "array_remove",
+      { case Seq(ArrayValue(elems), v) => ArrayValue(elems.filterNot(_ == v)) },
+      ArrayType,
+    ),
+    ScalarFunction(
+      "array_position",
+      { case Seq(ArrayValue(elems), v) =>
+        val idx = elems.indexOf(v)
+        if idx < 0 then NullValue() else NumberValue(idx + 1)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "array_distinct",
+      { case Seq(ArrayValue(elems)) => ArrayValue(elems.distinct) },
+      ArrayType,
+    ),
   ).map(f => f.name -> f).toMap
+
+// Convert SQL date format patterns to Java DateTimeFormatter patterns
+private def sqlToJavaDateFormat(fmt: String): DateTimeFormatter =
+  val javaFmt = fmt
+    .replace("YYYY", "yyyy").replace("YY", "yy")
+    .replace("MM", "MM").replace("DD", "dd")
+    .replace("HH24", "HH").replace("HH12", "hh").replace("HH", "HH")
+    .replace("MI", "mm").replace("SS", "ss")
+    .replace("Month", "MMMM").replace("Mon", "MMM")
+    .replace("Day", "EEEE").replace("Dy", "EEE")
+    .replace("AM", "a").replace("PM", "a")
+  DateTimeFormatter.ofPattern(javaFmt)
+
+private def formatNumber(n: Number, fmt: String): String =
+  if fmt.contains("FM") then
+    val clean = fmt.replace("FM", "")
+    formatNumberCore(n, clean).replaceAll("\\s+", "").replaceAll("^0+(?=\\d)", "")
+  else formatNumberCore(n, fmt)
+
+private def formatNumberCore(n: Number, fmt: String): String =
+  val d = n.doubleValue
+  if fmt.contains(".") then
+    val decimalPlaces = fmt.length - fmt.indexOf('.') - 1
+    val totalWidth    = fmt.length
+    String.format(s"%${totalWidth}.${decimalPlaces}f", d)
+  else
+    val totalWidth = fmt.length
+    String.format(s"%${totalWidth}.0f", d)

@@ -10,7 +10,7 @@ abstract class AggregateFunction(val name: String):
   def instantiate: (AggregateFunctionInstance, Type)
 
 abstract class AggregateFunctionInstance(val name: String) {
-  val acc: PartialFunction[Value, Value]
+  val acc: PartialFunction[Seq[Value], Value]
 
   def result: Value
 
@@ -25,10 +25,9 @@ val aggregateFunction: Map[String, AggregateFunction] =
           new AggregateFunctionInstance("count"):
             var count: Int = 0
 
-            val acc: PartialFunction[Value, Value] =
-              case v =>
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v) =>
                 if !v.isNull then count += 1
-
                 NumberValue(count)
 
             def result: NumberValue = NumberValue(count)
@@ -44,12 +43,12 @@ val aggregateFunction: Map[String, AggregateFunction] =
           new AggregateFunctionInstance("sum"):
             var sum: NumberValue = NumberValue(0)
 
-            val acc: PartialFunction[Value, Value] =
-              case v: NumberValue =>
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v: NumberValue) =>
                 sum = BasicDAL.compute(PLUS, sum, v, NumberValue.from)
                 sum
-              case v if v.isNull => sum // Ignore NULL values
-              case v => problem(v, "only numbers can be summed")
+              case Seq(v) if v.isNull => sum
+              case Seq(v) => problem(v, "only numbers can be summed")
 
             def result: NumberValue = sum
 
@@ -65,8 +64,8 @@ val aggregateFunction: Map[String, AggregateFunction] =
             var minValue: Value = NullValue()
             var hasValue: Boolean = false
 
-            val acc: PartialFunction[Value, Value] =
-              case v if !v.isNull =>
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v) if !v.isNull =>
                 if !hasValue then
                   minValue = v
                   hasValue = true
@@ -74,26 +73,26 @@ val aggregateFunction: Map[String, AggregateFunction] =
                   v match
                     case n1: NumberValue =>
                       minValue match
-                        case n2: NumberValue => 
+                        case n2: NumberValue =>
                           if n1.value.doubleValue < n2.value.doubleValue then minValue = n1
                         case _ => problem(v, "inconsistent types in min")
                     case t1: TextValue =>
                       minValue match
-                        case t2: TextValue => 
+                        case t2: TextValue =>
                           if t1.s < t2.s then minValue = t1
                         case _ => problem(v, "inconsistent types in min")
-                    case _ => 
+                    case _ =>
                       if v.toString < minValue.toString then minValue = v
                 minValue
               case _ => minValue
 
             def result: Value = if hasValue then minValue else NullValue()
 
-            def init(): Unit = 
+            def init(): Unit =
               minValue = NullValue()
               hasValue = false
           ,
-          NumberType, // This will be adjusted based on actual data type
+          NumberType,
         )
     },
     new AggregateFunction("max") {
@@ -103,8 +102,8 @@ val aggregateFunction: Map[String, AggregateFunction] =
             var maxValue: Value = NullValue()
             var hasValue: Boolean = false
 
-            val acc: PartialFunction[Value, Value] =
-              case v if !v.isNull =>
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v) if !v.isNull =>
                 if !hasValue then
                   maxValue = v
                   hasValue = true
@@ -112,26 +111,26 @@ val aggregateFunction: Map[String, AggregateFunction] =
                   v match
                     case n1: NumberValue =>
                       maxValue match
-                        case n2: NumberValue => 
+                        case n2: NumberValue =>
                           if n1.value.doubleValue > n2.value.doubleValue then maxValue = n1
                         case _ => problem(v, "inconsistent types in max")
                     case t1: TextValue =>
                       maxValue match
-                        case t2: TextValue => 
+                        case t2: TextValue =>
                           if t1.s > t2.s then maxValue = t1
                         case _ => problem(v, "inconsistent types in max")
-                    case _ => 
+                    case _ =>
                       if v.toString > maxValue.toString then maxValue = v
                 maxValue
               case _ => maxValue
 
             def result: Value = if hasValue then maxValue else NullValue()
 
-            def init(): Unit = 
+            def init(): Unit =
               maxValue = NullValue()
               hasValue = false
           ,
-          NumberType, // This will be adjusted based on actual data type
+          NumberType,
         )
     },
     new AggregateFunction("avg") {
@@ -141,23 +140,117 @@ val aggregateFunction: Map[String, AggregateFunction] =
             var sum: NumberValue = NumberValue(0)
             var count: Int = 0
 
-            val acc: PartialFunction[Value, Value] =
-              case v: NumberValue =>
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v: NumberValue) =>
                 sum = BasicDAL.compute(PLUS, sum, v, NumberValue.from)
                 count += 1
                 sum
-              case v if v.isNull => sum // Ignore NULL values
-              case v => problem(v, "only numbers can be averaged")
+              case Seq(v) if v.isNull => sum
+              case Seq(v) => problem(v, "only numbers can be averaged")
 
-            def result: Value = 
+            def result: Value =
               if count > 0 then NumberValue(sum.value.doubleValue / count.toDouble)
               else NullValue()
 
-            def init(): Unit = 
+            def init(): Unit =
               sum = NumberValue(0)
               count = 0
           ,
           NumberType,
+        )
+    },
+    new AggregateFunction("string_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("string_agg"):
+            val parts = new scala.collection.mutable.ArrayBuffer[String]
+            var separator: String = ","
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v, _) if v.isNull =>
+                if parts.isEmpty then NullValue() else TextValue(parts.mkString(separator))
+              case Seq(v, TextValue(sep)) =>
+                separator = sep
+                parts += v.string
+                TextValue(parts.mkString(sep))
+
+            def result: Value =
+              if parts.isEmpty then NullValue()
+              else TextValue(parts.mkString(separator))
+
+            def init(): Unit =
+              parts.clear()
+              separator = ","
+          ,
+          TextType,
+        )
+    },
+    new AggregateFunction("array_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("array_agg"):
+            val elems = new scala.collection.mutable.ArrayBuffer[Value]
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v) =>
+                elems += v
+                ArrayValue(elems.toIndexedSeq)
+
+            def result: Value =
+              if elems.isEmpty then NullValue()
+              else ArrayValue(elems.toIndexedSeq)
+
+            def init(): Unit = elems.clear()
+          ,
+          ArrayType,
+        )
+    },
+    new AggregateFunction("bool_and") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("bool_and"):
+            var value: Boolean = true
+            var hasValue: Boolean = false
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(BooleanValue(b)) =>
+                hasValue = true
+                value = value && b
+                BooleanValue(value)
+              case Seq(v) if v.isNull => BooleanValue(value)
+
+            def result: Value =
+              if hasValue then BooleanValue(value) else NullValue()
+
+            def init(): Unit =
+              value = true
+              hasValue = false
+          ,
+          BooleanType,
+        )
+    },
+    new AggregateFunction("bool_or") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("bool_or"):
+            var value: Boolean = false
+            var hasValue: Boolean = false
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(BooleanValue(b)) =>
+                hasValue = true
+                value = value || b
+                BooleanValue(value)
+              case Seq(v) if v.isNull => BooleanValue(value)
+
+            def result: Value =
+              if hasValue then BooleanValue(value) else NullValue()
+
+            def init(): Unit =
+              value = false
+              hasValue = false
+          ,
+          BooleanType,
         )
     },
   ) map (f => f.name -> f) toMap

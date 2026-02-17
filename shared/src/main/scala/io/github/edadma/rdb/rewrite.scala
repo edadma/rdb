@@ -7,17 +7,17 @@ class AggregateCollector:
   private val seen = mutable.Map[String, String]() // canonical key → column name
   private var counter = 0
 
-  private def canonicalKey(funcName: String, arg: Expr): String =
-    s"$funcName(${arg.toString})"
+  private def canonicalKey(funcName: String, args: Seq[Expr]): String =
+    s"$funcName(${args.mkString(", ")})"
 
   def collect(expr: Expr): Expr =
     expr match
-      case AggregateFunctionExpr(f, arg) =>
-        val key = canonicalKey(f.name, arg)
+      case AggregateFunctionExpr(f, args) =>
+        val key = canonicalKey(f.name, args)
         val colName = seen.getOrElseUpdate(key, {
           counter += 1
           val name = s"_agg_$counter"
-          specs += AggregateSpec(name, f, arg, expr.typ.asInstanceOf[Type])
+          specs += AggregateSpec(name, f, args, expr.typ.asInstanceOf[Type])
           name
         })
         ColumnExpr(None, Ident(colName)) setType expr.typ
@@ -81,12 +81,11 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       scalarFunction get func.toLowerCase match
         case None =>
           aggregateFunction get func.toLowerCase match
-            case None                        => problem(id, s"unknown function '$func'")
-            case Some(f) if args.length != 1 => problem(id, "aggregate function takes one argument")
-            case Some(f)                     =>
+            case None    => problem(id, s"unknown function '$func'")
+            case Some(f) =>
               val (instance, typ) = f.instantiate
 
-              AggregateFunctionExpr(instance, rewrite(args.head)) setType typ
+              AggregateFunctionExpr(instance, args map rewrite) setType typ
         case Some(f) => ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match

@@ -109,6 +109,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "exec",
       "EXISTS",
       "exists",
+      "EXTRACT",
+      "extract",
       "FALSE",
       "false",
       "FIRST",
@@ -492,6 +494,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     ),
   )
 
+  lazy val extractField: P[String] =
+    ident ^^ (_.toLowerCase) |
+      kw("TIMESTAMP") ^^^ "timestamp" |
+      kw("TIME") ^^^ "time" |
+      kw("DATE") ^^^ "date"
+
   lazy val castType: P[Type] = typ ^? (
     { case Left(t) => t },
     _ => "cannot cast to custom type",
@@ -542,6 +550,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       stringLit ^^ StringExpr.apply |
       kw("NULL") ^^^ NullExpr() |
       kw("ARRAY") ~> "[" ~> repsep(expression, ",") <~ "]" ^^ ArrayExpr.apply |
+      kw("EXTRACT") ~> "(" ~> extractField ~ kw("FROM") ~ expression <~ ")" ^^ { case field ~ _ ~ source =>
+        ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source))
+      } |
       application |
       column |
       variable |

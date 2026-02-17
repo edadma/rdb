@@ -47,7 +47,7 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
       for row <- rows do
         val rowCtx = row +: ctx
-        for spec <- aggregates do spec.func.acc(eval(spec.arg, rowCtx))
+        for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
       val aggValues = aggregates.map(_.func.result).toVector
       // Even if rows is empty, emit one row (COUNT→0, SUM→0, etc.)
@@ -66,7 +66,7 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
         for row <- group do
           val rowCtx = row +: ctx
-          for spec <- aggregates do spec.func.acc(eval(spec.arg, rowCtx))
+          for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
         val aggValues = aggregates.map(_.func.result).toVector
         Row(group.last.data ++ aggValues, meta, None, None)
