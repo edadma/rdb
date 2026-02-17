@@ -13,8 +13,6 @@ RDB is designed to provide a lightweight, embeddable SQL database for applicatio
 - **Data processing** - In-memory analytics and transformations
 - **Embedded systems** - Native compilation for resource-constrained environments
 
-The database supports standard SQL operations including CREATE TABLE, INSERT, SELECT, UPDATE, DELETE, with features like auto-increment columns, JSON data types, joins, subqueries, and aggregate functions.
-
 ## Installation
 
 ### JavaScript/Node.js
@@ -26,7 +24,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.0"
+libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.1"
 ```
 
 ## Basic Usage
@@ -78,15 +76,15 @@ val results = executeSQL("""
     price NUMERIC(10,2),
     category TEXT
   );
-  
+
   INSERT INTO products (name, price, category) VALUES
     ('Laptop', 999.99, 'Electronics'),
     ('Coffee', 4.50, 'Food'),
     ('Book', 19.99, 'Education');
-  
-  SELECT category, COUNT(*), AVG(price) 
-  FROM products 
-  GROUP BY category 
+
+  SELECT category, COUNT(*), AVG(price)
+  FROM products
+  GROUP BY category
   ORDER BY category;
 """)
 
@@ -97,100 +95,235 @@ results.foreach(println)
 
 ### Data Types
 
-- **INT/INTEGER** - 32-bit integers
-- **SERIAL** - Auto-incrementing 32-bit integer
-- **BIGINT** - 64-bit integers
-- **BIGSERIAL** - Auto-incrementing 64-bit integer
-- **DOUBLE** - Double-precision floating point
-- **NUMERIC(precision, scale)** - Fixed-precision decimal numbers
-- **TEXT** - Variable-length strings
-- **BOOLEAN** - True/false values
-- **TIMESTAMP** - Date and time values
-- **UUID** - Universally unique identifiers (use `DEFAULT gen_random_uuid()` for auto-generation)
-- **JSON** - Structured JSON objects and arrays
-- **ENUM** - Custom enumerated types
+| Type | Description |
+|------|-------------|
+| `SMALLINT` | 16-bit integer (-32768 to 32767) |
+| `INT` / `INTEGER` | 32-bit integer |
+| `BIGINT` | 64-bit integer |
+| `SMALLSERIAL` | Auto-incrementing 16-bit integer |
+| `SERIAL` | Auto-incrementing 32-bit integer |
+| `BIGSERIAL` | Auto-incrementing 64-bit integer |
+| `DOUBLE` / `FLOAT` / `REAL` | Double-precision floating point |
+| `NUMERIC(p,s)` / `DECIMAL(p,s)` | Fixed-precision decimal |
+| `TEXT` | Variable-length string |
+| `CHAR(n)` | Fixed-length string (right-padded with spaces) |
+| `BOOLEAN` | True/false |
+| `DATE` | Calendar date (`yyyy-MM-dd`) |
+| `TIME` | Time of day (`HH:mm:ss`) |
+| `TIMESTAMP` | Date and time |
+| `TIMESTAMP WITH TIME ZONE` | Date and time with timezone offset |
+| `INTERVAL` | Duration (ISO 8601 or `N days N hours N minutes N seconds`) |
+| `UUID` | Universally unique identifier |
+| `JSON` / `JSONB` | Structured JSON objects and arrays |
+| `BYTEA` | Binary data |
+| `ENUM` | Custom enumerated types (via `CREATE TYPE ... AS ENUM`) |
+| `INT[]`, `TEXT[]`, etc. | Typed arrays (any base type with `[]` suffix) |
 
-### SQL Operations
+### Type Casting
 
-#### DDL (Data Definition Language)
+Use the `::` operator or `CAST` to convert between types:
+
 ```sql
--- Create custom types
+SELECT '2024-06-15'::DATE;
+SELECT '14:30:00'::TIME;
+SELECT '2 hours 30 minutes'::INTERVAL;
+SELECT val::TEXT;
+SELECT '42'::INT;
+SELECT 1::BOOLEAN;
+SELECT EXTRACT(year FROM created_at);
+```
+
+### DDL (Data Definition Language)
+
+```sql
 CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
 
--- Create tables with constraints
 CREATE TABLE orders (
   id UUID DEFAULT gen_random_uuid(),
   customer_name TEXT NOT NULL,
   amount NUMERIC(10,2),
   status order_status,
+  tags INT[],
   metadata JSON
 );
 
--- Drop tables
+ALTER TABLE orders ADD COLUMN notes TEXT;
+ALTER TABLE orders DROP COLUMN notes;
+ALTER TABLE orders RENAME COLUMN amount TO total;
+ALTER TABLE orders RENAME TO purchases;
+
 DROP TABLE orders;
+DROP TABLE IF EXISTS orders;
+DROP TYPE order_status CASCADE;
 ```
 
-#### DML (Data Manipulation Language)
+### DML (Data Manipulation Language)
+
 ```sql
--- Insert with explicit columns
-INSERT INTO orders (customer_name, amount) 
+INSERT INTO orders (customer_name, amount)
 VALUES ('Alice Smith', 149.99);
 
--- Insert with RETURNING clause
-INSERT INTO orders (customer_name, amount) 
-VALUES ('Bob Johnson', 75.50) 
+INSERT INTO orders (customer_name, amount)
+VALUES ('Bob Johnson', 75.50)
 RETURNING id;
 
--- Update records
-UPDATE orders 
-SET status = 'shipped' 
-WHERE amount > 100;
+UPDATE orders SET status = 'shipped' WHERE amount > 100;
 
--- Delete records
-DELETE FROM orders 
-WHERE status = 'delivered';
+DELETE FROM orders WHERE status = 'delivered';
 ```
 
-#### DQL (Data Query Language)
-```sql
--- Basic queries with WHERE, ORDER BY, LIMIT
-SELECT * FROM orders 
-WHERE amount > 50 
-ORDER BY amount DESC 
-LIMIT 10;
+### Queries
 
--- Aggregations and GROUP BY
+```sql
+-- Filtering, sorting, pagination
+SELECT * FROM orders
+WHERE amount > 50
+ORDER BY amount DESC
+LIMIT 10 OFFSET 5;
+
+-- Aggregations
 SELECT status, COUNT(*), AVG(amount), SUM(amount)
-FROM orders 
+FROM orders
 GROUP BY status
 HAVING COUNT(*) > 5;
 
--- Joins
-SELECT o.id, o.amount, c.name, c.email
+-- Joins (INNER, LEFT, RIGHT, FULL, CROSS)
+SELECT o.id, o.amount, c.name
 FROM orders o
 INNER JOIN customers c ON o.customer_id = c.id;
 
 -- Subqueries and EXISTS
 SELECT * FROM customers c
 WHERE EXISTS (
-  SELECT 1 FROM orders o 
+  SELECT 1 FROM orders o
   WHERE o.customer_id = c.id AND o.amount > 100
 );
 
--- JSON operations
-SELECT * FROM products 
-WHERE metadata->>'category' = 'electronics';
+-- Set operations
+SELECT name FROM customers
+UNION
+SELECT name FROM suppliers;
+
+-- CASE expressions
+SELECT name,
+  CASE WHEN amount > 100 THEN 'high' ELSE 'low' END AS tier
+FROM orders;
+
+-- Pattern matching
+SELECT * FROM products WHERE name LIKE '%phone%';
+SELECT * FROM products WHERE name ILIKE '%Phone%';
+
+-- BETWEEN, IN
+SELECT * FROM orders WHERE amount BETWEEN 10 AND 100;
+SELECT * FROM orders WHERE status IN ('pending', 'shipped');
+
+-- DISTINCT
+SELECT DISTINCT category FROM products;
+
+-- ARRAY constructor
+SELECT ARRAY[1, 2, 3];
 ```
 
-### Advanced Features
+### Date/Time Arithmetic
 
-- **Window Functions** - ROW_NUMBER(), RANK(), etc.
-- **Common Table Expressions (CTEs)** - WITH clauses
-- **Case Expressions** - Conditional logic in SELECT
-- **Pattern Matching** - LIKE and ILIKE operators
-- **DISTINCT** - Remove duplicate rows from results
-- **Set Operations** - UNION, INTERSECT, EXCEPT
-- **Null Handling** - IS NULL, IS NOT NULL, COALESCE
+```sql
+-- Date arithmetic
+SELECT '2024-01-01'::DATE + 10;                        -- add days
+SELECT '2024-01-15'::DATE - '2024-01-10'::DATE;        -- days between
+SELECT now() + '2 hours'::INTERVAL;                     -- timestamp + interval
+SELECT now() - '30 minutes'::INTERVAL;                  -- timestamp - interval
+SELECT '1 hour'::INTERVAL * 3;                          -- scale interval
+SELECT EXTRACT(year FROM now());                        -- extract field
+SELECT date_trunc('month', now());                      -- truncate
+```
+
+### Scalar Functions
+
+#### Text
+| Function | Description |
+|----------|-------------|
+| `lower(text)` | Convert to lowercase |
+| `upper(text)` | Convert to uppercase |
+| `initcap(text)` | Capitalize each word |
+| `length(text)` / `char_length(text)` | String length |
+| `trim(text)` / `ltrim(text)` / `rtrim(text)` | Trim whitespace |
+| `substring(text, start [, len])` | Extract substring |
+| `left(text, n)` / `right(text, n)` | First/last n characters |
+| `lpad(text, len [, pad])` / `rpad(text, len [, pad])` | Pad string |
+| `replace(text, from, to)` | Replace occurrences |
+| `concat(a, b)` / `concat_ws(sep, ...)` | Concatenate (with separator) |
+| `repeat(text, n)` | Repeat string |
+| `reverse(text)` | Reverse string |
+| `position(substr, text)` | Find substring position (1-based) |
+| `split_part(text, delim, n)` | Split and get nth part |
+| `ascii(text)` / `chr(int)` | Character/code point conversion |
+| `regexp_replace(text, pat, repl [, flags])` | Regex replace (`'g'` for global) |
+| `regexp_match(text, pattern)` | First regex match as array |
+
+#### Numeric
+| Function | Description |
+|----------|-------------|
+| `abs(x)` | Absolute value |
+| `ceil(x)` / `floor(x)` | Round up/down |
+| `round(x [, digits])` / `trunc(x [, digits])` | Round/truncate |
+| `sign(x)` | Sign (-1, 0, 1) |
+| `mod(x, y)` | Modulo |
+| `power(x, y)` / `sqrt(x)` | Power/square root |
+| `exp(x)` / `ln(x)` / `log10(x)` / `log(base, x)` | Exponential/logarithm |
+| `pi()` | Pi constant |
+| `degrees(rad)` / `radians(deg)` | Angle conversion |
+| `sin` / `cos` / `tan` / `asin` / `acos` / `atan` / `atan2` | Trigonometry |
+| `random()` | Random number [0, 1) |
+| `greatest(a, b, ...)` / `least(a, b, ...)` | Max/min of values |
+
+#### Date/Time
+| Function | Description |
+|----------|-------------|
+| `now()` | Current timestamp (UTC) |
+| `current_date()` | Current date (UTC) |
+| `current_time()` | Current time (UTC) |
+| `date_part(field, source)` | Extract field from date/time |
+| `EXTRACT(field FROM source)` | SQL standard extract |
+| `date_trunc(field, source)` | Truncate to precision (year/quarter/month/week/day/hour/minute/second) |
+| `make_date(y, m, d)` / `make_time(h, m, s)` | Construct date/time |
+| `age(ts1, ts2)` / `age(ts)` | Interval between timestamps |
+| `to_char(value, format)` | Format as text |
+| `to_date(text, format)` / `to_timestamp(text, format)` | Parse with format |
+
+#### Array
+| Function | Description |
+|----------|-------------|
+| `array_length(arr)` | Number of elements |
+| `array_append(arr, val)` / `array_prepend(val, arr)` | Add element |
+| `array_concat(arr1, arr2)` | Concatenate arrays |
+| `array_slice(arr, start [, end])` | Slice array |
+| `array_remove(arr, val)` | Remove all occurrences |
+| `array_position(arr, val)` | Find element position (1-based) |
+| `array_distinct(arr)` | Remove duplicates |
+| `string_to_array(text, delim)` | Split string to array |
+| `array_to_string(arr, sep)` | Join array to string |
+
+#### Other
+| Function | Description |
+|----------|-------------|
+| `coalesce(a, b, ...)` | First non-null value |
+| `nullif(a, b)` | NULL if a = b |
+| `typeof(value)` | Type name as text |
+| `gen_random_uuid()` | Generate UUID v4 |
+| `octet_length(bytea)` | Byte count |
+| `encode(bytea, format)` / `decode(text, format)` | Binary encoding (hex, base64) |
+
+### Aggregate Functions
+
+| Function | Description |
+|----------|-------------|
+| `COUNT(*)` / `COUNT(expr)` | Count rows |
+| `SUM(expr)` | Sum of values |
+| `AVG(expr)` | Average |
+| `MIN(expr)` / `MAX(expr)` | Minimum/maximum |
+| `string_agg(text, separator)` | Concatenate with separator |
+| `array_agg(expr)` | Collect values into array |
+| `bool_and(expr)` / `bool_or(expr)` | Logical AND/OR across rows |
 
 ## API Reference
 
@@ -260,101 +393,6 @@ case class UpdateResult(rows: Int) extends Result
 case class DeleteResult(rows: Int) extends Result
 ```
 
-## Examples
-
-### E-commerce Database
-
-```sql
--- Create product catalog
-CREATE TABLE products (
-  id UUID DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  description TEXT,
-  price NUMERIC(10,2) NOT NULL,
-  category TEXT,
-  tags JSON,
-  created_at TIMESTAMP
-);
-
--- Create orders table
-CREATE TABLE orders (
-  id SERIAL,
-  product_id UUID NOT NULL,
-  quantity INT NOT NULL,
-  total_amount NUMERIC(10,2),
-  order_date TIMESTAMP
-);
-
--- Insert sample data
-INSERT INTO products (name, price, category, tags) VALUES
-  ('Wireless Headphones', 99.99, 'Electronics', '["bluetooth", "wireless", "audio"]'),
-  ('Coffee Beans', 24.99, 'Food', '["organic", "fair-trade", "dark-roast"]'),
-  ('Programming Book', 49.99, 'Books', '["programming", "technology", "education"]');
-
--- Complex query with joins and aggregations
-SELECT 
-  p.category,
-  COUNT(o.id) as total_orders,
-  SUM(o.total_amount) as total_revenue,
-  AVG(o.total_amount) as avg_order_value
-FROM products p
-LEFT JOIN orders o ON p.id = o.product_id
-WHERE p.created_at >= '2024-01-01'
-GROUP BY p.category
-HAVING total_orders > 0
-ORDER BY total_revenue DESC;
-```
-
-### Analytics Example
-
-```sql
--- Time-series analysis
-WITH daily_sales AS (
-  SELECT 
-    DATE(order_date) as sale_date,
-    SUM(total_amount) as daily_total,
-    COUNT(*) as order_count
-  FROM orders
-  GROUP BY DATE(order_date)
-),
-moving_averages AS (
-  SELECT 
-    sale_date,
-    daily_total,
-    AVG(daily_total) OVER (
-      ORDER BY sale_date 
-      ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-    ) as seven_day_avg
-  FROM daily_sales
-)
-SELECT * FROM moving_averages
-ORDER BY sale_date DESC;
-```
-
-## Performance Considerations
-
-- **Memory Usage** - All data is stored in memory; monitor usage for large datasets
-- **Query Optimization** - Use indexes on frequently queried columns
-- **Batch Operations** - Use bulk INSERT statements for better performance
-- **Connection Pooling** - Reuse database instances when possible
-
-## Platform-Specific Notes
-
-### JavaScript/Node.js
-- Compatible with Node.js 19+
-- Works in browsers with bundlers (webpack, rollup, etc.)
-- No external dependencies required
-
-### JVM
-- Requires Java 8+ or Scala 2.13+/3.x
-- Can be used in Spring Boot, Play Framework, etc.
-- Thread-safe for concurrent access
-
-### Native
-- Compiles to native executables with Scala Native
-- Minimal runtime dependencies
-- Ideal for CLI tools and embedded systems
-
 ## Testing
 
 The project includes comprehensive test suites:
@@ -363,7 +401,7 @@ The project includes comprehensive test suites:
 # Run tests for all platforms
 sbt test
 
-# Run JavaScript tests only  
+# Run JavaScript tests only
 sbt rdbJS/test
 
 # Run JVM tests only
@@ -380,9 +418,7 @@ Contributions are welcome! Please follow these guidelines:
 1. **Fork and Clone** - Fork the repository and clone your fork
 2. **Create Branch** - Create a feature branch for your changes
 3. **Write Tests** - Add tests for new functionality
-4. **Follow Style** - Use the existing code formatting (scalafmt)
-5. **Update Docs** - Update README and code comments as needed
-6. **Submit PR** - Create a pull request with a clear description
+4. **Submit PR** - Create a pull request with a clear description
 
 ### Development Setup
 
@@ -393,22 +429,6 @@ sbt compile
 sbt test
 ```
 
-### Code Style
-
-The project uses scalafmt for code formatting:
-
-```bash
-sbt scalafmtAll
-```
-
-## Contributors
-
-- **Edward A. Maxedon, Sr.** - Original author and maintainer
-
 ## License
 
 [ISC License](LICENSE) - see LICENSE file for details.
-
----
-
-**Keywords:** SQL, database, in-memory, Scala, JavaScript, TypeScript, cross-platform, relational, embedded
