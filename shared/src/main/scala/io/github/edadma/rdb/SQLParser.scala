@@ -51,6 +51,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "and",
       "ANY",
       "any",
+      "ARRAY",
+      "array",
       "AS",
       "as",
       "ASC",
@@ -65,8 +67,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "by",
       "CASCADE",
       "cascade",
+      "BYTEA",
+      "bytea",
       "CASE",
       "case",
+      "CHAR",
+      "char",
       "CHECK",
       "check",
       "COLUMN",
@@ -79,6 +85,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "current_timestamp",
       "DATABASE",
       "database",
+      "DATE",
+      "date",
       "DEFAULT",
       "default",
       "DELETE",
@@ -105,6 +113,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "false",
       "FIRST",
       "first",
+      "DECIMAL",
+      "decimal",
       "FLOAT",
       "float",
       "FOREIGN",
@@ -131,12 +141,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "int",
       "INTEGER",
       "integer",
+      "INTERVAL",
+      "interval",
       "INTO",
       "into",
       "IS",
       "is",
       "JOIN",
       "join",
+      "JSONB",
+      "jsonb",
       "JSON",
       "json",
       "KEY",
@@ -177,10 +191,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "outer",
       "PROCEDURE",
       "procedure",
+      "SMALLINT",
+      "smallint",
+      "SMALLSERIAL",
+      "smallserial",
       "SERIAL",
       "serial",
       "BIGSERIAL",
       "bigserial",
+      "REAL",
+      "real",
       "REFERENCES",
       "references",
       "RENAME",
@@ -231,6 +251,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "when",
       "WHERE",
       "where",
+      "WITH",
+      "with",
       "WITHOUT",
       "without",
       "ZONE",
@@ -519,6 +541,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       integer ^^ (n => NumberExpr(n)) |
       stringLit ^^ StringExpr.apply |
       kw("NULL") ^^^ NullExpr() |
+      kw("ARRAY") ~> "[" ~> repsep(expression, ",") <~ "]" ^^ ArrayExpr.apply |
       application |
       column |
       variable |
@@ -641,19 +664,35 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
-  lazy val typ: P[Either[Type, Ident]] =
+  lazy val baseTyp: P[Either[Type, Ident]] =
     kw("BOOLEAN") ^^^ Left(BooleanType)
+      | kw("SMALLINT") ^^^ Left(SmallintType)
       | (kw("INT") | kw("INTEGER")) ^^^ Left(IntegerType)
       | kw("BIGINT") ^^^ Left(BigintType)
+      | kw("SMALLSERIAL") ^^^ Left(SmallSerialType)
       | kw("SERIAL") ^^^ Left(SerialType)
       | kw("BIGSERIAL") ^^^ Left(BigSerialType)
-      | kw("DOUBLE") ~ opt(kw("PRECISION")) ^^^ Left(DoubleType)
+      | (kw("DOUBLE") ~ opt(kw("PRECISION")) | kw("FLOAT") | kw("REAL")) ^^^ Left(DoubleType)
       | kw("NUMERIC") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
+      | kw("DECIMAL") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
+      | kw("CHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(CharType(n)) }
+      | kw("JSONB") ^^^ Left(JSONType)
       | kw("JSON") ^^^ Left(JSONType)
+      | kw("TIMESTAMP") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimestampTZType)
       | kw("TIMESTAMP") ~ opt(kw("WITHOUT") ~ kw("TIME") ~ kw("ZONE")) ^^^ Left(TimestampType)
+      | kw("DATE") ^^^ Left(DateType)
+      | kw("TIME") ^^^ Left(TimeType)
+      | kw("INTERVAL") ^^^ Left(IntervalType)
+      | kw("BYTEA") ^^^ Left(ByteaType)
       | kw("TEXT") ^^^ Left(TextType)
       | kw("UUID") ^^^ Left(UUIDType)
       | identifier ^^ Right.apply
+
+  lazy val typ: P[Either[Type, Ident]] =
+    baseTyp ~ opt("[" ~ "]") ^^ {
+      case Left(t) ~ Some(_) => Left(ArrayColumnType(t))
+      case other ~ _         => other
+    }
 
   lazy val columnDesc: P[ColumnDesc] =
     identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")")) ^^ {

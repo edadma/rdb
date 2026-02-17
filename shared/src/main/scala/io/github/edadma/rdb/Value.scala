@@ -2,8 +2,7 @@ package io.github.edadma.rdb
 
 import io.github.edadma.dal.{BasicDAL, BigDecType, TypedNumber}
 import io.github.edadma.dal
-import java.time.LocalDateTime
-import java.time.ZoneOffset
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -67,6 +66,80 @@ case class TimestampValue(t: LocalDateTime) extends Value(TimestampType):
   override def render: String = s"'$t'"
 
   def string: String = t.toString
+
+case class DateValue(d: LocalDate) extends Value(DateType):
+  override def toText: TextValue = TextValue(d.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case DateValue(u) => d.compareTo(u)
+      case _            => super.compare(that)
+
+  override def render: String = s"'$d'"
+
+  def string: String = d.toString
+
+case class TimeValue(t: LocalTime) extends Value(TimeType):
+  override def toText: TextValue = TextValue(t.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case TimeValue(u) => t.compareTo(u)
+      case _            => super.compare(that)
+
+  override def render: String = s"'$t'"
+
+  def string: String = t.toString
+
+case class IntervalValue(d: Duration) extends Value(IntervalType):
+  override def toText: TextValue = TextValue(string)
+
+  override def compare(that: Value): Int =
+    that match
+      case IntervalValue(u) => d.compareTo(u)
+      case _                => super.compare(that)
+
+  override def render: String = s"'$string'"
+
+  def string: String =
+    val totalSeconds = d.getSeconds
+    val days         = totalSeconds / 86400
+    val hours        = (totalSeconds % 86400) / 3600
+    val minutes      = (totalSeconds % 3600) / 60
+    val seconds      = totalSeconds % 60
+    val parts = Seq(
+      if days != 0 then Some(s"$days day${if days.abs != 1 then "s" else ""}") else None,
+      if hours != 0 then Some(s"$hours hour${if hours.abs != 1 then "s" else ""}") else None,
+      if minutes != 0 then Some(s"$minutes minute${if minutes.abs != 1 then "s" else ""}") else None,
+      if seconds != 0 then Some(s"$seconds second${if seconds.abs != 1 then "s" else ""}") else None,
+    ).flatten
+    if parts.isEmpty then "0 seconds" else parts.mkString(" ")
+
+case class TimestampTZValue(t: OffsetDateTime) extends Value(TimestampTZType):
+  override def toText: TextValue = TextValue(t.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case TimestampTZValue(u) => t.compareTo(u)
+      case _                   => super.compare(that)
+
+  override def render: String = s"'$t'"
+
+  def string: String = t.toString
+
+case class ByteaValue(data: Array[Byte]) extends Value(ByteaType):
+  override def toText: TextValue = TextValue(string)
+
+  override def render: String = s"'\\x${data.map(b => f"${b & 0xff}%02x").mkString}'"
+
+  def string: String = s"\\x${data.map(b => f"${b & 0xff}%02x").mkString}"
+
+  override def equals(other: Any): Boolean =
+    other match
+      case ByteaValue(otherData) => java.util.Arrays.equals(data, otherData)
+      case _                     => false
+
+  override def hashCode(): Int = java.util.Arrays.hashCode(data)
 
 object UUIDValue:
   val generated = new mutable.HashSet[String]

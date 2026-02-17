@@ -1,6 +1,7 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as DType}
+import java.time.Duration
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
@@ -130,14 +131,41 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
 
       BooleanValue(op.contains("NOT") ^ res)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
-      val l = neval(left, ctx)
-      val r = neval(right, ctx)
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
 
-      op match
-        case "+" => BasicDAL.compute(PLUS, l, r, NumberValue.from)
-        case "-" => BasicDAL.compute(MINUS, l, r, NumberValue.from)
-        case "*" => BasicDAL.compute(TIMES, l, r, NumberValue.from)
-        case "/" => BasicDAL.compute(DIVIDE, l, r, NumberValue.from)
+      (l, op, r) match
+        // number op number (existing behavior)
+        case (ln: NumberValue, "+", rn: NumberValue) => BasicDAL.compute(PLUS, ln, rn, NumberValue.from)
+        case (ln: NumberValue, "-", rn: NumberValue) => BasicDAL.compute(MINUS, ln, rn, NumberValue.from)
+        case (ln: NumberValue, "*", rn: NumberValue) => BasicDAL.compute(TIMES, ln, rn, NumberValue.from)
+        case (ln: NumberValue, "/", rn: NumberValue) => BasicDAL.compute(DIVIDE, ln, rn, NumberValue.from)
+        // date +/- int (days)
+        case (DateValue(d), "+", NumberValue(_, n))  => DateValue(d.plusDays(n.longValue))
+        case (DateValue(d), "-", NumberValue(_, n))  => DateValue(d.minusDays(n.longValue))
+        // date - date => integer (days between)
+        case (DateValue(d1), "-", DateValue(d2))     => NumberValue(java.time.temporal.ChronoUnit.DAYS.between(d2, d1).toInt)
+        // date + interval => timestamp
+        case (DateValue(d), "+", IntervalValue(dur))   => TimestampValue(d.atStartOfDay.plus(dur))
+        case (IntervalValue(dur), "+", DateValue(d))   => TimestampValue(d.atStartOfDay.plus(dur))
+        // timestamp +/- interval => timestamp
+        case (TimestampValue(t), "+", IntervalValue(dur)) => TimestampValue(t.plus(dur))
+        case (TimestampValue(t), "-", IntervalValue(dur)) => TimestampValue(t.minus(dur))
+        // timestamp - timestamp => interval
+        case (TimestampValue(t1), "-", TimestampValue(t2)) => IntervalValue(Duration.between(t2, t1))
+        // interval +/- interval => interval
+        case (IntervalValue(d1), "+", IntervalValue(d2)) => IntervalValue(d1.plus(d2))
+        case (IntervalValue(d1), "-", IntervalValue(d2)) => IntervalValue(d1.minus(d2))
+        // interval * number / number * interval
+        case (IntervalValue(d), "*", NumberValue(_, n))  => IntervalValue(d.multipliedBy(n.longValue))
+        case (NumberValue(_, n), "*", IntervalValue(d))  => IntervalValue(d.multipliedBy(n.longValue))
+        case (IntervalValue(d), "/", NumberValue(_, n))  => IntervalValue(d.dividedBy(n.longValue))
+        // timestamptz +/- interval
+        case (TimestampTZValue(t), "+", IntervalValue(dur)) => TimestampTZValue(t.plus(dur))
+        case (TimestampTZValue(t), "-", IntervalValue(dur)) => TimestampTZValue(t.minus(dur))
+        // timestamptz - timestamptz => interval
+        case (TimestampTZValue(t1), "-", TimestampTZValue(t2)) => IntervalValue(Duration.between(t2, t1))
+        case _ => problem(left, s"cannot apply '$op' to ${l.vtyp.name} and ${r.vtyp.name}")
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)

@@ -58,6 +58,7 @@ def unescape(s: String): String = {
             case 'r'  => '\r'
             case 't'  => '\t'
             case 'u'  => (hex(ch) << 12 | hex(ch) << 8 | hex(ch) << 4 | hex(ch)).toChar
+            case 'x'  => (hex(ch) << 4 | hex(ch)).toChar
             case c    => sys.error(s"unescape: non-escapable character: '$c' (${c.toInt})")
           })
       case c => buf += c

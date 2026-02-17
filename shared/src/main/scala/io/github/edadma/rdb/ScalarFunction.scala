@@ -2,7 +2,7 @@ package io.github.edadma.rdb
 
 import scala.math.*
 
-import java.time.{LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
 
@@ -265,21 +265,84 @@ val scalarFunction: Map[String, ScalarFunction] =
     ),
     ScalarFunction(
       "current_date",
-      { case Seq() => TimestampValue(LocalDate.now(ZoneOffset.UTC).atStartOfDay) },
-      TimestampType,
+      { case Seq() => DateValue(LocalDate.now(ZoneOffset.UTC)) },
+      DateType,
+    ),
+    ScalarFunction(
+      "current_time",
+      { case Seq() => TimeValue(LocalTime.now(ZoneOffset.UTC)) },
+      TimeType,
     ),
     ScalarFunction(
       "date_part",
-      { case Seq(TextValue(part), TimestampValue(ts)) =>
-        part.toLowerCase match
-          case "year"   => NumberValue(ts.getYear)
-          case "month"  => NumberValue(ts.getMonthValue)
-          case "day"    => NumberValue(ts.getDayOfMonth)
-          case "hour"   => NumberValue(ts.getHour)
-          case "minute" => NumberValue(ts.getMinute)
-          case "second" => NumberValue(ts.getSecond)
-          case _        => NumberValue(0)
+      {
+        case Seq(TextValue(part), TimestampValue(ts)) =>
+          part.toLowerCase match
+            case "year"   => NumberValue(ts.getYear)
+            case "month"  => NumberValue(ts.getMonthValue)
+            case "day"    => NumberValue(ts.getDayOfMonth)
+            case "hour"   => NumberValue(ts.getHour)
+            case "minute" => NumberValue(ts.getMinute)
+            case "second" => NumberValue(ts.getSecond)
+            case _        => NumberValue(0)
+        case Seq(TextValue(part), DateValue(d)) =>
+          part.toLowerCase match
+            case "year"  => NumberValue(d.getYear)
+            case "month" => NumberValue(d.getMonthValue)
+            case "day"   => NumberValue(d.getDayOfMonth)
+            case _       => NumberValue(0)
+        case Seq(TextValue(part), TimeValue(t)) =>
+          part.toLowerCase match
+            case "hour"   => NumberValue(t.getHour)
+            case "minute" => NumberValue(t.getMinute)
+            case "second" => NumberValue(t.getSecond)
+            case _        => NumberValue(0)
       },
       NumberType,
+    ),
+    ScalarFunction(
+      "make_date",
+      { case Seq(NumberValue(_, y), NumberValue(_, m), NumberValue(_, d)) =>
+        DateValue(LocalDate.of(y.intValue, m.intValue, d.intValue))
+      },
+      DateType,
+    ),
+    ScalarFunction(
+      "make_time",
+      { case Seq(NumberValue(_, h), NumberValue(_, m), NumberValue(_, s)) =>
+        TimeValue(LocalTime.of(h.intValue, m.intValue, s.intValue))
+      },
+      TimeType,
+    ),
+    ScalarFunction(
+      "octet_length",
+      {
+        case Seq(ByteaValue(data)) => NumberValue(data.length)
+        case Seq(TextValue(s))     => NumberValue(s.getBytes("UTF-8").length)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "encode",
+      { case Seq(ByteaValue(data), TextValue(format)) =>
+        format.toLowerCase match
+          case "hex"    => TextValue(data.map(b => f"${b & 0xff}%02x").mkString)
+          case "base64" => TextValue(java.util.Base64.getEncoder.encodeToString(data))
+          case _        => sys.error(s"unsupported encoding format: $format")
+      },
+      TextType,
+    ),
+    ScalarFunction(
+      "decode",
+      { case Seq(TextValue(s), TextValue(format)) =>
+        format.toLowerCase match
+          case "hex" =>
+            val bytes = s.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+            ByteaValue(bytes)
+          case "base64" =>
+            ByteaValue(java.util.Base64.getDecoder.decode(s))
+          case _ => sys.error(s"unsupported encoding format: $format")
+      },
+      ByteaType,
     ),
   ).map(f => f.name -> f).toMap

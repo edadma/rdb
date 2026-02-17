@@ -67,7 +67,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
     case constraint => constraints += constraint
   }
 
-  private val autoSet = columns filter (c => c.typ == SerialType || c.typ == BigSerialType || c.typ == UUIDType) map (_.name) toSet
+  private val autoSet = columns filter (c => c.typ == SmallSerialType || c.typ == SerialType || c.typ == BigSerialType || c.typ == UUIDType) map (_.name) toSet
 
   def meta: Metadata = _meta
 
