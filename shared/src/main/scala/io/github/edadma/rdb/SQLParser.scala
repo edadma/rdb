@@ -143,6 +143,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "key",
       "LAST",
       "last",
+      "CROSS",
+      "cross",
+      "FULL",
+      "full",
       "LEFT",
       "left",
       "LIKE",
@@ -169,6 +173,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "precision",
       "PRIMARY",
       "primary",
+      "OUTER",
+      "outer",
       "PROCEDURE",
       "procedure",
       "SERIAL",
@@ -183,6 +189,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "restrict",
       "RETURNING",
       "returning",
+      "RIGHT",
+      "right",
       "SELECT",
       "select",
       "SET",
@@ -317,13 +325,22 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case e ~ _ ~ _                                         => OrderBy(e, false, false)
     }
 
+  lazy val joinType: P[String] =
+    kw("INNER") ^^^ "INNER" |
+      kw("LEFT") ~ opt(kw("OUTER")) ^^^ "LEFT" |
+      kw("RIGHT") ~ opt(kw("OUTER")) ^^^ "RIGHT" |
+      kw("FULL") ~ opt(kw("OUTER")) ^^^ "FULL"
+
   lazy val sources: P[Expr] =
-    sources ~ opt(kw("INNER") | (kw("LEFT") ~ opt(kw("OUTER")))) ~ kw("JOIN") ~ source ~ kw(
-      "ON",
-    ) ~ booleanExpression ^^ {
-      case l ~ (None | Some("INNER")) ~ _ ~ r ~ _ ~ c => InnerJoinOperator(l, r, c)
-      case l ~ _ ~ _ ~ r ~ _ ~ c                      => LeftJoinOperator(l, r, c)
-    } | source
+    sources ~ kw("CROSS") ~ kw("JOIN") ~ source ^^ {
+      case l ~ _ ~ _ ~ r => CrossOperator(l, r)
+    } |
+      sources ~ opt(joinType) ~ kw("JOIN") ~ source ~ kw("ON") ~ booleanExpression ^^ {
+        case l ~ (None | Some("INNER")) ~ _ ~ r ~ _ ~ c => InnerJoinOperator(l, r, c)
+        case l ~ Some("LEFT") ~ _ ~ r ~ _ ~ c           => LeftJoinOperator(l, r, c)
+        case l ~ Some("RIGHT") ~ _ ~ r ~ _ ~ c          => RightJoinOperator(l, r, c)
+        case l ~ Some("FULL") ~ _ ~ r ~ _ ~ c           => FullJoinOperator(l, r, c)
+      } | source
 
   lazy val source: P[Expr] =
     (table | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier) ^^ {

@@ -227,6 +227,10 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
       ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+    case RightJoinOperator(rel1, rel2, on) =>
+      ProcessOperator(RightCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+    case FullJoinOperator(rel1, rel2, on) =>
+      ProcessOperator(FullCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
     case TableOperator(id @ Ident(name))  =>
       db.getTable(name) match

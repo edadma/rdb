@@ -14,6 +14,8 @@ case class SortOperator(rel: Expr, by: Seq[OrderBy]) extends Operator
 case class CrossOperator(rel1: Expr, rel2: Expr) extends Operator
 case class InnerJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
 case class LeftJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
+case class RightJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
+case class FullJoinOperator(rel1: Expr, rel2: Expr, on: Expr) extends Operator
 case class OffsetOperator(rel: Expr, offset: Int) extends Operator
 case class LimitOperator(rel: Expr, limit: Int) extends Operator
 case class DistinctOperator(rel: Expr) extends Operator

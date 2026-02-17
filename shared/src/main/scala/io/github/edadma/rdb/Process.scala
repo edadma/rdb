@@ -191,3 +191,45 @@ case class LeftCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
       if matches.isEmpty then Iterator(Row(x.data ++ Seq.fill(input2.meta.width)(NULL), meta, None, None))
       else matches
     }
+
+case class RightCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input2.iterator(ctx).flatMap { y =>
+      val matches =
+        input1.iterator(ctx) map (x => Row(x.data ++ y.data, meta, None, None)) filter (row => beval(cond, row +: ctx))
+
+      if matches.isEmpty then Iterator(Row(Vector.fill(input1.meta.width)(NULL) ++ y.data, meta, None, None))
+      else matches
+    }
+
+case class FullCrossJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val leftRows = input1.iterator(ctx).to(ArraySeq)
+    val rightRows = input2.iterator(ctx).to(ArraySeq)
+    val rightMatched = mutable.Set[Int]()
+
+    val leftResults = leftRows.iterator.flatMap { x =>
+      var matched = false
+      val matches = rightRows.zipWithIndex.iterator.flatMap { case (y, idx) =>
+        val row = Row(x.data ++ y.data, meta, None, None)
+        if beval(cond, row +: ctx) then
+          matched = true
+          rightMatched += idx
+          Iterator(row)
+        else Iterator.empty
+      }.to(ArraySeq)
+
+      if matched then matches.iterator
+      else Iterator(Row(x.data ++ Vector.fill(input2.meta.width)(NULL), meta, None, None))
+    }
+
+    val rightUnmatched = rightRows.zipWithIndex.iterator.flatMap { case (y, idx) =>
+      if rightMatched.contains(idx) then Iterator.empty
+      else Iterator(Row(Vector.fill(input1.meta.width)(NULL) ++ y.data, meta, None, None))
+    }
+
+    leftResults ++ rightUnmatched
