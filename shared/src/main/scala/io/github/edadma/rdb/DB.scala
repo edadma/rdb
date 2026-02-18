@@ -10,7 +10,7 @@ abstract class DB:
   val name: String
 
   protected val tables = new mutable.HashMap[String, Table]
-  protected val types  = new mutable.HashMap[String, Type]
+  protected[rdb] val types = new mutable.HashMap[String, Type]
 
   infix def hasTable(name: String): Boolean = tables contains name
 
@@ -52,12 +52,12 @@ abstract class DB:
 
 abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
-  protected val columns       = new ArrayBuffer[ColumnSpec]
-  protected val columnMap     = new mutable.HashMap[String, Int]
-  private val autoMap         = new mutable.HashMap[String, Value]
+  protected[rdb] val columns   = new ArrayBuffer[ColumnSpec]
+  protected val columnMap      = new mutable.HashMap[String, Int]
+  protected[rdb] val autoMap   = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
-  private var primaryKey: Option[PrimaryKeySpec] = None
-  private val constraints     = new ArrayBuffer[Spec]
+  protected[rdb] var primaryKey: Option[PrimaryKeySpec] = None
+  protected[rdb] val constraints                       = new ArrayBuffer[Spec]
 
   specs foreach {
     case s: ColumnSpec => createColumn(s)
@@ -100,6 +100,8 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
         autoMap(col) = next
         next
+
+  protected[rdb] def restoreAutoState(state: Map[String, Value]): Unit = autoMap ++= state
 
   // Abstract storage methods for subclasses to implement
   protected def addColumnData(defaultValue: Value): Unit
