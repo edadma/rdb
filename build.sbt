@@ -95,6 +95,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
     name    := "rdb-cli",
     version := "0.0.1",
     scalacOptions ++= commonScalacOptions,
+    libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
     publishLocal / skip := true,
   )
