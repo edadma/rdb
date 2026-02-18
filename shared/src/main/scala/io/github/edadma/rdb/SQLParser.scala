@@ -388,10 +388,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case l ~ _ ~ _ ~ r => CrossOperator(l, r)
     } |
       sources ~ opt(joinType) ~ kw("JOIN") ~ source ~ kw("ON") ~ booleanExpression ^^ {
-        case l ~ (None | Some("INNER")) ~ _ ~ r ~ _ ~ c => InnerJoinOperator(l, r, c)
-        case l ~ Some("LEFT") ~ _ ~ r ~ _ ~ c           => LeftJoinOperator(l, r, c)
-        case l ~ Some("RIGHT") ~ _ ~ r ~ _ ~ c          => RightJoinOperator(l, r, c)
-        case l ~ Some("FULL") ~ _ ~ r ~ _ ~ c           => FullJoinOperator(l, r, c)
+        case l ~ Some("LEFT") ~ _ ~ r ~ _ ~ c  => LeftJoinOperator(l, r, c)
+        case l ~ Some("RIGHT") ~ _ ~ r ~ _ ~ c => RightJoinOperator(l, r, c)
+        case l ~ Some("FULL") ~ _ ~ r ~ _ ~ c  => FullJoinOperator(l, r, c)
+        case l ~ _ ~ _ ~ r ~ _ ~ c             => InnerJoinOperator(l, r, c)
       } | source
 
   lazy val source: P[Expr] =
