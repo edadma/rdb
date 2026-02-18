@@ -104,6 +104,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
   )
   .nativeSettings(
     libraryDependencies += "io.github.edadma" %%% "readline" % "0.0.2",
+    nativeConfig ~= { _.withBaseName("rdb") },
   )
 
 // ── root aggregate ──────────────────────────────────────────────────
