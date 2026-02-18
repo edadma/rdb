@@ -7,7 +7,6 @@ ThisBuild / scalaVersion           := "3.8.1"
 ThisBuild / organization           := "io.github.edadma"
 ThisBuild / organizationName       := "edadma"
 ThisBuild / organizationHomepage   := Some(url("https://github.com/edadma"))
-ThisBuild / version                := "0.1.2"
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
 ThisBuild / publishConfiguration := publishConfiguration.value.withOverwrite(true).withChecksums(Vector.empty)
@@ -37,20 +36,24 @@ ThisBuild / description := "Project description here"
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 
-lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
-  .in(file("."))
+lazy val commonScalacOptions = Seq(
+  "-deprecation",
+  "-feature",
+  "-unchecked",
+  "-language:postfixOps",
+  "-language:implicitConversions",
+  "-language:existentials",
+  "-language:dynamics",
+)
+
+// ── core: the existing rdb library ──────────────────────────────────
+
+lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("core"))
   .settings(
-    name := "rdb",
-    scalacOptions ++=
-      Seq(
-        "-deprecation",
-        "-feature",
-        "-unchecked",
-        "-language:postfixOps",
-        "-language:implicitConversions",
-        "-language:existentials",
-        "-language:dynamics",
-      ),
+    name    := "rdb",
+    version := "0.1.2",
+    scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
       "io.github.edadma"  %%% "dllist"          % "0.0.6",
@@ -76,21 +79,42 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .jsSettings(
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
-    //  scalaJSLinkerConfig ~= { _.withModuleSplitStyle(ModuleSplitStyle.SmallestModules) },
     scalaJSLinkerConfig ~= { _.withSourceMap(false) },
-    //    Test / scalaJSUseMainModuleInitializer := true,
-    //    Test / scalaJSUseTestModuleInitializer := false,
-    Test / scalaJSUseMainModuleInitializer      := false,
-    Test / scalaJSUseTestModuleInitializer      := true,
-    scalaJSUseMainModuleInitializer             := false,
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
+    scalaJSUseMainModuleInitializer       := false,
     libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
   )
 
+// ── cli: SQL interactive shell ──────────────────────────────────────
+
+lazy val cli = crossProject(JVMPlatform, NativePlatform)
+  .in(file("cli"))
+  .dependsOn(core)
+  .settings(
+    name    := "rdb-cli",
+    version := "0.0.1",
+    scalacOptions ++= commonScalacOptions,
+    publish / skip      := true,
+    publishLocal / skip := true,
+  )
+  .jvmSettings(
+    libraryDependencies += "org.jline" % "jline" % "3.29.0",
+  )
+  .nativeSettings(
+    libraryDependencies += "io.github.edadma" %%% "readline" % "0.1.0",
+  )
+
+// ── root aggregate ──────────────────────────────────────────────────
+
 lazy val root = project
   .in(file("."))
-  .aggregate(rdb.js, rdb.jvm, rdb.native)
+  .aggregate(
+    core.js, core.jvm, core.native,
+    cli.jvm, cli.native,
+  )
   .settings(
-    name                := "rdb",
+    name                := "rdb-root",
     publish / skip      := true,
     publishLocal / skip := true,
   )

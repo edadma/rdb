@@ -1,0 +1,38 @@
+package io.github.edadma.rdb.cli
+
+import io.github.edadma.rdb.*
+import io.github.edadma.table.TextTable
+
+object Output:
+  def printResult(result: Result): Unit =
+    result match
+      case QueryResult(table)       => println(tableString(table))
+      case InsertResult(_, table)   => println(tableString(table))
+      case CreateTableResult(name)  => println(s"CREATE TABLE")
+      case DropTableResult(name)    => println(s"DROP TABLE")
+      case DropIndexResult(name)    => println(s"DROP INDEX")
+      case DropTypeResult(name)     => println(s"DROP TYPE")
+      case CreateTypeResult(name)   => println(s"CREATE TYPE")
+      case UpdateResult(n)          => println(s"UPDATE $n")
+      case DeleteResult(n)          => println(s"DELETE $n")
+      case AlterTableResult()       => println(s"ALTER TABLE")
+
+  def listTables(db: DB): Unit =
+    val names = db.tableNames.toSeq.sorted
+    if names.isEmpty then println("No tables.")
+    else
+      val t = new TextTable:
+        header("Table")
+      for name <- names do t.row(name)
+      println(t.toString)
+
+  def describeTable(db: DB, name: String): Unit =
+    db.getTable(name) match
+      case None => println(s"Table '$name' not found.")
+      case Some(table) =>
+        val t = new TextTable:
+          headerSeq(Seq("Column", "Type", "Nullable"))
+        for col <- table.columns do
+          t.rowSeq(Seq(col.name, col.typ.name, if col.required then "not null" else "null"))
+        println(s"Table \"$name\"")
+        println(t.toString)
