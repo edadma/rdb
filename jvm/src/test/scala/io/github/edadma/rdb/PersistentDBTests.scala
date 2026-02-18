@@ -3,21 +3,21 @@ package io.github.edadma.rdb
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.BeforeAndAfterEach
+import io.github.edadma.cross_platform.{createTempFile, deleteFile}
 
-import java.nio.file.{Files, Path}
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
 import scala.compiletime.uninitialized
 
 class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
 
-  private var tmpFile: Path = uninitialized
+  private var tmpFile: String = uninitialized
 
   override def beforeEach(): Unit =
-    tmpFile = Files.createTempFile("rdb_test_", ".db")
-    Files.delete(tmpFile) // FilePageStore.create needs a non-existent path
+    tmpFile = createTempFile("rdb_test_", ".db")
+    deleteFile(tmpFile) // FilePageStore.create needs a non-existent path
 
   override def afterEach(): Unit =
-    try Files.deleteIfExists(tmpFile)
+    try deleteFile(tmpFile)
     catch case _: Exception => ()
 
   private val pageSize = 4096
@@ -27,7 +27,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Basic persistence" - {
     "create table, insert, close, reopen, query" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO users (name) VALUES ('Alice');")
@@ -36,7 +36,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val results = executeSQL("SELECT id, name FROM users ORDER BY id;")
         val table = results.collect { case QueryResult(t) => t }.head
@@ -50,14 +50,14 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "empty table persists" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE empty_table (id INTEGER, name TEXT);")
         db.close()
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val results = executeSQL("SELECT * FROM empty_table;")
         val table = results.collect { case QueryResult(t) => t }.head
@@ -73,7 +73,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Auto-increment persistence" - {
     "serial counter persists across reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE items (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO items (name) VALUES ('first');")
@@ -82,7 +82,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO items (name) VALUES ('third');")
         val results = executeSQL("SELECT id, name FROM items ORDER BY id;")
@@ -98,7 +98,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "smallserial counter persists" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE ss (id SMALLSERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO ss (name) VALUES ('a');")
@@ -107,7 +107,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO ss (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM ss ORDER BY id;").collect { case QueryResult(t) => t }.head
@@ -119,7 +119,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "bigserial counter persists" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE bs (id BIGSERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO bs (name) VALUES ('a');")
@@ -128,7 +128,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO bs (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM bs ORDER BY id;").collect { case QueryResult(t) => t }.head
@@ -144,7 +144,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Data type persistence" - {
     "SMALLINT roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v SMALLINT);")
         executeSQL("INSERT INTO t (v) VALUES (42);")
@@ -154,7 +154,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 3
@@ -167,7 +167,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "INTEGER roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v INTEGER);")
         executeSQL("INSERT INTO t (v) VALUES (0);")
@@ -177,7 +177,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 3
@@ -190,7 +190,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "BIGINT roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v BIGINT);")
         // Use API to insert a true long value that SQL parser can't handle
@@ -199,7 +199,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).string shouldBe "9999999999"
@@ -209,7 +209,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "DOUBLE roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v DOUBLE PRECISION);")
         executeSQL("INSERT INTO t (v) VALUES (3.14);")
@@ -218,7 +218,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -230,7 +230,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "NUMERIC roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v NUMERIC(10,2));")
         executeSQL("INSERT INTO t (v) VALUES (12345.67);")
@@ -238,7 +238,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).string should include("12345.67")
@@ -248,7 +248,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "BOOLEAN roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE flags (a BOOLEAN, b BOOLEAN);")
         executeSQL("INSERT INTO flags (a, b) VALUES (true, false);")
@@ -256,7 +256,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT a, b FROM flags;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe BooleanValue(true)
@@ -267,7 +267,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "TEXT roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TEXT);")
         executeSQL("INSERT INTO t (v) VALUES ('hello world');")
@@ -276,7 +276,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -288,7 +288,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "CHAR(n) roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v CHAR(5));")
         executeSQL("INSERT INTO t (v) VALUES ('hi');")
@@ -297,7 +297,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("hi   ") // padded
@@ -308,7 +308,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "DATE roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v DATE);")
         executeSQL("INSERT INTO t (v) VALUES ('2024-01-15');")
@@ -318,7 +318,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe DateValue(LocalDate.of(1970, 1, 1))
@@ -330,7 +330,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "TIME roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TIME);")
         executeSQL("INSERT INTO t (v) VALUES ('14:30:00');")
@@ -340,7 +340,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TimeValue(LocalTime.of(0, 0, 0))
@@ -352,7 +352,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "TIMESTAMP roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TIMESTAMP);")
         executeSQL("INSERT INTO t (v) VALUES ('2024-01-15 14:30:00');")
@@ -361,7 +361,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(1970, 1, 1, 0, 0, 0))
@@ -372,7 +372,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "TIMESTAMP WITH TIME ZONE roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TIMESTAMP WITH TIME ZONE);")
         executeSQL("INSERT INTO t (v) VALUES ('2024-06-15T10:30:00+05:30');")
@@ -381,7 +381,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t ORDER BY v;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -396,7 +396,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "INTERVAL roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v INTERVAL);")
         executeSQL("INSERT INTO t (v) VALUES ('2 days 3 hours');")
@@ -405,7 +405,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -421,7 +421,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val testBytes = "Hello".getBytes("UTF-8")
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v BYTEA);")
         db.getTable("t").get.insert(Map("v" -> ByteaValue(testBytes)), None)
@@ -429,7 +429,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val bytes = table.data(0).data(0).asInstanceOf[ByteaValue].data
@@ -440,7 +440,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "UUID roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id UUID);")
         executeSQL("INSERT INTO t (id) VALUES ('550e8400-e29b-41d4-a716-446655440000');")
@@ -448,7 +448,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe UUIDValue("550e8400-e29b-41d4-a716-446655440000")
@@ -461,7 +461,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       var uuid2: String = ""
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id UUID, name TEXT);")
         executeSQL("INSERT INTO t (name) VALUES ('Alice');")
@@ -473,7 +473,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).string shouldBe uuid1
@@ -484,7 +484,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "JSON object roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v JSON);")
         executeSQL("""INSERT INTO t (v) VALUES ('{"name": "Alice", "age": 30}');""")
@@ -492,7 +492,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val obj = table.data(0).data(0).asInstanceOf[ObjectValue]
@@ -505,7 +505,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "JSON array roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v JSON);")
         executeSQL("""INSERT INTO t (v) VALUES ('[1, 2, 3]');""")
@@ -513,7 +513,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val arr = table.data(0).data(0).asInstanceOf[ArrayValue]
@@ -525,7 +525,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "typed INT[] array roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v INT[]);")
         executeSQL("INSERT INTO t (v) VALUES (ARRAY[10, 20, 30]);")
@@ -533,7 +533,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val arr = table.data(0).data(0).asInstanceOf[ArrayValue]
@@ -547,7 +547,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ENUM type roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TYPE color AS ENUM ('red', 'green', 'blue');")
         executeSQL("CREATE TABLE t (c color);")
@@ -557,7 +557,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT c FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).string shouldBe "red"
@@ -570,7 +570,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "NULL values roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -578,7 +578,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).string shouldBe "1"
@@ -589,7 +589,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "all-nulls row roundtrip" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (a INTEGER, b TEXT, c BOOLEAN, d DATE);")
         db.getTable("t").get.insert(Map.empty, None)
@@ -597,7 +597,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
@@ -608,7 +608,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "multiple data types in single table" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL(
           """CREATE TABLE mixed (
@@ -636,7 +636,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT * FROM mixed;").collect { case QueryResult(t) => t }.head
         val row = table.data(0)
@@ -658,7 +658,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val longText = "x" * 500
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE docs (id INTEGER, content TEXT);")
         db.getTable("docs").get.insert(Map("id" -> NumberValue(1), "content" -> TextValue(longText)), None)
@@ -666,7 +666,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, content FROM docs;").collect { case QueryResult(t) => t }.head
         table.data(0).data(1) shouldBe TextValue(longText)
@@ -678,7 +678,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val bigData = (0 until 500).map(i => (i % 256).toByte).toArray
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v BYTEA);")
         db.getTable("t").get.insert(Map("v" -> ByteaValue(bigData)), None)
@@ -686,7 +686,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val result = table.data(0).data(0).asInstanceOf[ByteaValue].data
@@ -699,7 +699,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val exact = "a" * 64
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(exact)), None)
@@ -707,7 +707,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(exact)
@@ -719,7 +719,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val overBy1 = "a" * 65
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(overBy1)), None)
@@ -727,7 +727,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(overBy1)
@@ -739,7 +739,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val huge = "x" * 20000 // ~5 chain pages at 4096 page size
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(huge)), None)
@@ -747,7 +747,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(huge)
@@ -761,7 +761,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "DML persistence" - {
     "UPDATE survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE users (id INTEGER, name TEXT);")
         executeSQL("INSERT INTO users (id, name) VALUES (1, 'Alice');")
@@ -771,7 +771,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM users ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -783,7 +783,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "DELETE survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE users (id INTEGER, name TEXT);")
         executeSQL("INSERT INTO users (id, name) VALUES (1, 'Alice');")
@@ -794,7 +794,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM users ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -806,7 +806,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "DELETE all rows then reopen yields empty table" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -817,7 +817,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 0
@@ -831,7 +831,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "UPDATE short text to long text (inline to chain)" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 'short');")
@@ -842,7 +842,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("x" * 200)
@@ -854,7 +854,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val longVal = "y" * 200
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         db.getTable("t").get.insert(Map("id" -> NumberValue(1), "v" -> TextValue(longVal)), None)
@@ -863,7 +863,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("short")
@@ -873,7 +873,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "multiple updates to same row" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v INTEGER);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 10);")
@@ -884,7 +884,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe NumberValue(40)
@@ -898,7 +898,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "DDL persistence" - {
     "ALTER TABLE ADD COLUMN survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -907,7 +907,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
@@ -919,7 +919,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER TABLE DROP COLUMN survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT, email TEXT);")
         executeSQL("INSERT INTO t (id, name, email) VALUES (1, 'Alice', 'alice@test.com');")
@@ -928,7 +928,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
@@ -940,7 +940,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER COLUMN TYPE survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v INTEGER);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 42);")
@@ -949,7 +949,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("42")
@@ -959,7 +959,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER COLUMN SET DEFAULT survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, status TEXT);")
         executeSQL("ALTER TABLE t ALTER COLUMN status SET DEFAULT 'active';")
@@ -967,7 +967,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT status FROM t;").collect { case QueryResult(t) => t }.head
@@ -978,7 +978,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER COLUMN DROP DEFAULT survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, status TEXT DEFAULT 'active');")
         executeSQL("ALTER TABLE t ALTER COLUMN status DROP DEFAULT;")
@@ -986,7 +986,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT status FROM t;").collect { case QueryResult(t) => t }.head
@@ -997,7 +997,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER COLUMN SET NOT NULL survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         executeSQL("ALTER TABLE t ALTER COLUMN name SET NOT NULL;")
@@ -1005,7 +1005,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         assertThrows[RuntimeException] {
           executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -1016,7 +1016,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ALTER COLUMN DROP NOT NULL survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT NOT NULL);")
         executeSQL("ALTER TABLE t ALTER COLUMN name DROP NOT NULL;")
@@ -1024,7 +1024,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
@@ -1035,7 +1035,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ADD/DROP CONSTRAINT survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         executeSQL("ALTER TABLE t ADD CONSTRAINT uq_name UNIQUE (name);")
@@ -1043,7 +1043,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         // Verify table still works
         executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -1055,7 +1055,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
@@ -1065,7 +1065,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "RENAME TABLE survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE old_name (id INTEGER);")
         executeSQL("INSERT INTO old_name (id) VALUES (1);")
@@ -1074,7 +1074,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         (db hasTable "old_name") shouldBe false
         (db hasTable "new_name") shouldBe true
@@ -1086,7 +1086,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "RENAME COLUMN survives reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, old_col TEXT);")
         executeSQL("INSERT INTO t (id, old_col) VALUES (1, 'val');")
@@ -1095,7 +1095,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT new_col FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("val")
@@ -1105,7 +1105,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "ADD COLUMN then insert new rows with that column" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -1115,7 +1115,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
@@ -1131,7 +1131,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "DROP TABLE" - {
     "table gone after reopen" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t1 (id INTEGER);")
         executeSQL("CREATE TABLE t2 (id INTEGER);")
@@ -1142,7 +1142,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         (db hasTable "t1") shouldBe false
         (db hasTable "t2") shouldBe true
@@ -1154,7 +1154,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "drop and recreate table with same name" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, old_col TEXT);")
         executeSQL("INSERT INTO t (id, old_col) VALUES (1, 'old');")
@@ -1165,7 +1165,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, new_col FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
@@ -1177,7 +1177,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "DROP TYPE persists" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TYPE mood AS ENUM ('happy', 'sad');")
         executeSQL("DROP TYPE mood;")
@@ -1185,7 +1185,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         (db hasType "mood") shouldBe false
         db.close()
@@ -1198,7 +1198,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Multiple tables" - {
     "multiple tables persist independently" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("CREATE TABLE products (id SERIAL, title TEXT, price INTEGER, PRIMARY KEY (id));")
@@ -1209,7 +1209,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val users = executeSQL("SELECT name FROM users;").collect { case QueryResult(t) => t }.head
         val products = executeSQL("SELECT title, price FROM products ORDER BY price;").collect { case QueryResult(t) => t }.head
@@ -1230,7 +1230,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Slotted page edge cases" - {
     "many rows spanning multiple data pages" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, payload TEXT);")
         // Insert enough rows to fill multiple pages (each row ~100 bytes serialized)
@@ -1240,7 +1240,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 100
@@ -1252,7 +1252,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "insert after delete reuses space" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         for i <- 1 to 20 do
@@ -1266,7 +1266,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 20
@@ -1280,7 +1280,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       val smallPageSize = 256
 
       locally {
-        val db = PersistentDB.create(tmpFile.toString, smallPageSize)
+        val db = PersistentDB.create(tmpFile, smallPageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         for i <- 1 to 20 do
@@ -1289,7 +1289,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 20
@@ -1305,7 +1305,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
   "Multiple reopen cycles" - {
     "three open/close cycles with inserts each time" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO t (name) VALUES ('a');")
@@ -1313,14 +1313,14 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO t (name) VALUES ('b');")
         db.close()
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("INSERT INTO t (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
@@ -1334,7 +1334,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
 
     "open/close with mixed DML each cycle" in {
       locally {
-        val db = PersistentDB.create(tmpFile.toString, pageSize)
+        val db = PersistentDB.create(tmpFile, pageSize)
         given DB = db
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 'a');")
@@ -1343,7 +1343,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         executeSQL("UPDATE t SET v = 'aa' WHERE id = 1;")
         executeSQL("DELETE FROM t WHERE id = 2;")
@@ -1352,7 +1352,7 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
       }
 
       locally {
-        val db = PersistentDB.open(tmpFile.toString)
+        val db = PersistentDB.open(tmpFile)
         given DB = db
         val table = executeSQL("SELECT id, v FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
