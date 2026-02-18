@@ -57,7 +57,7 @@ class Repl(db: DB, rl: ReadLine):
 
     executeSql(buf.toString)
 
-  private def executeSql(sql: String): Unit =
+  def executeSql(sql: String): Unit =
     given DB = db
     try
       val results = executeSQL(sql)
