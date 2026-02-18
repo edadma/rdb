@@ -20,7 +20,8 @@ case class Config(
 
 object Main:
   def main(args: Array[String]): Unit =
-    val config = ParserForClass[Config].constructOrExit(args.toIndexedSeq)
+    val normalizedArgs = args.map(a => if a == "-h" then "--help" else a)
+    val config = ParserForClass[Config].constructOrExit(normalizedArgs.toIndexedSeq, customName = "rdb-cli")
 
     val db: DB =
       if config.memory.value || config.path.isEmpty then new MemoryDB
