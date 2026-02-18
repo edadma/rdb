@@ -40,6 +40,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     super.dropTable(name)
     persistCatalog()
 
+  override def renameTable(oldName: String, newName: String): Unit =
+    val fdp = tableFirstPages.remove(oldName)
+    super.renameTable(oldName, newName)
+    fdp.foreach(p => tableFirstPages(newName) = p)
+    persistCatalog()
+
   override def dropType(name: String): Unit =
     super.dropType(name)
     persistCatalog()
@@ -360,6 +366,10 @@ class PersistentTable(
   // Override DDL methods to persist catalog after schema changes
   override def addColumnToTable(spec: ColumnSpec, defaultValue: Value): Unit =
     super.addColumnToTable(spec, defaultValue)
+    db.persistCatalog()
+
+  override def renameColumnInTable(oldName: String, newName: String): Unit =
+    super.renameColumnInTable(oldName, newName)
     db.persistCatalog()
 
   override def dropColumnFromTable(colName: String): Unit =
