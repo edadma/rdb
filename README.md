@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/%40edadma%2Frdb.svg)](https://www.npmjs.com/package/@edadma/rdb)
 
-A cross-platform in-memory relational database implementation written in Scala that compiles to JVM, JavaScript, and Native platforms. RDB provides a full SQL interface with support for tables, queries, joins, aggregations, and more.
+A cross-platform relational database implementation written in Scala that compiles to JVM, JavaScript, and Native platforms. RDB provides a full SQL interface with support for tables, queries, joins, aggregations, and more — with both in-memory and persistent storage backends.
 
 ## Overview
 
@@ -12,6 +12,7 @@ RDB is designed to provide a lightweight, embeddable SQL database for applicatio
 - **Client-side applications** - Running SQL queries in web browsers or Node.js
 - **Data processing** - In-memory analytics and transformations
 - **Embedded systems** - Native compilation for resource-constrained environments
+- **Persistent storage** - Crash-safe durable storage backed by [stow](https://github.com/edadma/stow)
 
 ## Installation
 
@@ -24,7 +25,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.1"
+libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.2"
 ```
 
 ## Basic Usage
@@ -62,12 +63,12 @@ const arrayDb = new ConnectSQL({ rowMode: 'array' });
 // Can also override per-call: db.execute(sql, { rowMode: 'array' })
 ```
 
-### Scala
+### Scala (In-Memory)
 
 ```scala
 import io.github.edadma.rdb.*
 
-implicit val db: DB = new MemoryDB
+given DB = new MemoryDB
 
 val results = executeSQL("""
   CREATE TABLE products (
@@ -90,6 +91,38 @@ val results = executeSQL("""
 
 results.foreach(println)
 ```
+
+### Scala (Persistent)
+
+```scala
+import io.github.edadma.rdb.*
+
+// Create a new persistent database
+given DB = PersistentDB.create("mydata.db", 4096)
+
+executeSQL("""
+  CREATE TABLE users (
+    id SERIAL,
+    name TEXT NOT NULL,
+    email TEXT,
+    PRIMARY KEY (id)
+  );
+
+  INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+""")
+
+db.close()
+
+// Reopen existing database — all tables, data, and auto-increment state are restored
+given DB = PersistentDB.open("mydata.db")
+
+val results = executeSQL("SELECT * FROM users")
+results.foreach(println)
+
+db.close()
+```
+
+Persistent databases use crash-safe atomic writes via [stow](https://github.com/edadma/stow), with copy-on-write pages and double-buffered headers. All DDL and DML operations are durable — the catalog (table definitions, enum types, auto-increment state) and row data are persisted automatically.
 
 ## Supported SQL Features
 
@@ -378,8 +411,12 @@ class ConnectSQL {
 ### Scala API
 
 ```scala
-// Create database instance
-implicit val db: DB = new MemoryDB
+// In-memory database
+given DB = new MemoryDB
+
+// Persistent database — create new or reopen existing
+given DB = PersistentDB.create("path/to/db", pageSize = 4096)
+given DB = PersistentDB.open("path/to/db")
 
 // Execute SQL and get results
 val results: Seq[Result] = executeSQL("SELECT * FROM users")
