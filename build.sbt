@@ -103,7 +103,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
     libraryDependencies += "org.jline" % "jline" % "3.29.0",
   )
   .nativeSettings(
-    libraryDependencies += "io.github.edadma" %%% "readline" % "0.1.0",
+    libraryDependencies += "io.github.edadma" %%% "readline" % "0.0.2",
   )
 
 // ── root aggregate ──────────────────────────────────────────────────
