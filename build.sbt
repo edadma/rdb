@@ -46,10 +46,10 @@ lazy val commonScalacOptions = Seq(
   "-language:dynamics",
 )
 
-// ── core: the existing rdb library ──────────────────────────────────
+// ── rdb: the SQL database library ───────────────────────────────────
 
-lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
-  .in(file("core"))
+lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("rdb"))
   .settings(
     name    := "rdb",
     version := "0.1.2",
@@ -90,7 +90,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 lazy val cli = crossProject(JVMPlatform, NativePlatform)
   .in(file("cli"))
-  .dependsOn(core)
+  .dependsOn(rdb)
   .settings(
     name    := "rdb-cli",
     version := "0.0.1",
@@ -112,7 +112,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
 lazy val root = project
   .in(file("."))
   .aggregate(
-    core.js, core.jvm, core.native,
+    rdb.js, rdb.jvm, rdb.native,
     cli.jvm, cli.native,
   )
   .settings(
