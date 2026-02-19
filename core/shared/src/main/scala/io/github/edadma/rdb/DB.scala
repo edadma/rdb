@@ -12,6 +12,8 @@ abstract class DB:
   protected val tables = new mutable.HashMap[String, Table]
   protected[rdb] val types = new mutable.HashMap[String, Type]
 
+  def tableNames: Iterable[String] = tables.keys
+
   infix def hasTable(name: String): Boolean = tables contains name
 
   infix def getTable(name: String): Option[Table] = tables get name
