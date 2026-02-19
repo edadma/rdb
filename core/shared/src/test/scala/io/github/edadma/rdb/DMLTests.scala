@@ -88,6 +88,52 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "INSERT without column list" - {
+    "inserts with all columns specified positionally" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name TEXT, age INT);
+          |INSERT INTO t VALUES ('Alice', 30), ('Bob', 25);
+          |SELECT name, age FROM t ORDER BY name;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe TextValue("Alice")
+      table.data(0).data(1) shouldBe NumberValue(DIntType, 30)
+      table.data(1).data(0) shouldBe TextValue("Bob")
+      table.data(1).data(1) shouldBe NumberValue(DIntType, 25)
+    }
+
+    "inserts with serial column included" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id SERIAL, name TEXT);
+          |INSERT INTO t VALUES (1, 'Alice');
+          |SELECT id, name FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 1)
+      table.data(0).data(1) shouldBe TextValue("Alice")
+    }
+
+    "rejects wrong number of values" in {
+      Console.withErr(java.io.OutputStream.nullOutputStream()) {
+        an[Exception] should be thrownBy {
+          query(
+            """
+              |CREATE TABLE t (name TEXT, age INT);
+              |INSERT INTO t VALUES ('Alice');
+              |SELECT * FROM t;
+              |""".trim.stripMargin
+          )
+        }
+      }
+    }
+  }
+
   "DELETE" - {
     "deletes matching rows with WHERE" in {
       val table = query(

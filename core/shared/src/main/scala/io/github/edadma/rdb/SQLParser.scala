@@ -604,7 +604,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
   lazy val insert: P[Command] =
-    kw("INSERT") ~> kw("INTO") ~> identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ kw("VALUES") ~ rep1sep(
+    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ kw("VALUES") ~ rep1sep(
       row,
       ",",
     ) ~ opt(

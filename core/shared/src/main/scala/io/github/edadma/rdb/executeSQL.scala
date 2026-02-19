@@ -17,8 +17,9 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
 
   cs map {
     case InsertCommand(id @ Ident(table), columns, rows, returning) =>
-      val t    = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
-      val cols = columns.length
+      val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
+      val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
+      val cols = resolvedColumns.length
 
       rows find (_.length != cols) match
         case Some(row) => problem(row.head, s"row length (${row.length}) not equal to number of columns ($cols)")
@@ -27,10 +28,10 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             for (r <- rows)
               yield r map (e => eval(rewrite(e), Nil))
 
-          for (id @ Ident(c) <- columns)
+          for (id @ Ident(c) <- resolvedColumns)
             if !t.hasColumn(c) then problem(id, s"unknown column: $c")
 
-          val result = t.bulkInsert(columns map (_.name), data, returning)
+          val result = t.bulkInsert(resolvedColumns map (_.name), data, returning)
 
           val (row, metadata) =
             returning match

@@ -10,7 +10,7 @@ case class ForeignKeyConstraint(name: Option[String], columns: Seq[Ident], refer
 trait Command
 
 case class QueryCommand(query: Expr) extends Command
-case class InsertCommand(table: Ident, columns: Seq[Ident], rows: Seq[Seq[Expr]], returning: Option[Ident])
+case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident])
     extends Command
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint]) extends Command
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
