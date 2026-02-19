@@ -1,0 +1,191 @@
+package io.github.edadma.rdb
+
+class PersistentTransactionTests extends PersistentTestBase:
+
+  "Transactions" - {
+    "BEGIN/COMMIT persists inserts" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (name) VALUES ('Alice');")
+      executeSQL("INSERT INTO t (name) VALUES ('Bob');")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe TextValue("Alice")
+      table.data(1).data(0) shouldBe TextValue("Bob")
+      db.close()
+    }
+
+    "ROLLBACK undoes inserts" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+      executeSQL("INSERT INTO t (name) VALUES ('before');")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (name) VALUES ('inside');")
+      executeSQL("ROLLBACK;")
+
+      val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("before")
+      db.close()
+    }
+
+    "ROLLBACK undoes deletes" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("BEGIN;")
+      executeSQL("DELETE FROM t WHERE id = 1;")
+      executeSQL("ROLLBACK;")
+
+      val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("Alice")
+      db.close()
+    }
+
+    "ROLLBACK undoes updates" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("BEGIN;")
+      executeSQL("UPDATE t SET name = 'CHANGED' WHERE id = 1;")
+      executeSQL("ROLLBACK;")
+
+      val table = executeSQL("SELECT name FROM t WHERE id = 1;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("Alice")
+      db.close()
+    }
+
+    "ROLLBACK restores auto-increment state" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+      executeSQL("INSERT INTO t (name) VALUES ('first');")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (name) VALUES ('second');")
+      executeSQL("ROLLBACK;")
+
+      // The next insert after rollback should reuse the rolled-back counter
+      executeSQL("INSERT INTO t (name) VALUES ('actual_second');")
+      val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(1).data(0) shouldBe NumberValue(2)
+      db.close()
+    }
+
+    "read-your-own-writes within transaction" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'txn_row');")
+
+      val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("txn_row")
+      executeSQL("COMMIT;")
+      db.close()
+    }
+
+    "multiple DML operations in single transaction" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Charlie');")
+
+      executeSQL("BEGIN;")
+      executeSQL("UPDATE t SET name = 'ALICE' WHERE id = 1;")
+      executeSQL("DELETE FROM t WHERE id = 2;")
+      executeSQL("INSERT INTO t (id, name) VALUES (4, 'Dave');")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      table.data(0).data(1) shouldBe TextValue("ALICE")
+      table.data(1).data(1) shouldBe TextValue("Charlie")
+      table.data(2).data(1) shouldBe TextValue("Dave")
+      db.close()
+    }
+
+    "transaction survives reopen after commit" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given DB = db
+        executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+        executeSQL("BEGIN;")
+        executeSQL("INSERT INTO t (name) VALUES ('persisted');")
+        executeSQL("COMMIT;")
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given DB = db
+        val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+        table.data.length shouldBe 1
+        table.data(0).data(0) shouldBe TextValue("persisted")
+        db.close()
+      }
+    }
+
+    "DDL inside transaction fails" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("BEGIN;")
+
+      the[RuntimeException] thrownBy {
+        executeSQL("CREATE TABLE t2 (id INTEGER);")
+      } should have message "DDL not allowed inside a transaction"
+
+      executeSQL("ROLLBACK;")
+      db.close()
+    }
+
+    "auto-commit works as before" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'auto');")
+
+      val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("auto")
+      db.close()
+    }
+
+    "COMMIT without BEGIN fails" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER);")
+
+      the[RuntimeException] thrownBy {
+        executeSQL("COMMIT;")
+      } should have message "no active transaction"
+
+      db.close()
+    }
+
+    "ROLLBACK without BEGIN fails" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER);")
+
+      the[RuntimeException] thrownBy {
+        executeSQL("ROLLBACK;")
+      } should have message "no active transaction"
+
+      db.close()
+    }
+  }

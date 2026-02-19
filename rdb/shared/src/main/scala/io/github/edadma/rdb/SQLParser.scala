@@ -57,6 +57,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "as",
       "ASC",
       "asc",
+      "BEGIN",
+      "begin",
       "BETWEEN",
       "between",
       "BIGINT",
@@ -77,6 +79,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "check",
       "COLUMN",
       "column",
+      "COMMIT",
+      "commit",
       "CONSTRAINT",
       "constraint",
       "CREATE",
@@ -213,6 +217,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "returning",
       "RIGHT",
       "right",
+      "ROLLBACK",
+      "rollback",
       "SELECT",
       "select",
       "SET",
@@ -231,6 +237,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "time",
       "TIMESTAMP",
       "timestamp",
+      "TRANSACTION",
+      "transaction",
       "TRUE",
       "true",
       "TYPE",
@@ -769,8 +777,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         DropDefaultColumnModification()
       }
 
+  lazy val beginCmd: P[Command] = kw("BEGIN") ~> opt(kw("TRANSACTION")) ^^^ BeginCommand
+  lazy val commitCmd: P[Command] = kw("COMMIT") ~> opt(kw("TRANSACTION")) ^^^ CommitCommand
+  lazy val rollbackCmd: P[Command] = kw("ROLLBACK") ~> opt(kw("TRANSACTION")) ^^^ RollbackCommand
+
   lazy val command: P[Command] =
-    query ^^ QueryCommand.apply |
+    beginCmd |
+      commitCmd |
+      rollbackCmd |
+      query ^^ QueryCommand.apply |
       insert |
       createTable |
       dropTable |

@@ -16,6 +16,9 @@ object Output:
       case UpdateResult(n)          => println(s"UPDATE $n")
       case DeleteResult(n)          => println(s"DELETE $n")
       case AlterTableResult()       => println(s"ALTER TABLE")
+      case BeginResult              => println(s"BEGIN")
+      case CommitResult             => println(s"COMMIT")
+      case RollbackResult           => println(s"ROLLBACK")
 
   def listTables(db: DB): Unit =
     val names = db.tableNames.toSeq.sorted

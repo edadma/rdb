@@ -16,6 +16,9 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
   // pprintln(com)
 
   cs map {
+    case BeginCommand    => db.beginTransaction(); BeginResult
+    case CommitCommand   => db.commitTransaction(); CommitResult
+    case RollbackCommand => db.rollbackTransaction(); RollbackResult
     case InsertCommand(id @ Ident(table), columns, rows, returning) =>
       val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
       val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)

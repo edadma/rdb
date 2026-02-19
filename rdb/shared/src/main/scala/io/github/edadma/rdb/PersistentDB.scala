@@ -1,16 +1,74 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.stow.{FilePageStore, PageId, NoPage, WriteBatch}
+import io.github.edadma.stow.{FilePageStore, PageId, NoPage, WriteBatch, Transaction}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
+private case class TransactionSnapshot(
+    firstDataPages: Map[String, PageId],
+    autoMaps: Map[String, Map[String, Value]],
+)
 
 class PersistentDB private (val store: FilePageStore) extends DB:
   val name = "persistent DB"
+
+  private var activeTxn: Option[Transaction] = None
+  private var txnSnapshot: Option[TransactionSnapshot] = None
+
+  override def inTransaction: Boolean = activeTxn.isDefined
+
+  override def beginTransaction(): Unit =
+    require(activeTxn.isEmpty, "a transaction is already active")
+    // Snapshot per-table state
+    val fdpSnap = tables.map { (n, t) =>
+      n -> t.asInstanceOf[PersistentTable].firstDataPage
+    }.toMap
+    val autoSnap = tables.map { (n, t) =>
+      n -> t.asInstanceOf[PersistentTable].autoMap.toMap
+    }.toMap
+    txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap))
+    activeTxn = Some(store.beginTransaction())
+
+  override def commitTransaction(): Unit =
+    val txn = activeTxn.getOrElse(sys.error("no active transaction"))
+    txn.commit()
+    activeTxn = None
+    txnSnapshot = None
+
+  override def rollbackTransaction(): Unit =
+    val txn = activeTxn.getOrElse(sys.error("no active transaction"))
+    txn.rollback()
+    // Restore snapshots
+    val snap = txnSnapshot.get
+    for (n, fdp) <- snap.firstDataPages do
+      tables.get(n).foreach { t =>
+        val pt = t.asInstanceOf[PersistentTable]
+        pt.firstDataPage = fdp
+      }
+    for (n, am) <- snap.autoMaps do
+      tables.get(n).foreach { t =>
+        t.asInstanceOf[PersistentTable].autoMap.clear()
+        t.asInstanceOf[PersistentTable].autoMap ++= am
+      }
+    activeTxn = None
+    txnSnapshot = None
+
+  private[rdb] def withBatch(fn: WriteBatch => Unit): Unit =
+    activeTxn match
+      case Some(txn) => fn(txn)
+      case None      => store.modify(fn)
+
+  private[rdb] def readPage(id: PageId): Array[Byte] =
+    activeTxn match
+      case Some(txn) => txn.read(id)
+      case None      => store.read(id)
 
   protected def addTable(name: String, specs: Seq[Spec]): Table =
     new PersistentTable(name, specs, store, this)
 
   override def createTable(name: String, specs: Seq[Spec]): Table =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     val table = super.createTable(name, specs)
     store.modify { batch =>
       val pt = table.asInstanceOf[PersistentTable]
@@ -25,10 +83,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     e
 
   override def createEnum(name: String, labels: Seq[String]): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.createEnum(name, labels)
     persistCatalog()
 
   override def dropTable(name: String): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     // Free all data pages and header page for this table
     tables.get(name).foreach { table =>
       val pt = table.asInstanceOf[PersistentTable]
@@ -38,14 +98,17 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     persistCatalog()
 
   override def renameTable(oldName: String, newName: String): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.renameTable(oldName, newName)
     persistCatalog()
 
   override def dropType(name: String): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.dropType(name)
     persistCatalog()
 
   private[rdb] def persistCatalog(): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
     store.modify { batch =>
       writeCatalogInBatch(batch)
     }
@@ -149,7 +212,7 @@ class PersistentTable(
   protected def addColumn(spec: ColumnSpec): Unit = {} // handled by catalog persistence
 
   protected def addRow(row: Seq[Value]): Unit =
-    store.modify { batch =>
+    db.withBatch { batch =>
       val oldFirstDataPage = firstDataPage
       val rowBytes = serializeRow(row, batch, store.pageSize)
       insertRowBytes(rowBytes, batch)
@@ -193,7 +256,7 @@ class PersistentTable(
     var currentPageId = firstDataPage
 
     while currentPageId != NoPage do
-      val pageData = store.read(currentPageId)
+      val pageData = db.readPage(currentPageId)
       val page     = SlottedPage.wrap(pageData)
       val pid      = currentPageId
 
@@ -218,7 +281,7 @@ class PersistentTable(
 
   private def makeUpdater(pageId: PageId, slotIndex: Int, oldChains: IndexedSeq[Option[ChainRef]]): Seq[(String, Value)] => Unit =
     (updates: Seq[(String, Value)]) =>
-      store.modify { batch =>
+      db.withBatch { batch =>
         // Read current row data
         val pageData = batch.read(pageId)
         val page     = SlottedPage.wrap(pageData)
@@ -255,7 +318,7 @@ class PersistentTable(
 
   private def makeDeleter(pageId: PageId, slotIndex: Int, chains: IndexedSeq[Option[ChainRef]]): () => Unit =
     () =>
-      store.modify { batch =>
+      db.withBatch { batch =>
         // Free chain pages
         for chainOpt <- chains; ref <- chainOpt do
           freeChain(ref.firstPage, batch, store.pageSize)

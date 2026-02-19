@@ -50,6 +50,11 @@ abstract class DB:
 
   infix def getType(name: String): Option[Type] = types get name
 
+  def beginTransaction(): Unit = ()
+  def commitTransaction(): Unit = ()
+  def rollbackTransaction(): Unit = ()
+  def inTransaction: Boolean = false
+
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
 abstract class Table(var name: String, specs: Seq[Spec]) extends Process:

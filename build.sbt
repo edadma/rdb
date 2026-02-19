@@ -57,7 +57,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
       "io.github.edadma"  %%% "dllist"          % "0.0.6",
-      "io.github.edadma"  %%% "stow"            % "0.0.1",
+      "io.github.edadma"  %%% "stow"            % "0.0.2",
       "io.github.edadma"  %%% "table"           % "0.0.3",
       "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
     ),

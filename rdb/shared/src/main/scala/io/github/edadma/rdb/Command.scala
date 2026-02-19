@@ -20,6 +20,9 @@ case class AlterTableCommand(table: Ident, alter: TableAlteration)              
 case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Boolean = false)         extends Command
 case class DropIndexCommand(name: Ident, ifExists: Boolean = false)                                    extends Command  
 case class DropTypeCommand(name: Ident, ifExists: Boolean = false, cascade: Boolean = false)          extends Command
+case object BeginCommand    extends Command
+case object CommitCommand   extends Command
+case object RollbackCommand extends Command
 
 case class UpdateSet(col: Ident, value: Expr)
 case class ColumnDesc(
