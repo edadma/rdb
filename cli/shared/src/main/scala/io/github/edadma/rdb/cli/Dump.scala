@@ -12,9 +12,12 @@ object Dump:
     val db = PersistentDB.open(path)
 
     try
-      dumpEnums(db)
-      dumpTables(db)
+      dump(db)
     finally db.close()
+
+  def dump(db: DB): Unit =
+    dumpEnums(db)
+    dumpTables(db)
 
   private def dumpEnums(db: DB): Unit =
     for (name, typ) <- db.types.toSeq.sortBy(_._1) do

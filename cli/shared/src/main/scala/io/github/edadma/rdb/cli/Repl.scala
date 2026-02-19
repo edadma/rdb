@@ -37,9 +37,12 @@ class Repl(db: DB, rl: ReadLine):
       case MetaCommand.Include(path) =>
         executeFile(path)
         true
+      case MetaCommand.DumpSchema =>
+        Dump.dump(db)
+        true
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
-        println("Available: \\dt  \\d <table>  \\i <file>  \\q")
+        println("Available: \\dt  \\d <table>  \\dump  \\i <file>  \\q")
         true
 
   private def collectAndExecute(first: String): Unit =
