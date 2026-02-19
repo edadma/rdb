@@ -54,6 +54,8 @@ abstract class DB:
   def commitTransaction(): Unit = ()
   def rollbackTransaction(): Unit = ()
   def inTransaction: Boolean = false
+  def isTransactionAborted: Boolean = false
+  def markTransactionAborted(): Unit = ()
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 

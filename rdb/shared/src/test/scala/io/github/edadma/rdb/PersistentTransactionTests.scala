@@ -188,4 +188,72 @@ class PersistentTransactionTests extends PersistentTestBase:
 
       db.close()
     }
+
+    "error inside transaction marks it aborted" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
+      executeSQL("BEGIN;")
+
+      // Insert a NULL into a NOT NULL column — should fail
+      intercept[Exception] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+      }
+
+      // Subsequent DML should be rejected
+      the[RuntimeException] thrownBy {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'good');")
+      } should have message "current transaction is aborted, use ROLLBACK"
+
+      // COMMIT should be rejected
+      the[RuntimeException] thrownBy {
+        executeSQL("COMMIT;")
+      } should have message "current transaction is aborted, use ROLLBACK"
+
+      // ROLLBACK should work
+      executeSQL("ROLLBACK;")
+      db.close()
+    }
+
+    "ROLLBACK after error allows new transaction" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
+      executeSQL("BEGIN;")
+
+      intercept[Exception] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+      }
+
+      executeSQL("ROLLBACK;")
+
+      // New transaction should work fine
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'good');")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("good")
+      db.close()
+    }
+
+    "SELECT in aborted transaction fails" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER NOT NULL);")
+      executeSQL("INSERT INTO t (id) VALUES (1);")
+      executeSQL("BEGIN;")
+
+      intercept[Exception] {
+        executeSQL("INSERT INTO t (id) VALUES (NULL);")
+      }
+
+      the[RuntimeException] thrownBy {
+        executeSQL("SELECT * FROM t;")
+      } should have message "current transaction is aborted, use ROLLBACK"
+
+      executeSQL("ROLLBACK;")
+      db.close()
+    }
   }

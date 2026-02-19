@@ -15,8 +15,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
 
   private var activeTxn: Option[Transaction] = None
   private var txnSnapshot: Option[TransactionSnapshot] = None
+  private var txnAborted: Boolean = false
 
   override def inTransaction: Boolean = activeTxn.isDefined
+  override def isTransactionAborted: Boolean = txnAborted
+  override def markTransactionAborted(): Unit = txnAborted = true
 
   override def beginTransaction(): Unit =
     require(activeTxn.isEmpty, "a transaction is already active")
@@ -28,10 +31,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       n -> t.asInstanceOf[PersistentTable].autoMap.toMap
     }.toMap
     txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap))
+    txnAborted = false
     activeTxn = Some(store.beginTransaction())
 
   override def commitTransaction(): Unit =
     val txn = activeTxn.getOrElse(sys.error("no active transaction"))
+    if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
     txn.commit()
     activeTxn = None
     txnSnapshot = None
@@ -53,16 +58,25 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       }
     activeTxn = None
     txnSnapshot = None
+    txnAborted = false
 
   private[rdb] def withBatch(fn: WriteBatch => Unit): Unit =
     activeTxn match
-      case Some(txn) => fn(txn)
-      case None      => store.modify(fn)
+      case Some(txn) =>
+        if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
+        try fn(txn)
+        catch
+          case e: Throwable =>
+            txnAborted = true
+            throw e
+      case None => store.modify(fn)
 
   private[rdb] def readPage(id: PageId): Array[Byte] =
     activeTxn match
-      case Some(txn) => txn.read(id)
-      case None      => store.read(id)
+      case Some(txn) =>
+        if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
+        txn.read(id)
+      case None => store.read(id)
 
   protected def addTable(name: String, specs: Seq[Spec]): Table =
     new PersistentTable(name, specs, store, this)
