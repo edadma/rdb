@@ -80,14 +80,16 @@ class NewDataTypeTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "rejects out-of-range values" in {
-      an[Exception] should be thrownBy {
-        query(
-          """
-            |CREATE TABLE t (val SMALLINT);
-            |INSERT INTO t (val) VALUES (40000);
-            |SELECT val FROM t;
-            |""".trim.stripMargin
-        )
+      Console.withErr(java.io.OutputStream.nullOutputStream()) {
+        an[Exception] should be thrownBy {
+          query(
+            """
+              |CREATE TABLE t (val SMALLINT);
+              |INSERT INTO t (val) VALUES (40000);
+              |SELECT val FROM t;
+              |""".trim.stripMargin
+          )
+        }
       }
     }
   }
