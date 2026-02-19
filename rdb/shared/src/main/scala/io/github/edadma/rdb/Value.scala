@@ -16,11 +16,12 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
   def string: String
 
   infix def compare(that: Value): Int =
-    if this.isNull then -1
+    if this.isNull && that.isNull then 0
+    else if this.isNull then -1
     else if that.isNull then 1
     else if vtyp != that.vtyp then problem(pos, s"'$this' can't be compared to '$that''")
     else if this == that then 0
-    else 1
+    else problem(pos, s"'$this' can't be compared to '$that''")
 
   def isNull: Boolean = isInstanceOf[NullValue]
 
@@ -134,6 +135,18 @@ case class ByteaValue(data: Array[Byte]) extends Value(ByteaType):
 
   def string: String = s"\\x${data.map(b => f"${b & 0xff}%02x").mkString}"
 
+  override def compare(that: Value): Int =
+    that match
+      case ByteaValue(other) =>
+        val len = math.min(data.length, other.length)
+        var i = 0
+        while i < len do
+          val cmp = (data(i) & 0xff) - (other(i) & 0xff)
+          if cmp != 0 then return cmp
+          i += 1
+        data.length - other.length
+      case _ => super.compare(that)
+
   override def equals(other: Any): Boolean =
     other match
       case ByteaValue(otherData) => java.util.Arrays.equals(data, otherData)
@@ -188,6 +201,11 @@ case class BooleanValue(b: Boolean) extends Value(BooleanType):
   override def toText: TextValue = TextValue(if b then "TRUE" else "FALSE")
 
   def string: String = if b then "true" else "false"
+
+  override def compare(that: Value): Int =
+    that match
+      case BooleanValue(o) => b compare o
+      case _               => super.compare(that)
 
 trait ArrayLikeValue extends Value:
   infix def contains(v: Value): Boolean
