@@ -4,6 +4,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.BeforeAndAfterEach
 import io.github.edadma.cross_platform.{createTempFile, deleteFile}
+import io.github.edadma.stow.NoPage
 
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
 import scala.compiletime.uninitialized
@@ -1360,6 +1361,194 @@ class PersistentDBTests extends AnyFreeSpec with Matchers with BeforeAndAfterEac
         table.data(0).data(1) shouldBe TextValue("aa")
         table.data(1).data(0) shouldBe NumberValue(3)
         table.data(1).data(1) shouldBe TextValue("c")
+        db.close()
+      }
+    }
+  }
+
+  // ── Per-table header page tests ─────────────────────────────────────
+
+  "Header page" - {
+    "metaRoot unchanged after INSERT" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INT, name TEXT);")
+      val metaAfterDDL = db.store.metaRoot
+      metaAfterDDL should not be NoPage
+
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'a');")
+      db.store.metaRoot shouldBe metaAfterDDL
+
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'b');")
+      db.store.metaRoot shouldBe metaAfterDDL
+      db.close()
+    }
+
+    "metaRoot unchanged after UPDATE" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INT, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'a');")
+      val metaAfterInsert = db.store.metaRoot
+
+      executeSQL("UPDATE t SET name = 'updated' WHERE id = 1;")
+      db.store.metaRoot shouldBe metaAfterInsert
+      db.close()
+    }
+
+    "metaRoot unchanged after DELETE" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INT, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'a');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'b');")
+      val metaAfterInserts = db.store.metaRoot
+
+      executeSQL("DELETE FROM t WHERE id = 1;")
+      db.store.metaRoot shouldBe metaAfterInserts
+      db.close()
+    }
+
+    "metaRoot unchanged after INSERT with SERIAL" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+      val metaAfterDDL = db.store.metaRoot
+
+      executeSQL("INSERT INTO t (name) VALUES ('a');")
+      db.store.metaRoot shouldBe metaAfterDDL
+
+      executeSQL("INSERT INTO t (name) VALUES ('b');")
+      db.store.metaRoot shouldBe metaAfterDDL
+      db.close()
+    }
+
+    "metaRoot changes after DDL" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INT, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'a');")
+      val metaBefore = db.store.metaRoot
+
+      executeSQL("ALTER TABLE t ADD COLUMN age INT DEFAULT 0;")
+      db.store.metaRoot should not be metaBefore
+      db.close()
+    }
+
+    "per-table header page independence with SERIAL" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given DB = db
+        executeSQL("CREATE TABLE a (id SERIAL, v TEXT);")
+        executeSQL("CREATE TABLE b (id SERIAL, v TEXT);")
+        executeSQL("INSERT INTO a (v) VALUES ('a1');")
+        executeSQL("INSERT INTO a (v) VALUES ('a2');")
+        executeSQL("INSERT INTO a (v) VALUES ('a3');")
+        // b has no inserts — its serial counter should still be at 1
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given DB = db
+        // a's serial should continue at 4
+        executeSQL("INSERT INTO a (v) VALUES ('a4');")
+        val aResult = executeSQL("SELECT id FROM a ORDER BY id;").collect { case QueryResult(t) => t }.head
+        aResult.data.length shouldBe 4
+        aResult.data(3).data(0) shouldBe NumberValue(4)
+
+        // b's serial should start at 1
+        executeSQL("INSERT INTO b (v) VALUES ('b1');")
+        val bResult = executeSQL("SELECT id FROM b ORDER BY id;").collect { case QueryResult(t) => t }.head
+        bResult.data.length shouldBe 1
+        bResult.data(0).data(0) shouldBe NumberValue(1)
+        db.close()
+      }
+    }
+
+    "delete all rows then re-insert survives reopen" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given DB = db
+        executeSQL("CREATE TABLE t (id INT, v TEXT);")
+        executeSQL("INSERT INTO t (id, v) VALUES (1, 'a');")
+        executeSQL("INSERT INTO t (id, v) VALUES (2, 'b');")
+        executeSQL("DELETE FROM t;")
+        // firstDataPage is now NoPage
+        executeSQL("INSERT INTO t (id, v) VALUES (3, 'c');")
+        executeSQL("INSERT INTO t (id, v) VALUES (4, 'd');")
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given DB = db
+        val table = executeSQL("SELECT id, v FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+        table.data.length shouldBe 2
+        table.data(0).data(0) shouldBe NumberValue(3)
+        table.data(0).data(1) shouldBe TextValue("c")
+        table.data(1).data(0) shouldBe NumberValue(4)
+        table.data(1).data(1) shouldBe TextValue("d")
+        db.close()
+      }
+    }
+
+    "ADD COLUMN rewrite updates header page" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given DB = db
+        executeSQL("CREATE TABLE t (id INT, name TEXT);")
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'a');")
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'b');")
+        // ADD COLUMN triggers rewriteAllRows which changes firstDataPage
+        executeSQL("ALTER TABLE t ADD COLUMN age INT DEFAULT 99;")
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given DB = db
+        val table = executeSQL("SELECT id, name, age FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+        table.data.length shouldBe 2
+        table.data(0).data(0) shouldBe NumberValue(1)
+        table.data(0).data(1) shouldBe TextValue("a")
+        table.data(0).data(2) shouldBe NumberValue(99)
+        table.data(1).data(0) shouldBe NumberValue(2)
+        table.data(1).data(1) shouldBe TextValue("b")
+        table.data(1).data(2) shouldBe NumberValue(99)
+
+        // can still insert after reopen
+        executeSQL("INSERT INTO t (id, name, age) VALUES (3, 'c', 42);")
+        val table2 = executeSQL("SELECT age FROM t WHERE id = 3;").collect { case QueryResult(t) => t }.head
+        table2.data(0).data(0) shouldBe NumberValue(42)
+        db.close()
+      }
+    }
+
+    "table with no auto state persists via header page" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given DB = db
+        executeSQL("CREATE TABLE t (id INT, name TEXT);")
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'hello');")
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'world');")
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given DB = db
+        val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+        table.data.length shouldBe 2
+        table.data(0).data(0) shouldBe NumberValue(1)
+        table.data(0).data(1) shouldBe TextValue("hello")
+        table.data(1).data(0) shouldBe NumberValue(2)
+        table.data(1).data(1) shouldBe TextValue("world")
+
+        // insert more after reopen
+        executeSQL("INSERT INTO t (id, name) VALUES (3, 'again');")
+        val table2 = executeSQL("SELECT name FROM t WHERE id = 3;").collect { case QueryResult(t) => t }.head
+        table2.data(0).data(0) shouldBe TextValue("again")
         db.close()
       }
     }
