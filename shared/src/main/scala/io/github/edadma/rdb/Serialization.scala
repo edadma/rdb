@@ -464,6 +464,37 @@ def deserializeType(in: DataInputStream, enumTypes: Map[String, EnumType]): Type
       enumTypes.getOrElse(enumName, sys.error(s"unknown enum type '$enumName'"))
     case other           => sys.error(s"unknown type tag: $other")
 
+// ---- Table Header Page Serialization ----
+
+def serializeTableHeader(firstDataPage: PageId, autoState: Map[String, Value], batch: WriteBatch, pageSize: Int): Array[Byte] =
+  val baos = new ByteArrayOutputStream()
+  val out  = new DataOutputStream(baos)
+
+  out.writeInt(firstDataPage)
+  out.writeShort(autoState.size)
+  for (col, v) <- autoState do
+    writeString(out, col)
+    serializeValue(v, out, batch, pageSize)
+
+  out.flush()
+  val content = baos.toByteArray
+  val page    = new Array[Byte](pageSize)
+  System.arraycopy(content, 0, page, 0, content.length)
+  page
+
+def deserializeTableHeader(pageData: Array[Byte], store: PageStore): (PageId, Map[String, Value]) =
+  val in            = new DataInputStream(new ByteArrayInputStream(pageData))
+  val firstDataPage = in.readInt()
+  val autoCount     = in.readUnsignedShort()
+  val autoState     = new scala.collection.mutable.HashMap[String, Value]
+
+  for _ <- 0 until autoCount do
+    val col    = readString(in)
+    val (v, _) = deserializeValue(in, store, Map.empty)
+    autoState(col) = v
+
+  (firstDataPage, autoState.toMap)
+
 // ---- Catalog Serialization ----
 
 // Catalog layout:
@@ -475,7 +506,7 @@ def deserializeType(in: DataInputStream, enumTypes: Map[String, EnumType]): Type
 //   [2 bytes] table count
 //   For each table:
 //     [2 bytes] name len + name UTF-8
-//     [4 bytes] firstDataPage
+//     [4 bytes] headerPage (per-table header page storing firstDataPage + autoState)
 //     [2 bytes] column count
 //     For each column:
 //       [2 bytes] name len + name UTF-8
@@ -491,8 +522,6 @@ def deserializeType(in: DataInputStream, enumTypes: Map[String, EnumType]): Type
 //       For each: [2 bytes] col_name len + col_name UTF-8
 //     [2 bytes] constraint count (excluding PK)
 //     For each constraint: type tag + data
-//     [2 bytes] auto state count
-//     For each auto: [2 bytes] col_name len + col_name + serialized Value
 
 def serializeCatalog(
     enumTypes: Iterable[(String, Type)],
@@ -515,7 +544,7 @@ def serializeCatalog(
   out.writeShort(tableEntries.size)
   for entry <- tableEntries do
     writeString(out, entry.name)
-    out.writeInt(entry.firstDataPage)
+    out.writeInt(entry.headerPage)
 
     // Columns
     out.writeShort(entry.columns.size)
@@ -576,22 +605,15 @@ def serializeCatalog(
           for col <- refCols do writeString(out, col)
         case _ => // skip non-serializable constraints
 
-    // Auto state
-    out.writeShort(entry.autoState.size)
-    for (col, v) <- entry.autoState do
-      writeString(out, col)
-      serializeValue(v, out, batch, pageSize)
-
   out.flush()
   baos.toByteArray
 
 case class CatalogTableEntry(
     name: String,
-    firstDataPage: PageId,
+    headerPage: PageId,
     columns: Seq[ColumnSpec],
     primaryKey: Option[PrimaryKeySpec],
     constraints: Seq[Spec],
-    autoState: Map[String, Value],
 )
 
 def deserializeCatalog(
@@ -619,7 +641,7 @@ def deserializeCatalog(
 
   for _ <- 0 until tableCount do
     val name = readString(in)
-    val firstDataPage = in.readInt()
+    val headerPage = in.readInt()
 
     // Columns
     val colCount = in.readUnsignedShort()
@@ -677,18 +699,10 @@ def deserializeCatalog(
           constraints += ForeignKeySpec(cols, refTable, refCols, cName)
         case other => sys.error(s"unknown constraint type tag: $other")
 
-    // Auto state
-    val autoCount = in.readUnsignedShort()
-    val autoState = new scala.collection.mutable.HashMap[String, Value]
-    for _ <- 0 until autoCount do
-      val col = readString(in)
-      val (v, _) = deserializeValue(in, store, enumMap.toMap)
-      autoState(col) = v
-
     // Add PK to constraints list for reconstruction
     val allConstraints = primaryKey.toSeq ++ constraints.toSeq
 
-    tables += CatalogTableEntry(name, firstDataPage, columns.toSeq, primaryKey, allConstraints, autoState.toMap)
+    tables += CatalogTableEntry(name, headerPage, columns.toSeq, primaryKey, allConstraints)
 
   (enums.toSeq, tables.toSeq)
 

@@ -1,25 +1,23 @@
 package io.github.edadma.rdb
 
-import io.github.edadma.stow.{FilePageStore, PageId, NoPage, PageStore, WriteBatch}
+import io.github.edadma.stow.{FilePageStore, PageId, NoPage, WriteBatch}
 
-import scala.collection.immutable
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 class PersistentDB private (val store: FilePageStore) extends DB:
   val name = "persistent DB"
 
-  // Table first-page tracking (needed for catalog)
-  private[rdb] val tableFirstPages = new mutable.HashMap[String, PageId]
-
   protected def addTable(name: String, specs: Seq[Spec]): Table =
-    val table = new PersistentTable(name, specs, store, this)
-    tableFirstPages(name) = NoPage
-    table
+    new PersistentTable(name, specs, store, this)
 
   override def createTable(name: String, specs: Seq[Spec]): Table =
     val table = super.createTable(name, specs)
-    persistCatalog()
+    store.modify { batch =>
+      val pt = table.asInstanceOf[PersistentTable]
+      pt.headerPage = batch.allocate()
+      pt.writeHeaderPage(batch)
+      writeCatalogInBatch(batch)
+    }
     table
 
   protected def addEnum(name: String, labels: Seq[String]): EnumType =
@@ -31,19 +29,16 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     persistCatalog()
 
   override def dropTable(name: String): Unit =
-    // Free all data pages for this table
+    // Free all data pages and header page for this table
     tables.get(name).foreach { table =>
       val pt = table.asInstanceOf[PersistentTable]
       pt.freeAllPages()
     }
-    tableFirstPages.remove(name)
     super.dropTable(name)
     persistCatalog()
 
   override def renameTable(oldName: String, newName: String): Unit =
-    val fdp = tableFirstPages.remove(oldName)
     super.renameTable(oldName, newName)
-    fdp.foreach(p => tableFirstPages(newName) = p)
     persistCatalog()
 
   override def dropType(name: String): Unit =
@@ -66,11 +61,10 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       val pt = table.asInstanceOf[PersistentTable]
       CatalogTableEntry(
         name = tName,
-        firstDataPage = pt.firstDataPage,
+        headerPage = pt.headerPage,
         columns = pt.columns.toSeq,
         primaryKey = pt.primaryKey,
         constraints = pt.constraints.toSeq,
-        autoState = pt.autoMap.toMap,
       )
     }
 
@@ -97,10 +91,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     for entry <- tableEntries do
       val allSpecs: Seq[Spec] = entry.columns ++ entry.constraints
       val table = new PersistentTable(entry.name, allSpecs, store, this)
-      table.firstDataPage = entry.firstDataPage
-      table.restoreAutoState(entry.autoState)
+      table.headerPage = entry.headerPage
+      val (fdp, autoState) = deserializeTableHeader(store.read(entry.headerPage), store)
+      table.firstDataPage = fdp
+      table.restoreAutoState(autoState)
       tables(entry.name) = table
-      tableFirstPages(entry.name) = entry.firstDataPage
 
   private def readCatalogChain(firstPage: PageId): Array[Byte] =
     // First pass: count total bytes
@@ -146,14 +141,20 @@ class PersistentTable(
 ) extends Table(name, specs):
 
   var firstDataPage: PageId = NoPage
+  var headerPage: PageId    = NoPage
+
+  def writeHeaderPage(batch: WriteBatch): Unit =
+    batch.write(headerPage, serializeTableHeader(firstDataPage, autoMap.toMap, batch, store.pageSize))
 
   protected def addColumn(spec: ColumnSpec): Unit = {} // handled by catalog persistence
 
   protected def addRow(row: Seq[Value]): Unit =
     store.modify { batch =>
+      val oldFirstDataPage = firstDataPage
       val rowBytes = serializeRow(row, batch, store.pageSize)
       insertRowBytes(rowBytes, batch)
-      db.writeCatalogInBatch(batch)
+      if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
+        writeHeaderPage(batch)
     }
 
   private def insertRowBytes(rowBytes: Array[Byte], batch: WriteBatch): Unit =
@@ -177,7 +178,6 @@ class PersistentTable(
 
     if firstDataPage == NoPage then
       firstDataPage = newPageId
-      db.tableFirstPages(this.name) = newPageId
     else
       // Link from previous last page
       val prevData = batch.read(prevPageId)
@@ -251,8 +251,6 @@ class PersistentTable(
           insertRowBytes(newRowBytes, batch)
         else
           batch.write(pageId, page.data)
-
-        db.writeCatalogInBatch(batch)
       }
 
   private def makeDeleter(pageId: PageId, slotIndex: Int, chains: IndexedSeq[Option[ChainRef]]): () => Unit =
@@ -266,7 +264,6 @@ class PersistentTable(
         val page     = SlottedPage.wrap(pageData)
         page.removeSlot(slotIndex)
         batch.write(pageId, page.data)
-        db.writeCatalogInBatch(batch)
       }
 
   protected def addColumnData(defaultValue: Value): Unit =
@@ -331,11 +328,16 @@ class PersistentTable(
         val transformed = transform(values)
         val rowBytes    = serializeRow(transformed, batch, store.pageSize)
         insertRowBytes(rowBytes, batch)
+
+      writeHeaderPage(batch)
     }
 
   private[rdb] def freeAllPages(): Unit =
     store.modify { batch =>
       freeAllDataPages(batch)
+      if headerPage != NoPage then
+        batch.free(headerPage)
+        headerPage = NoPage
     }
 
   private def freeAllDataPages(batch: WriteBatch): Unit =
@@ -361,7 +363,6 @@ class PersistentTable(
       currentPageId = nextPageId
 
     firstDataPage = NoPage
-    db.tableFirstPages(this.name) = NoPage
 
   // Override DDL methods to persist catalog after schema changes
   override def addColumnToTable(spec: ColumnSpec, defaultValue: Value): Unit =
