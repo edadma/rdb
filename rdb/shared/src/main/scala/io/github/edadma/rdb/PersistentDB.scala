@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 private case class TransactionSnapshot(
     firstDataPages: Map[String, PageId],
     autoMaps: Map[String, Map[String, Value]],
+    indexNextRowIds: Map[String, Map[String, Long]],
 )
 
 class PersistentDB private (val store: FilePageStore) extends DB:
@@ -30,7 +31,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     val autoSnap = tables.map { (n, t) =>
       n -> t.asInstanceOf[PersistentTable].autoMap.toMap
     }.toMap
-    txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap))
+    val idxSnap = tables.map { (n, t) =>
+      n -> t.tableIndexes.map { (idxName, idx) =>
+        idxName -> idx.asInstanceOf[PersistentTableIndex].nextRowId
+      }.toMap
+    }.toMap
+    txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap, idxSnap))
     txnAborted = false
     activeTxn = Some(store.beginTransaction())
 
@@ -55,6 +61,13 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       tables.get(n).foreach { t =>
         t.asInstanceOf[PersistentTable].autoMap.clear()
         t.asInstanceOf[PersistentTable].autoMap ++= am
+      }
+    for (n, idxMap) <- snap.indexNextRowIds do
+      tables.get(n).foreach { t =>
+        for (idxName, nrid) <- idxMap do
+          t.tableIndexes.get(idxName).foreach { idx =>
+            idx.asInstanceOf[PersistentTableIndex].nextRowId = nrid
+          }
       }
     activeTxn = None
     txnSnapshot = None

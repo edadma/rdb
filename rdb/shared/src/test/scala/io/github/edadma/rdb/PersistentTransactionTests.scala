@@ -256,4 +256,65 @@ class PersistentTransactionTests extends PersistentTestBase:
       executeSQL("ROLLBACK;")
       db.close()
     }
+
+    "ROLLBACK restores unique index — re-insert same key" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      executeSQL("ROLLBACK;")
+
+      // Key 2 should be available again after rollback
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Charlie');")
+      val table = executeSQL("SELECT * FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(1).data(1) shouldBe TextValue("Charlie")
+      db.close()
+    }
+
+    "ROLLBACK restores non-unique index state" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Bob');")
+      executeSQL("ROLLBACK;")
+
+      // Only the pre-transaction row should remain
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+
+      // Insert should still work after rollback
+      executeSQL("INSERT INTO t (id, name) VALUES (4, 'Dave');")
+      val table2 = executeSQL("SELECT * FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table2.data.length shouldBe 2
+      db.close()
+    }
+
+    "ROLLBACK after delete restores index entry" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      executeSQL("BEGIN;")
+      executeSQL("DELETE FROM t WHERE id = 1;")
+      executeSQL("ROLLBACK;")
+
+      // Both rows should still be present and PK constraint still intact
+      val table = executeSQL("SELECT * FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+
+      // Key 1 should still be in the index — duplicate insert should fail
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Duplicate');")
+      }
+      db.close()
+    }
   }
