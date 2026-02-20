@@ -344,6 +344,7 @@ private[rdb] def deepCopyExpr(expr: Expr): Expr =
     case CastExpr(e, t)                    => CastExpr(deepCopyExpr(e), t)
     case SetOperationExpr(op, l, r)        => SetOperationExpr(op, deepCopyExpr(l), deepCopyExpr(r))
     case ValuesExpr(rows)                  => ValuesExpr(rows.map(_.map(deepCopyExpr)))
+    case LateralExpr(q)                    => LateralExpr(deepCopyExpr(q))
     case CompoundQueryExpr(q, ob, off, lim) =>
       CompoundQueryExpr(deepCopyExpr(q), ob.map(_.map(deepCopyOrderBy)), off, lim)
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>

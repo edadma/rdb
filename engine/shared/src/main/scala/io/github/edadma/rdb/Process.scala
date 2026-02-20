@@ -238,6 +238,29 @@ case class ValuesProcess(rows: Seq[Seq[Expr]], width: Int) extends Process:
       Row(exprs.map(e => eval(e, ctx)).toIndexedSeq, meta, None, None)
     }
 
+case class LateralCrossProcess(input1: Process, input2: Process) extends Process:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input1.iterator(ctx).flatMap { leftRow =>
+      input2.iterator(leftRow +: ctx).map { rightRow =>
+        Row(leftRow.data ++ rightRow.data, meta, None, None)
+      }
+    }
+
+case class LeftLateralJoinProcess(input1: Process, input2: Process, cond: Expr) extends Process:
+  val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input1.iterator(ctx).flatMap { leftRow =>
+      val matches = input2.iterator(leftRow +: ctx)
+        .map(rightRow => Row(leftRow.data ++ rightRow.data, meta, None, None))
+        .filter(row => beval(cond, row +: ctx))
+      if matches.isEmpty then
+        Iterator(Row(leftRow.data ++ Vector.fill(input2.meta.width)(NULL), meta, None, None))
+      else matches
+    }
+
 case class CrossProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)
 

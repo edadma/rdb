@@ -448,6 +448,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
         case SubqueryExpr(q)                   => countInExpr(q)
         case ExistsExpr(q)                     => countInExpr(q)
         case CastExpr(e, _)                    => countInExpr(e)
+        case LateralExpr(q)                    => countInExpr(q)
         case SQLSelectExpr(exprs, from, where, _, having, _, _, _, _) =>
           exprs.flatMap(countInExpr) ++
             from.toSeq.flatMap(_.flatMap(countInExpr)) ++

@@ -126,13 +126,31 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val rewritten_projs = exprs map rewrite
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
+    case LateralExpr(rel) => rewrite(rel)
     case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit, distinct) =>
-      def cross(es: Seq[Expr]): Expr =
-        es match
-          case Seq(e)  => e
-          case e :: tl => CrossOperator(e, cross(tl))
+      def isLateral(e: Expr): Boolean = e match
+        case LateralExpr(_)                   => true
+        case AliasOperator(LateralExpr(_), _) => true
+        case _                                => false
 
-      val r  = cross(from map rewrite)
+      def stripLateral(e: Expr): Expr = e match
+        case LateralExpr(rel)                   => rel
+        case AliasOperator(LateralExpr(rel), a) => AliasOperator(rel, a)
+        case other                              => other
+
+      val rewrittenFrom = from.map {
+        case e if isLateral(e) =>
+          e match
+            case LateralExpr(rel)                   => LateralExpr(rewrite(rel))
+            case AliasOperator(LateralExpr(rel), a) => AliasOperator(LateralExpr(rewrite(rel)), a)
+            case _                                  => rewrite(e)
+        case e => rewrite(e)
+      }
+
+      val r = rewrittenFrom.reduceLeft { (left, right) =>
+        if isLateral(right) then LateralCrossOperator(left, stripLateral(right))
+        else CrossOperator(left, right)
+      }
       val r1 =
         where match
           case Some(cond) => SelectOperator(r, rewrite(cond))
@@ -268,6 +286,15 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))
+    case LateralCrossOperator(rel1, rel2) =>
+      ProcessOperator(LateralCrossProcess(procRewrite(rel1), procRewrite(rel2)))
+    case InnerJoinOperator(rel1, rel2, on) if isLateralExpr(rel2) =>
+      ProcessOperator(SeqScanProcess(
+        LateralCrossProcess(procRewrite(rel1), procRewrite(stripLateralExpr(rel2))),
+        rewrite(on)))
+    case LeftJoinOperator(rel1, rel2, on) if isLateralExpr(rel2) =>
+      ProcessOperator(LeftLateralJoinProcess(
+        procRewrite(rel1), procRewrite(stripLateralExpr(rel2)), rewrite(on)))
     case InnerJoinOperator(rel1, rel2, on) =>
       ProcessOperator(SeqScanProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
@@ -286,6 +313,8 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val rewritten_proc  = procRewrite(rel)
 
       ProcessOperator(ProjectProcess(rewritten_proc, rewritten_projs))
+    case CrossOperator(rel1, rel2) if isLateralExpr(rel2) =>
+      ProcessOperator(LateralCrossProcess(procRewrite(rel1), procRewrite(stripLateralExpr(rel2))))
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) =>
       val proc = procRewrite(rel)
@@ -303,6 +332,16 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       ProcessOperator(ValuesProcess(rewrittenRows, width))
     // todo: ColumnExpr, VariableExpr
     case _ => expr
+
+private def isLateralExpr(e: Expr): Boolean = e match
+  case LateralExpr(_)                   => true
+  case AliasOperator(LateralExpr(_), _) => true
+  case _                                => false
+
+private def stripLateralExpr(e: Expr): Expr = e match
+  case LateralExpr(rel)                   => rel
+  case AliasOperator(LateralExpr(rel), a) => AliasOperator(rel, a)
+  case other                              => other
 
 private def flattenAnd(expr: Expr): Seq[Expr] =
   expr match

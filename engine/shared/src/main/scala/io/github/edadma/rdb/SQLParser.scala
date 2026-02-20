@@ -174,6 +174,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "cross",
       "FULL",
       "full",
+      "LATERAL",
+      "lateral",
       "LEFT",
       "left",
       "LIKE",
@@ -428,6 +430,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       } | source
 
   lazy val source: P[Expr] =
+    kw("LATERAL") ~> ("(" ~> query <~ ")") ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+      case q ~ None    => LateralExpr(q)
+      case q ~ Some(a) => AliasOperator(LateralExpr(q), a)
+    } |
     (table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
       case s ~ None    => s
       case s ~ Some(a) => AliasOperator(s, a)

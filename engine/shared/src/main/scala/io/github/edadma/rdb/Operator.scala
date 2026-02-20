@@ -27,4 +27,6 @@ case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator
 case class IntersectOperator(rel1: Expr, rel2: Expr) extends Operator
 case class ExceptOperator(rel1: Expr, rel2: Expr) extends Operator
 
+case class LateralCrossOperator(rel1: Expr, rel2: Expr) extends Operator
+
 case class ProcessOperator(proc: Process) extends Operator
