@@ -2,6 +2,7 @@ package io.github.edadma.rdb
 
 //import pprint.pprintln
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.language.postfixOps
 
@@ -12,8 +13,9 @@ def executeSelect(query: Expr)(using db: DB) =
 
 def executeSQL(sql: String)(using db: DB): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
+  executeCommands(cs)
 
-  // pprintln(com)
+private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
 
   def guardTransaction[T](fn: => T): T =
     if db.isTransactionAborted then sys.error("current transaction is aborted, use ROLLBACK")
@@ -29,6 +31,26 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
     case BeginCommand    => db.beginTransaction(); BeginResult
     case CommitCommand   => db.commitTransaction(); CommitResult
     case RollbackCommand => db.rollbackTransaction(); RollbackResult
+    case PrepareCommand(id @ Ident(name), cmds) =>
+      if db.preparedStatements.contains(name) then
+        problem(id, s"prepared statement '$name' already exists")
+      db.preparedStatements(name) = PreparedStatement(name, cmds)
+      PrepareResult(name)
+    case ExecuteCommand(id @ Ident(name), paramExprs) =>
+      val ps = db.preparedStatements.getOrElse(name, problem(id, s"prepared statement '$name' not found"))
+      val paramValues = paramExprs.map(e => eval(rewrite(e), Nil)).toIndexedSeq
+      val saved = currentParams
+      try
+        currentParams = paramValues
+        val copied = deepCopyCommands(ps.commands)
+        executeCommands(copied).last
+      finally
+        currentParams = saved
+    case DeallocateCommand(id @ Ident(name)) =>
+      if !db.preparedStatements.contains(name) then
+        problem(id, s"prepared statement '$name' not found")
+      db.preparedStatements.remove(name)
+      DeallocateResult(name)
     case cmd             => guardTransaction { cmd match
       case InsertCommand(id @ Ident(table), columns, rows, returning) =>
         val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
@@ -288,3 +310,75 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
       case _ => sys.error(s"unexpected command")
     }
   }
+
+// ── Deep Copy Utilities ──────────────────────────────────────────
+// AST nodes have a mutable `var typ` that gets set during rewrite().
+// To re-execute cached prepared statements we deep-copy the AST to
+// get fresh instances with typ = null.
+
+private[rdb] def deepCopyExpr(expr: Expr): Expr =
+  val copied: Expr = expr match
+    case ParameterExpr(index)              => ParameterExpr(index)
+    case ColumnExpr(table, col)            => ColumnExpr(table, col)
+    case VariableExpr(name)                => VariableExpr(name)
+    case NumberExpr(n)                     => NumberExpr(n)
+    case StringExpr(s)                     => StringExpr(s)
+    case BooleanExpr(b)                    => BooleanExpr(b)
+    case NullExpr()                        => NullExpr()
+    case StarExpr()                        => StarExpr()
+    case TableStarExpr(table)              => TableStarExpr(table)
+    case AliasExpr(e, alias)               => AliasExpr(deepCopyExpr(e), alias)
+    case UnaryExpr(op, e)                  => UnaryExpr(op, deepCopyExpr(e))
+    case BinaryExpr(l, op, r)              => BinaryExpr(deepCopyExpr(l), op, deepCopyExpr(r))
+    case BetweenExpr(v, op, lo, hi)        => BetweenExpr(deepCopyExpr(v), op, deepCopyExpr(lo), deepCopyExpr(hi))
+    case CaseExpr(whens, els) =>
+      CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w), deepCopyExpr(e)) }, els.map(deepCopyExpr))
+    case ApplyExpr(func, args)             => ApplyExpr(func, args.map(deepCopyExpr))
+    case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v), op, es.map(deepCopyExpr))
+    case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v), op, deepCopyExpr(q))
+    case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q))
+    case ExistsExpr(q)                     => ExistsExpr(deepCopyExpr(q))
+    case ObjectExpr(props)                 => ObjectExpr(props.map { case (k, v) => (k, deepCopyExpr(v)) })
+    case ArrayExpr(elems)                  => ArrayExpr(elems.map(deepCopyExpr))
+    case TableConstructorExpr(q)           => TableConstructorExpr(deepCopyExpr(q))
+    case CastExpr(e, t)                    => CastExpr(deepCopyExpr(e), t)
+    case SetOperationExpr(op, l, r)        => SetOperationExpr(op, deepCopyExpr(l), deepCopyExpr(r))
+    case ValuesExpr(rows)                  => ValuesExpr(rows.map(_.map(deepCopyExpr)))
+    case CompoundQueryExpr(q, ob, off, lim) =>
+      CompoundQueryExpr(deepCopyExpr(q), ob.map(_.map(deepCopyOrderBy)), off, lim)
+    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+      SQLSelectExpr(
+        exprs.map(deepCopyExpr).to(ArraySeq),
+        from.map(_.map(deepCopyExpr)),
+        where.map(deepCopyExpr),
+        groupBy.map(_.map(deepCopyExpr)),
+        having.map(deepCopyExpr),
+        orderBy.map(_.map(deepCopyOrderBy)),
+        offset,
+        limit,
+        distinct,
+      )
+    case other => other // ProcessOperator, etc. — should not appear in parsed AST
+  if expr.pos != null then copied.setPos(expr.pos)
+  copied
+
+private def deepCopyOrderBy(ob: OrderBy): OrderBy =
+  OrderBy(deepCopyExpr(ob.f), ob.asc, ob.nullsFirst)
+
+private[rdb] def deepCopyCommand(cmd: Command): Command =
+  cmd match
+    case QueryCommand(query) =>
+      QueryCommand(deepCopyExpr(query))
+    case InsertCommand(table, columns, rows, returning) =>
+      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr)), returning)
+    case UpdateCommand(table, sets, cond) =>
+      UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value))), cond.map(deepCopyExpr))
+    case DeleteCommand(table, cond) =>
+      DeleteCommand(table, cond.map(deepCopyExpr))
+    case PrepareCommand(name, cmds) =>
+      PrepareCommand(name, cmds.map(deepCopyCommand))
+    case ExecuteCommand(name, params) =>
+      ExecuteCommand(name, params.map(deepCopyExpr))
+    case other => other // DDL commands, BEGIN/COMMIT/ROLLBACK — no mutable Expr state
+
+private[rdb] def deepCopyCommands(cmds: Seq[Command]): Seq[Command] = cmds.map(deepCopyCommand)

@@ -39,6 +39,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "[",
       "]",
       ";",
+      "$",
     )
     reserved ++= Seq(
       "ADD",
@@ -93,6 +94,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "database",
       "DATE",
       "date",
+      "DEALLOCATE",
+      "deallocate",
       "DEFAULT",
       "default",
       "DELETE",
@@ -113,6 +116,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "enum",
       "EXEC",
       "exec",
+      "EXECUTE",
+      "execute",
       "EXISTS",
       "exists",
       "EXTRACT",
@@ -195,6 +200,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "order",
       "PRECISION",
       "precision",
+      "PREPARE",
+      "prepare",
       "PRIMARY",
       "primary",
       "OUTER",
@@ -277,7 +284,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       override def toString: String = chars
     }
 
-    override def token: Parser[Token] = quotedToken | stringToken | decimalToken | super.token
+    case class ParameterLit(index: Int) extends Token {
+      def chars: String = s"$$$index"
+      override def toString: String = chars
+    }
+
+    override def token: Parser[Token] = quotedToken | stringToken | parameterToken | decimalToken | super.token
+
+    private def parameterToken: Parser[Token] =
+      '$' ~> rep1(digit) ^^ { digits => ParameterLit(digits.mkString.toInt) }
 
     // Add support for SQL comments
     override def whitespace: Parser[Any] = rep[Any](
@@ -322,10 +337,13 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   override val lexical: SQLLexer = new SQLLexer
 
-  import lexical.DecimalLit
+  import lexical.{DecimalLit, ParameterLit}
 
   def decimalLit: Parser[String] =
     elem("decimal", _.isInstanceOf[DecimalLit]) ^^ (_.asInstanceOf[DecimalLit].chars)
+
+  def parameterLit: P[Int] =
+    elem("parameter", _.isInstanceOf[ParameterLit]) ^^ (_.asInstanceOf[ParameterLit].index)
 
   type P[+T] = PackratParser[T]
 
@@ -562,6 +580,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val primary: P[Expr] = positioned(
     decimal ^^ (n => NumberExpr(n)) |
       integer ^^ (n => NumberExpr(n)) |
+      parameterLit ^^ (n => ParameterExpr(n)) |
       stringLit ^^ StringExpr.apply |
       kw("NULL") ^^^ NullExpr() |
       kw("ARRAY") ~> "[" ~> repsep(expression, ",") <~ "]" ^^ ArrayExpr.apply |
@@ -800,6 +819,19 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         DropDefaultColumnModification()
       }
 
+  lazy val prepare: P[Command] =
+    kw("PREPARE") ~> identifier ~ kw("AS") ~ command ^^ { case name ~ _ ~ cmd =>
+      PrepareCommand(name, Seq(cmd))
+    }
+
+  lazy val executeCmd: P[Command] =
+    kw("EXECUTE") ~> identifier ~ opt("(" ~> rep1sep(expression, ",") <~ ")") ^^ { case name ~ params =>
+      ExecuteCommand(name, params.getOrElse(Nil))
+    }
+
+  lazy val deallocate: P[Command] =
+    kw("DEALLOCATE") ~> opt(kw("PREPARE")) ~> identifier ^^ DeallocateCommand.apply
+
   lazy val beginCmd: P[Command] = kw("BEGIN") ~> opt(kw("TRANSACTION")) ^^^ BeginCommand
   lazy val commitCmd: P[Command] = kw("COMMIT") ~> opt(kw("TRANSACTION")) ^^^ CommitCommand
   lazy val rollbackCmd: P[Command] = kw("ROLLBACK") ~> opt(kw("TRANSACTION")) ^^^ RollbackCommand
@@ -808,6 +840,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     beginCmd |
       commitCmd |
       rollbackCmd |
+      prepare |
+      executeCmd |
+      deallocate |
       query ^^ QueryCommand.apply |
       insert |
       createTable |

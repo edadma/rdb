@@ -28,6 +28,15 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
       case ObjectValue(properties)     => (properties map { case (k, v) => k -> toJS(v) } toMap) toJSDictionary
       case TimestampValue(t)           => new js.Date(t.toString)
 
+  private def fromJS(v: js.Any): Value =
+    if v == null || js.isUndefined(v) then NullValue()
+    else if js.typeOf(v) == "string" then TextValue(v.asInstanceOf[String])
+    else if js.typeOf(v) == "boolean" then BooleanValue(v.asInstanceOf[Boolean])
+    else if js.typeOf(v) == "number" then
+      val n = v.asInstanceOf[Double]
+      NumberValue(if n == n.toInt then DIntType else DDoubleType, n)
+    else TextValue(v.toString)
+
   private def typeString(typ: Type): String =
     typ match
       case SerialType        => "serial"
@@ -65,18 +74,12 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
 
     js.Dynamic.literal(command = "select", rows = rows, fields = fields)
 
-  @JSExport
-  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
-    val rowMode = options.toOption
-      .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
-      .getOrElse(defaultRowMode)
-
-    executeSQL(sql) map {
+  private def resultToJS(result: Result, rowMode: String): js.Any =
+    result match
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
       case InsertResult(obj, _) =>
         val res = obj.view.mapValues(toJS).toMap.toJSDictionary
-
         js.Dynamic.literal(command = "insert", result = res)
       case QueryResult(table) =>
         buildQueryResult(table, rowMode)
@@ -94,4 +97,34 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "drop index", index = name)
       case AlterTableResult() =>
         js.Dynamic.literal(command = "alter table")
-    } toJSArray
+      case PrepareResult(name) =>
+        js.Dynamic.literal(command = "prepare", name = name)
+      case DeallocateResult(name) =>
+        js.Dynamic.literal(command = "deallocate", name = name)
+      case BeginResult =>
+        js.Dynamic.literal(command = "begin")
+      case CommitResult =>
+        js.Dynamic.literal(command = "commit")
+      case RollbackResult =>
+        js.Dynamic.literal(command = "rollback")
+
+  @JSExport
+  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+    val rowMode = options.toOption
+      .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
+      .getOrElse(defaultRowMode)
+
+    (executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray
+
+  @JSExport
+  def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(db.prepare(sql))
+
+  class PreparedStatementJS(ps: PreparedStatement):
+    @JSExport
+    def execute(params: js.Array[js.Any] = js.Array(), options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+      val rowMode = options.toOption
+        .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
+        .getOrElse(defaultRowMode)
+      val paramValues = params.map(fromJS).toIndexedSeq
+      val results = ps.execute(paramValues*)(using db)
+      (results map (r => resultToJS(r, rowMode))).toJSArray

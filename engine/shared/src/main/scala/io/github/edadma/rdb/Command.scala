@@ -28,6 +28,9 @@ case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Bo
 case class CreateIndexCommand(name: Ident, table: Ident, columns: Seq[Ident], unique: Boolean)         extends Command
 case class DropIndexCommand(name: Ident, ifExists: Boolean = false)                                    extends Command
 case class DropTypeCommand(name: Ident, ifExists: Boolean = false, cascade: Boolean = false)          extends Command
+case class PrepareCommand(name: Ident, commands: Seq[Command])    extends Command
+case class ExecuteCommand(name: Ident, params: Seq[Expr])         extends Command
+case class DeallocateCommand(name: Ident)                         extends Command
 case object BeginCommand    extends Command
 case object CommitCommand   extends Command
 case object RollbackCommand extends Command

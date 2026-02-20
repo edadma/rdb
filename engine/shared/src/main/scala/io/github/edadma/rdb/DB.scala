@@ -12,6 +12,7 @@ abstract class DB:
   protected val tables = new mutable.HashMap[String, Table]
   protected[rdb] val types = new mutable.HashMap[String, Type]
   protected[rdb] val indexes = new mutable.HashMap[String, IndexMeta]
+  val preparedStatements: mutable.Map[String, PreparedStatement] = mutable.Map.empty
 
   def tableNames: Iterable[String] = tables.keys
 
@@ -85,6 +86,13 @@ abstract class DB:
   def inTransaction: Boolean = false
   def isTransactionAborted: Boolean = false
   def markTransactionAborted(): Unit = ()
+
+  def prepare(sql: String): PreparedStatement =
+    val cmds = SQLParser.parseCommands(sql)
+    val name = s"_auto_${preparedStatements.size}"
+    val ps = PreparedStatement(name, cmds)
+    preparedStatements(name) = ps
+    ps
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
@@ -413,6 +421,47 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
       addRow(arr to immutable.ArraySeq)
 
     result
+
+case class PreparedStatement(name: String, commands: Seq[Command]):
+  def execute(params: Value*)(using db: DB): Seq[Result] =
+    val saved = currentParams
+    try
+      currentParams = params.toIndexedSeq
+      val copied = deepCopyCommands(commands)
+      executeCommands(copied)
+    finally
+      currentParams = saved
+
+  def parameterCount: Int =
+    def countInExpr(expr: Expr): Seq[Int] =
+      expr match
+        case ParameterExpr(index)              => Seq(index)
+        case AliasExpr(e, _)                   => countInExpr(e)
+        case UnaryExpr(_, e)                   => countInExpr(e)
+        case BinaryExpr(l, _, r)               => countInExpr(l) ++ countInExpr(r)
+        case BetweenExpr(v, _, lo, hi)         => countInExpr(v) ++ countInExpr(lo) ++ countInExpr(hi)
+        case CaseExpr(whens, els) =>
+          whens.flatMap { case When(w, e) => countInExpr(w) ++ countInExpr(e) } ++ els.toSeq.flatMap(countInExpr)
+        case ApplyExpr(_, args)                => args.flatMap(countInExpr)
+        case InSeqExpr(v, _, es)               => countInExpr(v) ++ es.flatMap(countInExpr)
+        case InQueryExpr(v, _, q)              => countInExpr(v) ++ countInExpr(q)
+        case SubqueryExpr(q)                   => countInExpr(q)
+        case ExistsExpr(q)                     => countInExpr(q)
+        case CastExpr(e, _)                    => countInExpr(e)
+        case SQLSelectExpr(exprs, from, where, _, having, _, _, _, _) =>
+          exprs.flatMap(countInExpr) ++
+            from.toSeq.flatMap(_.flatMap(countInExpr)) ++
+            where.toSeq.flatMap(countInExpr) ++
+            having.toSeq.flatMap(countInExpr)
+        case _ => Nil
+    def countInCommand(cmd: Command): Seq[Int] =
+      cmd match
+        case QueryCommand(q)                    => countInExpr(q)
+        case InsertCommand(_, _, rows, _)       => rows.flatMap(_.flatMap(countInExpr))
+        case UpdateCommand(_, sets, cond)       => sets.flatMap(s => countInExpr(s.value)) ++ cond.toSeq.flatMap(countInExpr)
+        case DeleteCommand(_, cond)             => cond.toSeq.flatMap(countInExpr)
+        case _                                  => Nil
+    commands.flatMap(countInCommand).maxOption.getOrElse(0)
 
 enum ReferentialAction:
   case NoAction, Restrict, Cascade, SetNull

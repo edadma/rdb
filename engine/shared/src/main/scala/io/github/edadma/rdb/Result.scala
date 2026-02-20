@@ -13,6 +13,8 @@ case class CreateTypeResult(typ: String)                            extends Resu
 case class UpdateResult(rows: Int)                                  extends Result
 case class DeleteResult(rows: Int)                                  extends Result
 case class AlterTableResult()                                       extends Result
+case class PrepareResult(name: String)    extends Result
+case class DeallocateResult(name: String) extends Result
 case object BeginResult    extends Result
 case object CommitResult   extends Result
 case object RollbackResult extends Result

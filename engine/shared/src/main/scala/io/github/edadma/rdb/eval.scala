@@ -8,8 +8,14 @@ import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.language.postfixOps
 
+private[rdb] var currentParams: IndexedSeq[Value] = IndexedSeq.empty
+
 def eval(expr: Expr, ctx: Seq[Row]): Value =
   expr match
+    case ParameterExpr(index) =>
+      if index < 1 || index > currentParams.length then
+        problem(expr, s"parameter $$$index is not bound (have ${currentParams.length} parameters)")
+      currentParams(index - 1)
     case CastExpr(expr, targetType)    => targetType.convert(eval(expr, ctx))
     case AliasExpr(expr, _)            => eval(expr, ctx)
     case VariableInstanceExpr(v)       => v.value
