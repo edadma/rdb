@@ -24,7 +24,18 @@ object StowCodec:
     def decode(in: DataInputStream): (PageId, Int) = (in.readInt(), in.readInt())
     def encodedSize(value: (PageId, Int)): Int = 8
 
-  def valueSeq(using batch: WriteBatch, pageSize: Int): StowCodec[IndexedSeq[Value]] = new StowCodec[IndexedSeq[Value]]:
+  def valueSeq(using batch: WriteBatch, ps: Int): StowCodec[IndexedSeq[Value]] = new StowCodec[IndexedSeq[Value]]:
+    private val pageSize = ps
+    // Wrap batch as a PageStore for the decode path so chain reads work
+    // (batch.read falls through to disk for pages not in the write set)
+    private val batchStore = new PageStore:
+      def pageSize: Int = ps
+      def read(id: PageId): Array[Byte] = batch.read(id)
+      def modify(fn: WriteBatch => Unit): Unit = throw new UnsupportedOperationException
+      def beginTransaction(): io.github.edadma.stow.Transaction = throw new UnsupportedOperationException
+      def metaRoot: PageId = NoPage
+      def close(): Unit = ()
+
     def encode(out: DataOutputStream, value: IndexedSeq[Value]): Unit =
       out.writeShort(value.length)
       for v <- value do serializeValue(v, out, batch, pageSize)
@@ -33,7 +44,7 @@ object StowCodec:
       val count = in.readUnsignedShort()
       val values = new ArrayBuffer[Value](count)
       for _ <- 0 until count do
-        val (v, _) = deserializeValue(in, StowCodec.dummyStore, Map.empty)
+        val (v, _) = deserializeValue(in, batchStore, Map.empty)
         values += v
       values.toIndexedSeq
 
@@ -43,14 +54,6 @@ object StowCodec:
       encode(out, value)
       out.flush()
       baos.size
-
-  private object dummyStore extends PageStore:
-    def pageSize: Int = 4096
-    def read(id: PageId): Array[Byte] = throw new UnsupportedOperationException("chain reading not supported in index keys")
-    def modify(fn: WriteBatch => Unit): Unit = throw new UnsupportedOperationException
-    def beginTransaction(): io.github.edadma.stow.Transaction = throw new UnsupportedOperationException
-    def metaRoot: PageId = NoPage
-    def close(): Unit = ()
 
 // Node page layout:
 //   [0]        node type: 0 = leaf, 1 = internal

@@ -392,4 +392,70 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       table.data.length shouldBe 3
       db2.close()
     }
+
+    "unique index on long TEXT keys (chain-encoded)" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("CREATE UNIQUE INDEX idx ON t (name);")
+
+      val longA = "A" * 200
+      val longB = "B" * 200
+      executeSQL(s"INSERT INTO t (id, name) VALUES (1, '$longA');")
+      executeSQL(s"INSERT INTO t (id, name) VALUES (2, '$longB');")
+
+      // Duplicate long key should fail
+      assertThrows[RuntimeException] {
+        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")
+      }
+
+      val result = executeSQL("SELECT id FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      db.close()
+    }
+
+    "non-unique index on long TEXT keys with delete" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+
+      val longVal = "X" * 200
+      executeSQL(s"INSERT INTO t (id, name) VALUES (1, '$longVal');")
+      executeSQL(s"INSERT INTO t (id, name) VALUES (2, '$longVal');")
+      executeSQL("DELETE FROM t WHERE id = 1;")
+
+      val result = executeSQL("SELECT id FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(2)
+      db.close()
+    }
+
+    "long TEXT index key survives close/reopen" in {
+      val longA = "A" * 200
+      val longB = "B" * 200
+      val db1 = PersistentDB.create(tmpFile, pageSize)
+      given DB = db1
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE UNIQUE INDEX idx ON t (name);")
+      executeSQL(s"INSERT INTO t (id, name) VALUES (1, '$longA');")
+      executeSQL(s"INSERT INTO t (id, name) VALUES (2, '$longB');")
+      db1.close()
+
+      val db2 = PersistentDB.open(tmpFile)
+      // Unique constraint still enforced after reopen
+      assertThrows[RuntimeException] {
+        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")(using db2)
+      }
+      executeSQL(s"INSERT INTO t (id, name) VALUES (3, 'short');")(using db2)
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      db2.close()
+    }
   }
