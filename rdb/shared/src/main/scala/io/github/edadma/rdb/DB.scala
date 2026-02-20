@@ -23,7 +23,11 @@ abstract class DB:
 
   protected def registerTable(name: String, table: Table): Unit = tables(name) = table
 
+  protected def guardDDL(): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
+
   def createTable(name: String, specs: Seq[Spec]): Table =
+    guardDDL()
     require(!(tables contains name), s"table '$name' already exists")
 
     val table = addTable(name, specs)
@@ -32,6 +36,7 @@ abstract class DB:
     table
 
   def dropTable(name: String): Unit =
+    guardDDL()
     // Remove indexes for this table
     val toRemove = indexes.filter(_._2.tableName == name).keys.toSeq
     for idx <- toRemove do indexes.remove(idx)
@@ -41,6 +46,7 @@ abstract class DB:
     tables.remove(name)
 
   def renameTable(oldName: String, newName: String): Unit =
+    guardDDL()
     val table = tables.remove(oldName).getOrElse(sys.error(s"table '$oldName' not found"))
     table.name = newName
     tables(newName) = table
@@ -48,11 +54,14 @@ abstract class DB:
   protected def addEnum(name: String, labels: Seq[String]): EnumType
 
   def createEnum(name: String, labels: Seq[String]): Unit =
+    guardDDL()
     require(!types.contains(name), s"type $name already exists")
 
     types(name) = addEnum(name, labels)
 
-  def dropType(name: String): Unit = types.remove(name)
+  def dropType(name: String): Unit =
+    guardDDL()
+    types.remove(name)
 
   infix def hasType(name: String): Boolean = types contains name
 
@@ -61,6 +70,7 @@ abstract class DB:
   def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
 
   def dropIndex(indexName: String): Unit =
+    guardDDL()
     indexes.get(indexName) match
       case Some(meta) =>
         tables.get(meta.tableName).foreach(_.tableIndexes.remove(indexName))

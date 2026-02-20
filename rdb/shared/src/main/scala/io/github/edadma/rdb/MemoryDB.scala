@@ -4,9 +4,91 @@ import io.github.edadma.dllist.{DLListNode, DLList}
 import io.github.edadma.bptree.MemoryBPlusTree
 
 import scala.collection.immutable
+import scala.collection.mutable
 
 class MemoryDB extends DB:
   val name = "in-memory DB"
+
+  // Transaction state
+  private var _inTransaction = false
+  private var _aborted = false
+  private var snapshot: Option[MemorySnapshot] = None
+
+  private case class TableSnapshot(
+      rows: Seq[Array[Value]],        // deep-copied row arrays
+      autoMap: Map[String, Value],
+      indexNextRowIds: Map[String, Long],
+  )
+
+  private case class MemorySnapshot(
+      tables: Map[String, TableSnapshot],
+  )
+
+  override def inTransaction: Boolean = _inTransaction
+  override def isTransactionAborted: Boolean = _aborted
+  override def markTransactionAborted(): Unit = _aborted = true
+
+  override def beginTransaction(): Unit =
+    if _inTransaction then sys.error("already in a transaction")
+    _inTransaction = true
+    _aborted = false
+
+    // Snapshot all tables
+    val tableSnapshots = tables.map { case (tname, t) =>
+      val mt = t.asInstanceOf[MemoryTable]
+      val rows = mt.data.nodeIterator.map(_.element.clone()).toSeq
+      val autoState = mt.autoMap.toMap
+      val indexRowIds = mt.tableIndexes.map { case (iname, idx) =>
+        iname -> idx.asInstanceOf[MemoryTableIndex].nextRowId
+      }.toMap
+      tname -> TableSnapshot(rows, autoState, indexRowIds)
+    }.toMap
+    snapshot = Some(MemorySnapshot(tableSnapshots))
+
+  override def commitTransaction(): Unit =
+    if !_inTransaction then sys.error("no active transaction")
+    _inTransaction = false
+    _aborted = false
+    snapshot = None
+
+  override def rollbackTransaction(): Unit =
+    if !_inTransaction then sys.error("no active transaction")
+    _inTransaction = false
+    _aborted = false
+
+    for snap <- snapshot; (tname, ts) <- snap.tables; t <- tables.get(tname) do
+      val mt = t.asInstanceOf[MemoryTable]
+
+      // Restore data
+      mt.data.clear()
+      for row <- ts.rows do mt.data.appendElement(row.clone())
+
+      // Restore auto-increment state
+      mt.autoMap.clear()
+      mt.autoMap ++= ts.autoMap
+
+      // Rebuild all indexes from restored data with fresh trees
+      given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
+      val idxEntries = mt.tableIndexes.toSeq
+      for (idxName, idx) <- idxEntries do
+        val midx = idx.asInstanceOf[MemoryTableIndex]
+        val newTree = new MemoryBPlusTree[IndexedSeq[Value], DLListNode[Array[Value]]](50)
+
+        var rowId = 0L
+        for node <- mt.data.nodeIterator do
+          val baseKey = midx.columnIndices.map(i => node.element(i): Value)
+          if midx.meta.unique then
+            newTree.insert(baseKey, node)
+          else
+            val key = baseKey :+ NumberValue(rowId.toInt)
+            newTree.insert(key, node)
+            rowId += 1
+
+        val restoredRowId = ts.indexNextRowIds.getOrElse(idxName, 0L)
+        val newIdx = MemoryTableIndex(midx.meta, midx.columnIndices, newTree, rowId.max(restoredRowId))
+        mt.tableIndexes(idxName) = newIdx
+
+    snapshot = None
 
   protected def addTable(name: String, specs: Seq[Spec]) = new MemoryTable(name, specs)
 
@@ -20,6 +102,7 @@ class MemoryDB extends DB:
     table
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
+    guardDDL()
     val table = tables(tableName).asInstanceOf[MemoryTable]
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
 
