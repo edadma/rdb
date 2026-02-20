@@ -131,7 +131,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
           } unzip
         val rows =
           cond match
-            case Some(value) => FilterProcess(t, rewrite(value))
+            case Some(value) => SeqScanProcess(t, rewrite(value))
             case None        => t
         var count = 0
 
@@ -154,7 +154,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
         val t    = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         val rows =
           cond match
-            case Some(value) => FilterProcess(t, rewrite(value))
+            case Some(value) => SeqScanProcess(t, rewrite(value))
             case None        => t
         var count = 0
 

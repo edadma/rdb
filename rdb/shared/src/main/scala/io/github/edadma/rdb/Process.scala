@@ -22,10 +22,29 @@ case object SingleProcess extends Process:
     Row(Vector.empty, meta, None, None),
   )
 
-case class FilterProcess(input: Process, cond: Expr) extends Process:
+case class SeqScanProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
+
+sealed trait IndexLookup
+case class PointLookup(keyExprs: Seq[Expr]) extends IndexLookup
+case class RangeLookup(lowerExprs: Seq[Expr], upperExprs: Seq[Expr]) extends IndexLookup
+
+case class IndexScanProcess(table: Table, index: TableIndex, lookup: IndexLookup, residual: Option[Expr]) extends Process:
+  val meta: Metadata = table.meta
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val baseIter = lookup match
+      case PointLookup(keyExprs) =>
+        val key = keyExprs.map(e => eval(e, ctx)).toIndexedSeq
+        table.indexPointScan(index, key).getOrElse(table.iterator(ctx))
+      case RangeLookup(lower, upper) =>
+        val lo = lower.map(e => eval(e, ctx)).toIndexedSeq
+        val hi = upper.map(e => eval(e, ctx)).toIndexedSeq
+        table.indexRangeScan(index, lo, hi).getOrElse(table.iterator(ctx))
+    residual match
+      case Some(cond) => baseIter.filter(row => beval(cond, row +: ctx))
+      case None       => baseIter
 
 case class HavingProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta

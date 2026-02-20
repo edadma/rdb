@@ -1,7 +1,7 @@
 package io.github.edadma.rdb
 
 import io.github.edadma.dllist.{DLListNode, DLList}
-import io.github.edadma.bptree.MemoryBPlusTree
+import io.github.edadma.bptree.{Bound, MemoryBPlusTree}
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -155,6 +155,38 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
 
   def iterator(ctx: Seq[Row]): RowIterator =
     data.nodeIterator map (n => Row(n.element to immutable.ArraySeq, meta, Some(updater(n)), Some(deleter(n))))
+
+  private def nodeToRow(n: DLListNode[Array[Value]]): Row =
+    Row(n.element to immutable.ArraySeq, meta, Some(updater(n)), Some(deleter(n)))
+
+  override def indexPointScan(index: TableIndex, key: IndexedSeq[Value]): Option[RowIterator] =
+    index match
+      case midx: MemoryTableIndex =>
+        if midx.meta.unique then
+          Some(midx.tree.search(key).map(node => Iterator(nodeToRow(node))).getOrElse(Iterator.empty))
+        else
+          val iter = midx.tree.boundedIterator((Bound.Gte, key))
+          val matching = iter.takeWhile { case (k, _) =>
+            val prefix = k.take(key.length)
+            ValueSeqOrdering.compare(prefix, key) == 0
+          }.map { case (_, node) => nodeToRow(node) }
+          Some(matching)
+      case _ => None
+
+  override def indexRangeScan(index: TableIndex, lower: IndexedSeq[Value], upper: IndexedSeq[Value]): Option[RowIterator] =
+    index match
+      case midx: MemoryTableIndex =>
+        if midx.meta.unique then
+          val iter = midx.tree.boundedIterator((Bound.Gte, lower), (Bound.Lte, upper))
+          Some(iter.map { case (_, node) => nodeToRow(node) })
+        else
+          val iter = midx.tree.boundedIterator((Bound.Gte, lower))
+          val matching = iter.takeWhile { case (k, _) =>
+            val prefix = k.take(upper.length)
+            ValueSeqOrdering.compare(prefix, upper) <= 0
+          }.map { case (_, node) => nodeToRow(node) }
+          Some(matching)
+      case _ => None
 
   protected def addRow(row: Seq[Value]): Unit =
     val arr = row.toArray

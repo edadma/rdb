@@ -269,7 +269,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))
     case InnerJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(FilterProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
+      ProcessOperator(SeqScanProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
     case LeftJoinOperator(rel1, rel2, on) =>
       ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case RightJoinOperator(rel1, rel2, on) =>
@@ -287,7 +287,15 @@ def rewrite(expr: Expr)(using db: DB): Expr =
 
       ProcessOperator(ProjectProcess(rewritten_proc, rewritten_projs))
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
-    case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
+    case SelectOperator(rel, cond) =>
+      val proc = procRewrite(rel)
+      val rwCond = rewrite(cond)
+      proc match
+        case table: Table =>
+          tryIndexScan(table, rwCond) match
+            case Some(p) => ProcessOperator(p)
+            case None    => ProcessOperator(SeqScanProcess(proc, rwCond))
+        case _ => ProcessOperator(SeqScanProcess(proc, rwCond))
     case HavingOperator(rel, cond) => ProcessOperator(HavingProcess(procRewrite(rel), rewrite(cond)))
     case ValuesExpr(rows) =>
       val rewrittenRows = rows.map(_.map(rewrite))
@@ -295,5 +303,69 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       ProcessOperator(ValuesProcess(rewrittenRows, width))
     // todo: ColumnExpr, VariableExpr
     case _ => expr
+
+private def flattenAnd(expr: Expr): Seq[Expr] =
+  expr match
+    case BinaryExpr(l, "AND", r) => flattenAnd(l) ++ flattenAnd(r)
+    case other                   => Seq(other)
+
+private def findIndex(table: Table, colName: String): Option[(TableIndex, Boolean)] =
+  table.tableIndexes.values.find { idx =>
+    idx.meta.columns.length == 1 && idx.meta.columns.head == colName
+  }.map(idx => (idx, idx.meta.unique))
+
+private def isColumnOf(table: Table, expr: Expr): Option[String] =
+  expr match
+    case ColumnExpr(None, Ident(name)) if table.hasColumn(name)          => Some(name)
+    case ColumnExpr(Some(Ident(t)), Ident(name)) if t == table.name && table.hasColumn(name) => Some(name)
+    case _                                                                => None
+
+private def isNonColumnExpr(table: Table, expr: Expr): Boolean =
+  isColumnOf(table, expr).isEmpty
+
+def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
+  val conjuncts = flattenAnd(cond)
+
+  // Try to find an equality match: col = expr or expr = col
+  def tryEquality: Option[(TableIndex, Expr, Int)] =
+    conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
+      conj match
+        case BinaryExpr(left, "=", right) =>
+          isColumnOf(table, left).flatMap(col => findIndex(table, col).filter(_ => isNonColumnExpr(table, right)).map((ti, _) => (ti, right, idx)))
+            .orElse(isColumnOf(table, right).flatMap(col => findIndex(table, col).filter(_ => isNonColumnExpr(table, left)).map((ti, _) => (ti, left, idx))))
+        case _ => None
+    }.sortBy { case (idx, _, _) => if idx.meta.unique then 0 else 1 }.headOption
+
+  // Try to find a range match: lower <= col AND col <= upper (from BETWEEN rewrite)
+  def tryRange: Option[(TableIndex, Expr, Expr, Int, Int)] =
+    val leComps = conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
+      conj match
+        case BinaryExpr(lower, "<=", colExpr) =>
+          isColumnOf(table, colExpr).flatMap(col => findIndex(table, col).map((ti, _) => (col, ti, lower, idx)))
+        case _ => None
+    }
+    val geComps = conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
+      conj match
+        case BinaryExpr(colExpr, "<=", upper) =>
+          isColumnOf(table, colExpr).flatMap(col => findIndex(table, col).map((ti, _) => (col, ti, upper, idx)))
+        case _ => None
+    }
+    for
+      (col1, idx1, lower, li) <- leComps.headOption
+      (col2, idx2, upper, ui) <- geComps.find((c, _, _, i) => c == col1 && i != li)
+    yield (idx1, lower, upper, li, ui)
+
+  tryEquality match
+    case Some((idx, keyExpr, usedIdx)) =>
+      val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != usedIdx => c }
+      val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+      Some(IndexScanProcess(table, idx, PointLookup(Seq(keyExpr)), residual))
+    case None =>
+      tryRange match
+        case Some((idx, lower, upper, li, ui)) =>
+          val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != li && i != ui => c }
+          val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+          Some(IndexScanProcess(table, idx, RangeLookup(Seq(lower), Seq(upper)), residual))
+        case None => None
 
 def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

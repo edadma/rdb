@@ -112,6 +112,9 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator
 
+  def indexPointScan(index: TableIndex, key: IndexedSeq[Value]): Option[RowIterator] = None
+  def indexRangeScan(index: TableIndex, lower: IndexedSeq[Value], upper: IndexedSeq[Value]): Option[RowIterator] = None
+
   def hasColumn(name: String): Boolean = columnMap contains name
 
   protected def addColumn(spec: ColumnSpec): Unit
