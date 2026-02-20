@@ -324,4 +324,72 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       table.data(2).data(0) shouldBe NumberValue(4)
       db2.close()
     }
+
+    "bulk insert with unique index" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');")
+
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      table.data(0).data(1) shouldBe TextValue("Alice")
+      table.data(1).data(1) shouldBe TextValue("Bob")
+      table.data(2).data(1) shouldBe TextValue("Charlie")
+      db.close()
+    }
+
+    "bulk insert rejects duplicate in unique index" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (1, 'Charlie');")
+      }
+      db.close()
+    }
+
+    "bulk insert with non-unique index" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Alice'), (3, 'Bob');")
+
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+
+      // Delete one duplicate, verify the other remains
+      executeSQL("DELETE FROM t WHERE id = 1;")
+      val result2 = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table2 = result2.collect { case QueryResult(t) => t }.head
+      table2.data.length shouldBe 2
+      table2.data(0).data(0) shouldBe NumberValue(2)
+      table2.data(1).data(0) shouldBe NumberValue(3)
+      db.close()
+    }
+
+    "bulk insert survives close/reopen" in {
+      val db1 = PersistentDB.create(tmpFile, pageSize)
+      given DB = db1
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');")
+      db1.close()
+
+      val db2 = PersistentDB.open(tmpFile)
+      // PK constraint still enforced after reopen
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Duplicate');")(using db2)
+      }
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      db2.close()
+    }
   }

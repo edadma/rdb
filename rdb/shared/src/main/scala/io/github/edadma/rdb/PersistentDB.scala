@@ -298,28 +298,58 @@ class PersistentTable(
       50, store, batch, pidx.meta.treeRecordPage, keyCodec, StowCodec.pageIdPair,
     )
 
+  private type TreeCache = Map[String, StowBPlusTree[IndexedSeq[Value], (PageId, Int)]]
+
+  private def openIndexTrees(batch: WriteBatch): TreeCache =
+    tableIndexes.map { (idxName, idx) =>
+      idxName -> openIndexTree(idx.asInstanceOf[PersistentTableIndex], batch)
+    }.toMap
+
+  private def addRowInBatch(row: Seq[Value], batch: WriteBatch, trees: TreeCache): Unit =
+    val rowBytes = serializeRow(row, batch, store.pageSize)
+    val (insertedPageId, insertedSlotIndex) = insertRowBytes(rowBytes, batch)
+
+    for (idxName, idx) <- tableIndexes do
+      val pidx = idx.asInstanceOf[PersistentTableIndex]
+      val tree = trees(idxName)
+      val baseKey = pidx.columnIndices.map(i => row(i))
+      if pidx.meta.unique then
+        if tree.insertIfNotFound(baseKey, (insertedPageId, insertedSlotIndex)) then
+          sys.error(s"duplicate key value violates unique constraint \"${pidx.meta.name}\"")
+      else
+        val key = baseKey :+ NumberValue(pidx.nextRowId.toInt)
+        pidx.nextRowId += 1
+        tree.insert(key, (insertedPageId, insertedSlotIndex))
+
   protected def addRow(row: Seq[Value]): Unit =
+    bulkBatch match
+      case Some((batch, trees)) =>
+        addRowInBatch(row, batch, trees)
+      case None =>
+        db.withBatch { batch =>
+          val oldFirstDataPage = firstDataPage
+          addRowInBatch(row, batch, openIndexTrees(batch))
+          if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
+            writeHeaderPage(batch)
+        }
+
+  override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident]): Map[String, Value] =
+    if rows.size <= 1 then return super.bulkInsert(header, rows, returning)
+    var result: Map[String, Value] = Map.empty
     db.withBatch { batch =>
       val oldFirstDataPage = firstDataPage
-      val rowBytes = serializeRow(row, batch, store.pageSize)
-      val (insertedPageId, insertedSlotIndex) = insertRowBytes(rowBytes, batch)
-
-      // Insert into all indexes
-      for (idxName, idx) <- tableIndexes do
-        val pidx = idx.asInstanceOf[PersistentTableIndex]
-        val tree = openIndexTree(pidx, batch)
-        val baseKey = pidx.columnIndices.map(i => row(i))
-        if pidx.meta.unique then
-          if tree.insertIfNotFound(baseKey, (insertedPageId, insertedSlotIndex)) then
-            sys.error(s"duplicate key value violates unique constraint \"${pidx.meta.name}\"")
-        else
-          val key = baseKey :+ NumberValue(pidx.nextRowId.toInt)
-          pidx.nextRowId += 1
-          tree.insert(key, (insertedPageId, insertedSlotIndex))
-
+      val trees = openIndexTrees(batch)
+      // Delegate row preparation to super, but intercept addRow via bulkBatch state
+      bulkBatch = Some((batch, trees))
+      try result = super.bulkInsert(header, rows, returning)
+      finally bulkBatch = None
       if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
         writeHeaderPage(batch)
     }
+    result
+
+  // When set, addRow reuses this batch+trees instead of opening its own
+  private var bulkBatch: Option[(WriteBatch, TreeCache)] = None
 
   private def insertRowBytes(rowBytes: Array[Byte], batch: WriteBatch): (PageId, Int) =
     // Try to find a data page with room
