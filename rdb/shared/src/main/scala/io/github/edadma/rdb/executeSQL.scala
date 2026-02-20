@@ -135,10 +135,18 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             case None        => t
         var count = 0
 
+        val pkCols = t.primaryKey.map(_.columns.toSet).getOrElse(Set.empty)
+
         for (r <- rows.iterator(Nil))
           r.updater match
             case None    => problem(id, "not updatable")
-            case Some(u) => u(cols zip (exprs map (e => eval(e, Seq(r)))))
+            case Some(u) =>
+              val updates = cols zip (exprs map (e => eval(e, Seq(r))))
+              // Enforce NOT NULL for PRIMARY KEY columns
+              for (col, value) <- updates do
+                if pkCols.contains(col) && value.isNull then
+                  sys.error(s"null value in column \"$col\" violates not-null constraint")
+              u(updates)
           count += 1
 
         UpdateResult(count)

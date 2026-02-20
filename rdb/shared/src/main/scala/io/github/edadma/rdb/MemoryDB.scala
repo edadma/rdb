@@ -77,30 +77,48 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
     val arr = row.toArray
     val node = data.appendElement(arr)
 
-    // Insert into all indexes
-    for (idxName, idx) <- tableIndexes do
-      val midx = idx.asInstanceOf[MemoryTableIndex]
-      val baseKey = midx.columnIndices.map(i => arr(i): Value)
-      if midx.meta.unique then
-        if midx.tree.insertIfNotFound(baseKey, node) then
-          sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
-      else
-        val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
-        midx.nextRowId += 1
-        midx.tree.insert(key, node)
+    // Insert into all indexes, tracking what we've inserted for rollback on failure
+    val inserted = new scala.collection.mutable.ArrayBuffer[(MemoryTableIndex, IndexedSeq[Value])]
+    try
+      for (idxName, idx) <- tableIndexes do
+        val midx = idx.asInstanceOf[MemoryTableIndex]
+        val baseKey = midx.columnIndices.map(i => arr(i): Value)
+        if midx.meta.unique then
+          if midx.tree.insertIfNotFound(baseKey, node) then
+            sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
+          else
+            inserted += ((midx, baseKey))
+        else
+          val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
+          midx.nextRowId += 1
+          midx.tree.insert(key, node)
+          inserted += ((midx, key))
+    catch
+      case e: Exception =>
+        // Roll back: remove entries from indexes we already inserted into, then unlink the row
+        for (midx, key) <- inserted do
+          midx.tree.delete(key)
+        node.unlink
+        throw e
 
   class Updater private[MemoryTable] (node: DLListNode[Array[Value]]) extends (Seq[(String, Value)] => Unit):
     def apply(update: Seq[(String, Value)]): Unit =
       val row = node.element
 
-      // Capture old keys for all indexes
-      val oldKeys = tableIndexes.map { (idxName, idx) =>
+      // Save old values for rollback
+      val oldValues = row.clone()
+
+      // Remove old index entries
+      val removedEntries = new scala.collection.mutable.ArrayBuffer[(MemoryTableIndex, IndexedSeq[Value], DLListNode[Array[Value]])]
+      for (idxName, idx) <- tableIndexes do
         val midx = idx.asInstanceOf[MemoryTableIndex]
         val baseKey = midx.columnIndices.map(i => row(i): Value)
-        val key = if midx.meta.unique then baseKey
-                  else baseKey // for non-unique, we need the full key including rowId — search by prefix
-        (idxName, midx, key)
-      }.toSeq
+        if midx.meta.unique then
+          midx.tree.delete(baseKey)
+          removedEntries += ((midx, baseKey, node))
+        else
+          removeNonUniqueEntry(midx, baseKey, node)
+          removedEntries += ((midx, baseKey, node))
 
       // Apply updates
       for ((k, v) <- update)
@@ -108,21 +126,38 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
         val spec = columns(col)
         row(col) = spec.typ.convert(v)
 
-      // Update indexes: remove old key, insert new key
-      for (idxName, midx, oldKey) <- oldKeys do
-        if midx.meta.unique then
-          midx.tree.delete(oldKey)
+      // Insert new index entries, rolling back on failure
+      val inserted = new scala.collection.mutable.ArrayBuffer[(MemoryTableIndex, IndexedSeq[Value])]
+      try
+        for (idxName, idx) <- tableIndexes do
+          val midx = idx.asInstanceOf[MemoryTableIndex]
           val newKey = midx.columnIndices.map(i => row(i): Value)
-          if midx.tree.insertIfNotFound(newKey, node) then
-            sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
-        else
-          // For non-unique indexes, find and remove the entry that points to this node
-          // then re-insert with new key
-          removeNonUniqueEntry(midx, oldKey, node)
-          val newBaseKey = midx.columnIndices.map(i => row(i): Value)
-          val newKey = newBaseKey :+ NumberValue(midx.nextRowId.toInt)
-          midx.nextRowId += 1
-          midx.tree.insert(newKey, node)
+          if midx.meta.unique then
+            if midx.tree.insertIfNotFound(newKey, node) then
+              sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
+            else
+              inserted += ((midx, newKey))
+          else
+            val key = newKey :+ NumberValue(midx.nextRowId.toInt)
+            midx.nextRowId += 1
+            midx.tree.insert(key, node)
+            inserted += ((midx, key))
+      catch
+        case e: Exception =>
+          // Roll back new index entries
+          for (midx, key) <- inserted do
+            midx.tree.delete(key)
+          // Restore old row values
+          System.arraycopy(oldValues, 0, row, 0, oldValues.length)
+          // Re-insert old index entries
+          for (midx, oldKey, n) <- removedEntries do
+            if midx.meta.unique then
+              midx.tree.insert(oldKey, n)
+            else
+              val key = oldKey :+ NumberValue(midx.nextRowId.toInt)
+              midx.nextRowId += 1
+              midx.tree.insert(key, n)
+          throw e
 
     override def toString: String = "[MemoryDB Updater]"
 

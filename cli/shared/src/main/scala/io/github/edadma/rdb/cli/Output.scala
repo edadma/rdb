@@ -7,8 +7,11 @@ object Output:
   def printResult(result: Result): Unit =
     result match
       case QueryResult(table)       => println(tableString(table))
-      case InsertResult(_, table)   => println(tableString(table))
+      case InsertResult(_, table)   =>
+        if table.meta.width > 0 then println(tableString(table))
+        else println("INSERT 0 1")
       case CreateTableResult(name)  => println(s"CREATE TABLE")
+      case CreateIndexResult(name)  => println(s"CREATE INDEX")
       case DropTableResult(name)    => println(s"DROP TABLE")
       case DropIndexResult(name)    => println(s"DROP INDEX")
       case DropTypeResult(name)     => println(s"DROP TYPE")

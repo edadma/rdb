@@ -59,6 +59,74 @@ class ValueCompareTests extends AnyFreeSpec with Matchers {
     }
   }
 
+  "Cross-type numeric comparison" - {
+    "Int vs Long" in {
+      NumberValue(42).compare(NumberValue(io.github.edadma.dal.LongType, 42L: java.lang.Long)) shouldBe 0
+      (NumberValue(1) < NumberValue(io.github.edadma.dal.LongType, 2L: java.lang.Long)) shouldBe true
+    }
+
+    "Int vs Double" in {
+      NumberValue(42).compare(NumberValue(42.0)) shouldBe 0
+      (NumberValue(1) < NumberValue(1.5)) shouldBe true
+    }
+
+    "Int vs BigDecimal" in {
+      NumberValue(42).compare(NumberValue(BigDecimal(42))) shouldBe 0
+      (NumberValue(1) < NumberValue(BigDecimal(2))) shouldBe true
+    }
+  }
+
+  "ValueSeqOrdering" - {
+    "equal sequences" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NumberValue(1), TextValue("a")),
+        IndexedSeq(NumberValue(1), TextValue("a")),
+      ) shouldBe 0
+    }
+
+    "differs on first element" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NumberValue(1), TextValue("a")),
+        IndexedSeq(NumberValue(2), TextValue("a")),
+      ) should be < 0
+    }
+
+    "differs on second element" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NumberValue(1), TextValue("b")),
+        IndexedSeq(NumberValue(1), TextValue("a")),
+      ) should be > 0
+    }
+
+    "shorter prefix is less than longer" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(TextValue("a")),
+        IndexedSeq(TextValue("a"), NumberValue(1)),
+      ) should be < 0
+    }
+
+    "NULL sorts before non-null" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NullValue()),
+        IndexedSeq(NumberValue(1)),
+      ) should be < 0
+    }
+
+    "NULL equals NULL" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NullValue()),
+        IndexedSeq(NullValue()),
+      ) shouldBe 0
+    }
+
+    "mixed types in sequence — null then value" in {
+      ValueSeqOrdering.compare(
+        IndexedSeq(NullValue(), TextValue("a")),
+        IndexedSeq(NullValue(), TextValue("b")),
+      ) should be < 0
+    }
+  }
+
   "non-orderable types should throw" - {
     "ArrayValue" in {
       an[RuntimeException] should be thrownBy {

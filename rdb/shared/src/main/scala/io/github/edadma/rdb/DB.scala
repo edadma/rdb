@@ -274,6 +274,14 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
       result = newAutos.toMap
 
+      // Enforce NOT NULL for PRIMARY KEY columns
+      primaryKey.foreach { pk =>
+        for colName <- pk.columns do
+          val idx = columnMap(colName)
+          if arr(idx).isNull then
+            sys.error(s"null value in column \"$colName\" violates not-null constraint")
+      }
+
       if returning.isDefined then
         val idx =
           columnMap getOrElse (returning.get.name, problem(returning.get, s"column '${returning.get.name}' not found"))

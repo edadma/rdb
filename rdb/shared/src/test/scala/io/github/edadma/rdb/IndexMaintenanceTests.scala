@@ -57,6 +57,138 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       idx.tree.search(IndexedSeq(NumberValue(2))).isDefined shouldBe true
     }
 
+    "unique violation on insert does not leave row in table" in {
+      val table = queryTable(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |SELECT * FROM t;
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 2
+
+      // Now try a duplicate — should fail but not leave a ghost row
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (1, 'Bob');
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "unique violation rolls back row — table unaffected" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (name);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |""".trim.stripMargin
+      )
+
+      given DB = db
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+      }
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+
+    "unique violation on second index rolls back first index entry" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx_id ON t (id);
+          |CREATE UNIQUE INDEX idx_name ON t (name);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |""".trim.stripMargin
+      )
+
+      given DB = db
+      // id=2 is unique but name='Alice' is duplicate — should fail and roll back
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+      }
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+
+      // id=2 should not be in the id index — re-insert should work
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      val result2 = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table2 = result2.collect { case QueryResult(t) => t }.head
+      table2.data.length shouldBe 2
+    }
+
+    "update unique violation does not corrupt data" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |""".trim.stripMargin
+      )
+
+      given DB = db
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
+      }
+      // Original data should be intact
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(0).data(1) shouldBe TextValue("Alice")
+      table.data(1).data(0) shouldBe NumberValue(2)
+      table.data(1).data(1) shouldBe TextValue("Bob")
+
+      // The original key should still be in the index
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")
+      }
+    }
+
+    "NULL in PRIMARY KEY column rejected on update" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |""".trim.stripMargin
+      )
+
+      given DB = db
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = NULL WHERE id = 1;")
+      }
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+
+    "NULL in PRIMARY KEY column rejected" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+          |""".trim.stripMargin
+      )
+
+      given DB = db
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'Alice');")
+      }
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 0
+    }
+
     "PK constraint enforced via auto-index" in {
       assertThrows[RuntimeException] {
         queryTable(
