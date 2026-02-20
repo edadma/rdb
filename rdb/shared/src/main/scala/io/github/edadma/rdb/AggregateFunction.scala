@@ -253,4 +253,82 @@ val aggregateFunction: Map[String, AggregateFunction] =
           BooleanType,
         )
     },
+    new AggregateFunction("variance") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (varianceInstance("variance", sample = true), NumberType)
+    },
+    new AggregateFunction("var_samp") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (varianceInstance("var_samp", sample = true), NumberType)
+    },
+    new AggregateFunction("var_pop") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (varianceInstance("var_pop", sample = false), NumberType)
+    },
+    new AggregateFunction("stddev") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (stddevInstance("stddev", sample = true), NumberType)
+    },
+    new AggregateFunction("stddev_samp") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (stddevInstance("stddev_samp", sample = true), NumberType)
+    },
+    new AggregateFunction("stddev_pop") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (stddevInstance("stddev_pop", sample = false), NumberType)
+    },
   ) map (f => f.name -> f) toMap
+
+private def varianceInstance(n: String, sample: Boolean): AggregateFunctionInstance =
+  new AggregateFunctionInstance(n):
+    var count: Int = 0
+    var sum: Double = 0.0
+    var sumSq: Double = 0.0
+
+    val acc: PartialFunction[Seq[Value], Value] =
+      case Seq(v: NumberValue) =>
+        val d = v.value.doubleValue
+        count += 1
+        sum += d
+        sumSq += d * d
+        NumberValue(0)
+      case Seq(v) if v.isNull => NullValue()
+
+    def result: Value =
+      val divisor = if sample then count - 1 else count
+      if divisor < 1 then NullValue()
+      else
+        val mean = sum / count
+        NumberValue((sumSq - count * mean * mean) / divisor)
+
+    def init(): Unit =
+      count = 0
+      sum = 0.0
+      sumSq = 0.0
+
+private def stddevInstance(n: String, sample: Boolean): AggregateFunctionInstance =
+  new AggregateFunctionInstance(n):
+    var count: Int = 0
+    var sum: Double = 0.0
+    var sumSq: Double = 0.0
+
+    val acc: PartialFunction[Seq[Value], Value] =
+      case Seq(v: NumberValue) =>
+        val d = v.value.doubleValue
+        count += 1
+        sum += d
+        sumSq += d * d
+        NumberValue(0)
+      case Seq(v) if v.isNull => NullValue()
+
+    def result: Value =
+      val divisor = if sample then count - 1 else count
+      if divisor < 1 then NullValue()
+      else
+        val mean = sum / count
+        NumberValue(math.sqrt((sumSq - count * mean * mean) / divisor))
+
+    def init(): Unit =
+      count = 0
+      sum = 0.0
+      sumSq = 0.0
