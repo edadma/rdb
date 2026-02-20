@@ -160,11 +160,16 @@ def rewrite(expr: Expr)(using db: DB): Expr =
             collector.collect(resolved)
           }
 
-          // Collect aggregates from ORDER BY (resolve aliases first)
+          // Collect aggregates from ORDER BY (resolve ordinals and aliases first)
           val collectedOrderBy = orderBy.map { os =>
             os.map { case OrderBy(f, d, n) =>
-              val rewritten = rewrite(f)
-              val resolved = resolveAliases(rewritten, aliasMap)
+              val ordinalResolved = f match
+                case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
+                  rewrittenExprs(idx - 1) match
+                    case AliasExpr(inner, _) => inner
+                    case other               => other
+                case _ => rewrite(f)
+              val resolved = resolveAliases(ordinalResolved, aliasMap)
               OrderBy(collector.collect(resolved), d, n)
             }
           }
@@ -189,7 +194,15 @@ def rewrite(expr: Expr)(using db: DB): Expr =
           val r2 =
             orderBy match
               case None     => r1
-              case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
+              case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
+                val resolved = f match
+                  case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
+                    rewrittenExprs(idx - 1) match
+                      case AliasExpr(inner, _) => inner
+                      case other               => other
+                  case _ => rewrite(f)
+                OrderBy(resolved, d, n)
+              })
           val r3 =
             exprs match
               case Seq(StarExpr()) => r2
@@ -276,6 +289,10 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case CrossOperator(rel1, rel2) => ProcessOperator(CrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case SelectOperator(rel, cond) => ProcessOperator(FilterProcess(procRewrite(rel), rewrite(cond)))
     case HavingOperator(rel, cond) => ProcessOperator(HavingProcess(procRewrite(rel), rewrite(cond)))
+    case ValuesExpr(rows) =>
+      val rewrittenRows = rows.map(_.map(rewrite))
+      val width         = rewrittenRows.head.length
+      ProcessOperator(ValuesProcess(rewrittenRows, width))
     // todo: ColumnExpr, VariableExpr
     case _ => expr
 

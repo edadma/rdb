@@ -157,7 +157,12 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
           case (true, true)   => Nulls.first
       }
     val ordering              = new SeqOrdering(orderings)
-    val sorted: ArraySeq[Row] = data.sortBy(row => fs map (f => eval(f, row +: ctx)))(using ordering)
+    val sorted: ArraySeq[Row] = data.sortBy(row =>
+      fs map {
+        case NumberExpr(n: Int) if n >= 1 && n <= meta.width => row.data(n - 1)
+        case f                                               => eval(f, row +: ctx)
+      },
+    )(using ordering)
 
     sorted.iterator
 
@@ -191,6 +196,15 @@ case class ExceptProcess(input1: Process, input2: Process) extends Process:
   def iterator(ctx: Seq[Row]): RowIterator =
     val rightSet = input2.iterator(ctx).map(_.data).toSet
     input1.iterator(ctx).filter(row => !rightSet.contains(row.data)).distinctBy(_.data)
+
+case class ValuesProcess(rows: Seq[Seq[Expr]], width: Int) extends Process:
+  val meta: Metadata = Metadata((1 to width).map(i => ColumnMetadata(None, s"column$i", AnyType)).toIndexedSeq)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    rows.iterator.map { exprs =>
+      if exprs.length != width then sys.error(s"VALUES row has ${exprs.length} columns, expected $width")
+      Row(exprs.map(e => eval(e, ctx)).toIndexedSeq, meta, None, None)
+    }
 
 case class CrossProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = Metadata(input1.meta.columns ++ input2.meta.columns)

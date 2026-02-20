@@ -381,6 +381,30 @@ class QueryTests extends AnyFreeSpec with Matchers with Testing {
       // Fruit: Date(5), Banana(2), Apple(1); Vegetable: Eggplant(4), Carrot(3)
       names shouldBe Vector("Date", "Banana", "Apple", "Eggplant", "Carrot")
     }
+
+    "ordinal refers to column position" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, price FROM products ORDER BY 2;
+          |""".trim.stripMargin
+      )
+
+      val prices = table.data.map(_.data(1))
+      prices shouldBe Vector(NumberValue(1), NumberValue(2), NumberValue(3), NumberValue(4), NumberValue(5))
+    }
+
+    "ordinal 1 orders by first column" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT price, name FROM products ORDER BY 1 DESC;
+          |""".trim.stripMargin
+      )
+
+      val prices = table.data.map(_.data(0))
+      prices shouldBe Vector(NumberValue(5), NumberValue(4), NumberValue(3), NumberValue(2), NumberValue(1))
+    }
   }
 
   "EXISTS" - {

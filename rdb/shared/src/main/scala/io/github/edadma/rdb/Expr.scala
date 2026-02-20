@@ -38,6 +38,7 @@ case class ArrayExpr(elems: Seq[Expr])                                    extend
 case class TableConstructorExpr(query: Expr)                              extends Expr
 case class CastExpr(expr: Expr, targetType: Type)                         extends Expr
 case class SetOperationExpr(op: String, left: Expr, right: Expr)          extends Expr
+case class ValuesExpr(rows: Seq[Seq[Expr]])                               extends Expr
 case class CompoundQueryExpr(
     query: Expr,
     orderBy: Option[Seq[OrderBy]],

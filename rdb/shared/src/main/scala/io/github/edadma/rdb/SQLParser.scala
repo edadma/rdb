@@ -329,13 +329,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
+  lazy val valuesClause: P[Expr] =
+    kw("VALUES") ~> rep1sep("(" ~> rep1sep(expression, ",") <~ ")", ",") ^^ ValuesExpr.apply
+
   lazy val selectCore: P[Expr] =
     kw(
       "SELECT",
     ) ~ opt(kw("DISTINCT")) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ^^ {
       case _ ~ d ~ p ~ f ~ w ~ g ~ h =>
         SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = d.isDefined)
-    } | "(" ~> compoundSelect <~ ")"
+    } | valuesClause | "(" ~> compoundSelect <~ ")"
 
   lazy val intersectSelect: P[Expr] =
     intersectSelect ~ kw("INTERSECT") ~ selectCore ^^ { case l ~ _ ~ r =>
@@ -403,7 +406,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       } | source
 
   lazy val source: P[Expr] =
-    (table | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+    (table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
       case s ~ None    => s
       case s ~ Some(a) => AliasOperator(s, a)
     }

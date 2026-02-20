@@ -269,6 +269,8 @@ case object ObjectType extends Type("object")
 
 case object NullType extends Type("null")
 
+case object AnyType extends Type("any")
+
 case object StarType extends Type("star")
 
 case object BooleanType extends Type("boolean"):
