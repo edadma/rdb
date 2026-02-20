@@ -53,8 +53,16 @@ object Dump:
           parts += s"  PRIMARY KEY (${cols.mkString(", ")})"
         case UniqueSpec(cols, _) =>
           parts += s"  UNIQUE (${cols.mkString(", ")})"
-        case ForeignKeySpec(cols, refTable, refCols, _) =>
-          parts += s"  FOREIGN KEY (${cols.mkString(", ")}) REFERENCES $refTable (${refCols.mkString(", ")})"
+        case ForeignKeySpec(cols, refTable, refCols, _, onDelete, onUpdate) =>
+          import ReferentialAction.*
+          def actionStr(a: ReferentialAction): String = a match
+            case Cascade  => "CASCADE"
+            case Restrict => "RESTRICT"
+            case SetNull  => "SET NULL"
+            case NoAction => "NO ACTION"
+          val del = if onDelete != NoAction then s" ON DELETE ${actionStr(onDelete)}" else ""
+          val upd = if onUpdate != NoAction then s" ON UPDATE ${actionStr(onUpdate)}" else ""
+          parts += s"  FOREIGN KEY (${cols.mkString(", ")}) REFERENCES $refTable (${refCols.mkString(", ")})$del$upd"
         case _ =>
 
     println(s"CREATE TABLE $tableName (")

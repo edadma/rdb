@@ -88,10 +88,118 @@ abstract class DB:
 
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
+  // ── Foreign Key Helpers ──────────────────────────────────────────
+
+  private[rdb] def foreignKeys(table: Table): Seq[ForeignKeySpec] =
+    val fromConstraints = table.constraints.collect { case fk: ForeignKeySpec => fk }
+    val fromColumns = table.columns.collect {
+      case cs if cs.fk.isDefined =>
+        val (refTable, refCol, onDel, onUpd) = cs.fk.get
+        ForeignKeySpec(Seq(cs.name), refTable, Seq(refCol), None, onDel, onUpd)
+    }
+    // Deduplicate: if a column-level FK is also in constraints (same cols + refTable), skip it
+    val constraintKeys = fromConstraints.map(fk => (fk.columns, fk.referencedTable)).toSet
+    fromConstraints.toSeq ++ fromColumns.filterNot(fk => constraintKeys.contains((fk.columns, fk.referencedTable)))
+
+  private[rdb] def childForeignKeys(parentTableName: String): Seq[(Table, ForeignKeySpec)] =
+    tables.values.flatMap { t =>
+      foreignKeys(t).filter(_.referencedTable == parentTableName).map(fk => (t, fk))
+    }.toSeq
+
+  private[rdb] def checkParentExists(childTableName: String, fk: ForeignKeySpec, row: IndexedSeq[Value], colMap: mutable.HashMap[String, Int]): Unit =
+    val fkValues = fk.columns.map(c => row(colMap(c)))
+    if fkValues.exists(_.isNull) then return
+
+    val parentTable = tables.getOrElse(fk.referencedTable,
+      sys.error(s"foreign key references non-existent table '${fk.referencedTable}'"))
+
+    val parentKey = fkValues.toIndexedSeq
+    if !findRowByColumns(parentTable, fk.referencedColumns, parentKey) then
+      val constraintName = fk.name.getOrElse(s"${childTableName}_${fk.columns.mkString("_")}_fkey")
+      sys.error(
+        s"""insert or update on table "$childTableName" violates foreign key constraint "$constraintName"""" + "\n" +
+        s"""Key (${fk.columns.mkString(", ")})=(${fkValues.map(_.string).mkString(", ")}) is not present in table "${fk.referencedTable}"."""
+      )
+
+  private[rdb] def enforceChildConstraints(
+      parentTableName: String,
+      oldRow: Row,
+      operation: String,
+      updatedCols: Option[Set[String]] = None,
+      newValues: Option[Seq[(String, Value)]] = None,
+  ): Unit =
+    for (childTable, fk) <- childForeignKeys(parentTableName) do
+      if operation == "delete" || updatedCols.exists(_.intersect(fk.referencedColumns.toSet).nonEmpty) then
+        val action = if operation == "delete" then fk.onDelete else fk.onUpdate
+        val parentKeyValues = fk.referencedColumns.map(c => oldRow(c)).toIndexedSeq
+        if !parentKeyValues.exists(_.isNull) then
+          val childRows = findRowsByColumns(childTable, fk.columns, parentKeyValues)
+          if childRows.nonEmpty then
+            action match
+              case ReferentialAction.NoAction | ReferentialAction.Restrict =>
+                val constraintName = fk.name.getOrElse(s"${childTable.name}_${fk.columns.mkString("_")}_fkey")
+                sys.error(
+                  s"""update or delete on table "$parentTableName" violates foreign key constraint "$constraintName" on table "${childTable.name}"""" + "\n" +
+                  s"""Key (${fk.referencedColumns.mkString(", ")})=(${parentKeyValues.map(_.string).mkString(", ")}) is still referenced from table "${childTable.name}"."""
+                )
+              case ReferentialAction.Cascade =>
+                if operation == "delete" then
+                  for r <- childRows do
+                    enforceChildConstraints(childTable.name, r, "delete")
+                    r.deleter.getOrElse(sys.error("child row not deletable during CASCADE"))()
+                else
+                  val newValueMap = newValues.getOrElse(Nil).toMap
+                  for r <- childRows do
+                    val updates = fk.columns.zip(fk.referencedColumns).collect {
+                      case (childCol, parentCol) if newValueMap.contains(parentCol) =>
+                        childCol -> newValueMap(parentCol)
+                    }
+                    if updates.nonEmpty then
+                      r.updater.getOrElse(sys.error("child row not updatable during CASCADE"))(updates)
+              case ReferentialAction.SetNull =>
+                for r <- childRows do
+                  val updates = fk.columns.map(c => c -> NullValue())
+                  r.updater.getOrElse(sys.error("child row not updatable during SET NULL"))(updates)
+
+  private def findRowByColumns(table: Table, columnNames: Seq[String], values: IndexedSeq[Value]): Boolean =
+    val matchingIndex = table.tableIndexes.values.find(idx => idx.meta.columns == columnNames)
+    matchingIndex match
+      case Some(idx) =>
+        table.indexPointScan(idx, values) match
+          case Some(iter) => iter.hasNext
+          case None       => scanForMatch(table, columnNames, values)
+      case None => scanForMatch(table, columnNames, values)
+
+  private def scanForMatch(table: Table, columnNames: Seq[String], values: IndexedSeq[Value]): Boolean =
+    val colIndices = columnNames.map(c => table.columnMap(c))
+    table.iterator(Nil).exists { row =>
+      colIndices.zip(values).forall { (idx, v) =>
+        val rv = row.data(idx)
+        !rv.isNull && rv.compare(v) == 0
+      }
+    }
+
+  private[rdb] def findRowsByColumns(table: Table, columnNames: Seq[String], values: IndexedSeq[Value]): Seq[Row] =
+    val matchingIndex = table.tableIndexes.values.find(idx => idx.meta.columns == columnNames)
+    val iter = matchingIndex match
+      case Some(idx) =>
+        table.indexPointScan(idx, values).getOrElse(scanIterator(table, columnNames, values))
+      case None => scanIterator(table, columnNames, values)
+    iter.toSeq
+
+  private def scanIterator(table: Table, columnNames: Seq[String], values: IndexedSeq[Value]): RowIterator =
+    val colIndices = columnNames.map(c => table.columnMap(c))
+    table.iterator(Nil).filter { row =>
+      colIndices.zip(values).forall { (idx, v) =>
+        val rv = row.data(idx)
+        !rv.isNull && rv.compare(v) == 0
+      }
+    }
+
 abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   protected[rdb] val columns   = new ArrayBuffer[ColumnSpec]
-  protected val columnMap      = new mutable.HashMap[String, Int]
+  protected[rdb] val columnMap  = new mutable.HashMap[String, Int]
   protected[rdb] val autoMap   = new mutable.HashMap[String, Value]
   private var _meta: Metadata = Metadata(Vector.empty)
   protected[rdb] var primaryKey: Option[PrimaryKeySpec] = None
@@ -239,7 +347,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   protected def addRow(row: Seq[Value]): Unit
 
-  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident]): Map[String, Value] =
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
@@ -301,9 +409,13 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
         result += (returning.get.name -> arr(idx))
 
+      fkCheck.foreach(_(arr.toIndexedSeq))
       addRow(arr to immutable.ArraySeq)
 
     result
+
+enum ReferentialAction:
+  case NoAction, Restrict, Cascade, SetNull
 
 trait Spec
 case class ColumnSpec(
@@ -312,11 +424,18 @@ case class ColumnSpec(
     required: Boolean = false,
     indexed: Boolean = false,
     unique: Boolean = false,
-    fk: Option[(String, String)] = None,
+    fk: Option[(String, String, ReferentialAction, ReferentialAction)] = None,
     default: Option[Value] = None,
 ) extends Spec
 
 // Table-level constraint specifications
 case class PrimaryKeySpec(columns: Seq[String], name: Option[String] = None) extends Spec
-case class UniqueSpec(columns: Seq[String], name: Option[String] = None) extends Spec  
-case class ForeignKeySpec(columns: Seq[String], referencedTable: String, referencedColumns: Seq[String], name: Option[String] = None) extends Spec
+case class UniqueSpec(columns: Seq[String], name: Option[String] = None) extends Spec
+case class ForeignKeySpec(
+    columns: Seq[String],
+    referencedTable: String,
+    referencedColumns: Seq[String],
+    name: Option[String] = None,
+    onDelete: ReferentialAction = ReferentialAction.NoAction,
+    onUpdate: ReferentialAction = ReferentialAction.NoAction,
+) extends Spec

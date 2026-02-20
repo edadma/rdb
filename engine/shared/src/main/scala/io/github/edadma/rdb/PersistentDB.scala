@@ -346,15 +346,15 @@ class PersistentTable(
             writeHeaderPage(batch)
         }
 
-  override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident]): Map[String, Value] =
-    if rows.size <= 1 then return super.bulkInsert(header, rows, returning)
+  override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
+    if rows.size <= 1 then return super.bulkInsert(header, rows, returning, fkCheck)
     var result: Map[String, Value] = Map.empty
     db.withBatch { batch =>
       val oldFirstDataPage = firstDataPage
       val trees = openIndexTrees(batch)
       // Delegate row preparation to super, but intercept addRow via bulkBatch state
       bulkBatch = Some((batch, trees))
-      try result = super.bulkInsert(header, rows, returning)
+      try result = super.bulkInsert(header, rows, returning, fkCheck)
       finally bulkBatch = None
       if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
         writeHeaderPage(batch)

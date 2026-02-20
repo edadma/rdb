@@ -45,7 +45,14 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             for (id @ Ident(c) <- resolvedColumns)
               if !t.hasColumn(c) then problem(id, s"unknown column: $c")
 
-            val result = t.bulkInsert(resolvedColumns map (_.name), data, returning)
+            val fks = db.foreignKeys(t)
+            val fkCheck: Option[IndexedSeq[Value] => Unit] =
+              if fks.isEmpty then None
+              else Some { (row: IndexedSeq[Value]) =>
+                for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
+              }
+
+            val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
 
             val (row, metadata) =
               returning match
@@ -83,7 +90,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
                 db getType defined match
                   case None    => problem(tid, s"type '$defined' is undefined")
                   case Some(t) => t
-          val fkTuple = references.map { case (table, col) => (table.name, col.name) }
+          val fkTuple = references.map { case (table, col, onDel, onUpd) => (table.name, col.name, onDel, onUpd) }
 
           ColumnSpec(
             name,
@@ -101,9 +108,29 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             PrimaryKeySpec(cols.map(_.name), name)
           case UniqueConstraint(name, cols) =>
             UniqueSpec(cols.map(_.name), name)
-          case ForeignKeyConstraint(name, cols, refTable, refCols) =>
-            ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name)
+          case ForeignKeyConstraint(name, cols, refTable, refCols, onDel, onUpd) =>
+            ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name, onDel, onUpd)
         }
+
+        // Validate FK references
+        for spec <- columnSpecs do
+          spec match
+            case cs: ColumnSpec if cs.fk.isDefined =>
+              val (refTableName, refColName, _, _) = cs.fk.get
+              val refTable = db.getTable(refTableName).getOrElse(
+                problem(id, s"referenced table '$refTableName' does not exist"))
+              if !refTable.hasColumn(refColName) then
+                problem(id, s"referenced column '$refColName' not found in table '$refTableName'")
+            case _ =>
+        for spec <- constraintSpecs do
+          spec match
+            case fk: ForeignKeySpec =>
+              val refTable = db.getTable(fk.referencedTable).getOrElse(
+                problem(id, s"referenced table '${fk.referencedTable}' does not exist"))
+              for col <- fk.referencedColumns do
+                if !refTable.hasColumn(col) then
+                  problem(id, s"referenced column '$col' not found in table '${fk.referencedTable}'")
+            case _ =>
 
         val allSpecs = columnSpecs ++ constraintSpecs
         db.createTable(table, allSpecs)
@@ -113,6 +140,11 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
           if (!ifExists) problem(id, s"unknown table: $table")
           else DropTableResult(table) // IF EXISTS allows missing table
         } else {
+          if !cascade then
+            val refs = db.childForeignKeys(table)
+            if refs.nonEmpty then
+              val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
+              problem(id, s"cannot drop table '$table' because it is referenced by: $refTableNames")
           db.dropTable(table)
           DropTableResult(table)
         }
@@ -136,6 +168,8 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
         var count = 0
 
         val pkCols = t.primaryKey.map(_.columns.toSet).getOrElse(Set.empty)
+        val updatedColSet = cols.toSet
+        val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
         for (r <- rows.iterator(Nil))
           r.updater match
@@ -146,6 +180,15 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
               for (col, value) <- updates do
                 if pkCols.contains(col) && value.isNull then
                   sys.error(s"null value in column \"$col\" violates not-null constraint")
+              // Parent-side FK: enforce child constraints on old values
+              db.enforceChildConstraints(table, r, "update", Some(updatedColSet), Some(updates))
+              // Child-side FK: check new values reference existing parents
+              if childFKs.nonEmpty then
+                val newRowData = r.data.toArray
+                for (col, value) <- updates do
+                  newRowData(t.columnMap(col)) = value
+                for fk <- childFKs do
+                  db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
               u(updates)
           count += 1
 
@@ -159,6 +202,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
         var count = 0
 
         for (r <- rows.iterator(Nil))
+          db.enforceChildConstraints(table, r, "delete")
           r.deleter match
             case Some(d) => d()
             case None    => problem(id, "not updatable")
@@ -197,7 +241,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             val typ = typeDesc match
               case Left(primitive) => primitive
               case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(problem(tid, s"type '$defined' is undefined"))
-            val fk = references.map { case (tbl, col) => (tbl.name, col.name) }
+            val fk = references.map { case (tbl, col, onDel, onUpd) => (tbl.name, col.name, onDel, onUpd) }
             val defaultValue = default.map(expr => eval(rewrite(expr), Nil)).getOrElse(NullValue())
             val spec = ColumnSpec(colName, typ, required, false, unique, fk, default.map(expr => eval(rewrite(expr), Nil)))
             t.addColumnToTable(spec, defaultValue)
@@ -224,8 +268,8 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             val spec = constraint match
               case UniqueConstraint(cname, cols) => UniqueSpec(cols.map(_.name), cname)
               case PrimaryKeyConstraint(cname, cols) => PrimaryKeySpec(cols.map(_.name), cname)
-              case ForeignKeyConstraint(cname, cols, refTable, refCols) =>
-                ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), cname)
+              case ForeignKeyConstraint(cname, cols, refTable, refCols, onDel, onUpd) =>
+                ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), cname, onDel, onUpd)
             t.addConstraintToTable(spec)
           case DropConstraintTableAlteration(cid @ Ident(constraintName)) =>
             t.dropConstraintFromTable(constraintName)
@@ -238,7 +282,7 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
             val spec = ForeignKeySpec(Seq(fk.name), ref.name, Seq(fk.name), None)
             t.addConstraintToTable(spec)
           case AddForeignKeyConstraintTableAlteration(constraint) =>
-            val spec = ForeignKeySpec(constraint.columns.map(_.name), constraint.referencedTable.name, constraint.referencedColumns.map(_.name), constraint.name)
+            val spec = ForeignKeySpec(constraint.columns.map(_.name), constraint.referencedTable.name, constraint.referencedColumns.map(_.name), constraint.name, constraint.onDelete, constraint.onUpdate)
             t.addConstraintToTable(spec)
         AlterTableResult()
       case _ => sys.error(s"unexpected command")

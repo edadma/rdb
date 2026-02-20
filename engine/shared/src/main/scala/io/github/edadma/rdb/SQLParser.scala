@@ -55,6 +55,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "array",
       "AS",
       "as",
+      "ACTION",
+      "action",
       "ASC",
       "asc",
       "BEGIN",
@@ -173,6 +175,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "like",
       "LIMIT",
       "limit",
+      "NO",
+      "no",
       "NOT",
       "not",
       "NULL",
@@ -629,11 +633,21 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       constraint(name.map(_.name))
     }
 
+  lazy val referentialAction: P[ReferentialAction] =
+    kw("CASCADE") ^^^ ReferentialAction.Cascade
+      | kw("RESTRICT") ^^^ ReferentialAction.Restrict
+      | kw("SET") ~ kw("NULL") ^^^ ReferentialAction.SetNull
+      | kw("NO") ~ kw("ACTION") ^^^ ReferentialAction.NoAction
+
+  lazy val onDeleteClause: P[ReferentialAction] = kw("ON") ~> kw("DELETE") ~> referentialAction
+  lazy val onUpdateClause: P[ReferentialAction] = kw("ON") ~> kw("UPDATE") ~> referentialAction
+
   lazy val constraintBody: P[Option[String] => TableConstraint] =
     kw("UNIQUE") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => UniqueConstraint(name, cols) }
       | kw("PRIMARY") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => PrimaryKeyConstraint(name, cols) }
-      | kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ~ (kw("REFERENCES") ~> identifier) ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { 
-          case cols ~ table ~ refCols => (name: Option[String]) => ForeignKeyConstraint(name, cols, table, refCols) 
+      | kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ~ (kw("REFERENCES") ~> identifier) ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause) ^^ {
+          case cols ~ table ~ refCols ~ onDel ~ onUpd => (name: Option[String]) =>
+            ForeignKeyConstraint(name, cols, table, refCols, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
         }
 
   lazy val createTable: P[Command] =
@@ -723,9 +737,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")")) ^^ {
+    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause)) ^^ {
       case c ~ t ~ n ~ u ~ d ~ r =>
-        val refs = r.map { case table ~ column => (table, column) }
+        val refs = r.map { case table ~ column ~ onDel ~ onUpd => (table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction)) }
         ColumnDesc(c, t, n.isDefined, u.isDefined, d, refs)
     }
 

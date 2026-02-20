@@ -559,9 +559,11 @@ def serializeCatalog(
       if col.fk.isDefined then flags |= 8
       if col.default.isDefined then flags |= 16
       out.writeByte(flags)
-      col.fk.foreach { (refTable, refCol) =>
+      col.fk.foreach { (refTable, refCol, onDel, onUpd) =>
         writeString(out, refTable)
         writeString(out, refCol)
+        out.writeByte(onDel.ordinal)
+        out.writeByte(onUpd.ordinal)
       }
       col.default.foreach { v =>
         serializeValue(v, out, batch, pageSize)
@@ -594,8 +596,8 @@ def serializeCatalog(
             case None    => out.writeByte(0)
           out.writeShort(cols.size)
           for col <- cols do writeString(out, col)
-        case ForeignKeySpec(cols, refTable, refCols, name) =>
-          out.writeByte(2)
+        case ForeignKeySpec(cols, refTable, refCols, name, onDelete, onUpdate) =>
+          out.writeByte(3)
           name match
             case Some(n) => out.writeByte(1); writeString(out, n)
             case None    => out.writeByte(0)
@@ -604,6 +606,8 @@ def serializeCatalog(
           writeString(out, refTable)
           out.writeShort(refCols.size)
           for col <- refCols do writeString(out, col)
+          out.writeByte(onDelete.ordinal)
+          out.writeByte(onUpdate.ordinal)
         case _ => // skip non-serializable constraints
 
   // Indexes
@@ -679,7 +683,9 @@ def deserializeCatalog(
       val fk = if hasFk then
         val refTable = readString(in)
         val refCol   = readString(in)
-        Some((refTable, refCol))
+        val onDel    = ReferentialAction.fromOrdinal(in.readByte())
+        val onUpd    = ReferentialAction.fromOrdinal(in.readByte())
+        Some((refTable, refCol, onDel, onUpd))
       else None
       val default = if hasDef then
         val (v, _) = deserializeValue(in, store, enumMap.toMap)
@@ -709,7 +715,7 @@ def deserializeCatalog(
           val colCnt  = in.readUnsignedShort()
           val cols    = (0 until colCnt).map(_ => readString(in))
           constraints += UniqueSpec(cols, cName)
-        case 2 => // ForeignKeySpec
+        case 2 => // ForeignKeySpec (legacy, no actions)
           val hasName = in.readByte() != 0
           val cName   = if hasName then Some(readString(in)) else None
           val colCnt  = in.readUnsignedShort()
@@ -718,6 +724,17 @@ def deserializeCatalog(
           val refColCnt = in.readUnsignedShort()
           val refCols   = (0 until refColCnt).map(_ => readString(in))
           constraints += ForeignKeySpec(cols, refTable, refCols, cName)
+        case 3 => // ForeignKeySpec with actions
+          val hasName = in.readByte() != 0
+          val cName   = if hasName then Some(readString(in)) else None
+          val colCnt  = in.readUnsignedShort()
+          val cols    = (0 until colCnt).map(_ => readString(in))
+          val refTable = readString(in)
+          val refColCnt = in.readUnsignedShort()
+          val refCols   = (0 until refColCnt).map(_ => readString(in))
+          val onDelete  = ReferentialAction.fromOrdinal(in.readByte())
+          val onUpdate  = ReferentialAction.fromOrdinal(in.readByte())
+          constraints += ForeignKeySpec(cols, refTable, refCols, cName, onDelete, onUpdate)
         case other => sys.error(s"unknown constraint type tag: $other")
 
     // Add PK to constraints list for reconstruction

@@ -154,7 +154,7 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
           | log_id BIGSERIAL,
           | session_id UUID DEFAULT gen_random_uuid(),
           | user_id INT NOT NULL,
-          | action TEXT NOT NULL,
+          | "action" TEXT NOT NULL,
           | details JSON,
           | created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           | is_deleted BOOLEAN,
@@ -162,10 +162,10 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
           | UNIQUE (session_id)
           |);
           |
-          |INSERT INTO audit_log (user_id, action, details) 
+          |INSERT INTO audit_log (user_id, "action", details) 
           |VALUES (123, 'login', '{"ip": "192.168.1.1", "user_agent": "Chrome"}');
           |
-          |SELECT log_id, user_id, action FROM audit_log;
+          |SELECT log_id, user_id, "action" FROM audit_log;
           |""".trim.stripMargin
       ) should include("CreateTableResult(\"audit_log\")")
     }

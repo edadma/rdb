@@ -5,7 +5,14 @@ trait TableConstraint:
 
 case class UniqueConstraint(name: Option[String], columns: Seq[Ident]) extends TableConstraint
 case class PrimaryKeyConstraint(name: Option[String], columns: Seq[Ident]) extends TableConstraint
-case class ForeignKeyConstraint(name: Option[String], columns: Seq[Ident], referencedTable: Ident, referencedColumns: Seq[Ident]) extends TableConstraint
+case class ForeignKeyConstraint(
+    name: Option[String],
+    columns: Seq[Ident],
+    referencedTable: Ident,
+    referencedColumns: Seq[Ident],
+    onDelete: ReferentialAction = ReferentialAction.NoAction,
+    onUpdate: ReferentialAction = ReferentialAction.NoAction,
+) extends TableConstraint
 
 trait Command
 
@@ -32,7 +39,7 @@ case class ColumnDesc(
     required: Boolean,
     unique: Boolean,
     default: Option[Expr],
-    references: Option[(Ident, Ident)], // Single column foreign key: (table, column)
+    references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)], // Single column foreign key: (table, column, onDelete, onUpdate)
 )
 
 trait TableAlteration
