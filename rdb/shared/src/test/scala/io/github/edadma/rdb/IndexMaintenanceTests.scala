@@ -248,4 +248,80 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       }
       db.close()
     }
+
+    "non-unique index insert allows duplicates" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      db.close()
+    }
+
+    "non-unique index delete removes correct entry" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Bob');")
+      executeSQL("DELETE FROM t WHERE id = 1;")
+
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(2)
+      table.data(1).data(0) shouldBe NumberValue(3)
+      db.close()
+    }
+
+    "non-unique index update changes entry" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      executeSQL("UPDATE t SET name = 'Charlie' WHERE id = 1;")
+
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(1) shouldBe TextValue("Charlie")
+      table.data(1).data(1) shouldBe TextValue("Bob")
+      db.close()
+    }
+
+    "non-unique index survives close/reopen with delete" in {
+      val db1 = PersistentDB.create(tmpFile, pageSize)
+      given DB = db1
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Bob');")
+      db1.close()
+
+      val db2 = PersistentDB.open(tmpFile)
+      executeSQL("DELETE FROM t WHERE id = 2;")(using db2)
+      executeSQL("INSERT INTO t (id, name) VALUES (4, 'Alice');")(using db2)
+
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(1).data(0) shouldBe NumberValue(3)
+      table.data(2).data(0) shouldBe NumberValue(4)
+      db2.close()
+    }
   }
