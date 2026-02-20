@@ -439,13 +439,13 @@ The project includes comprehensive test suites:
 sbt test
 
 # Run JavaScript tests only
-sbt rdbJS/test
+sbt engineJS/test
 
 # Run JVM tests only
-sbt rdbJVM/test
+sbt engineJVM/test
 
 # Run Native tests only
-sbt rdbNative/test
+sbt engineNative/test
 ```
 
 ## Contributing

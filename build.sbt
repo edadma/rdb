@@ -46,13 +46,13 @@ lazy val commonScalacOptions = Seq(
   "-language:dynamics",
 )
 
-// ── rdb: the SQL database library ───────────────────────────────────
+// ── engine: the SQL database engine ─────────────────────────────────
 
-lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
-  .in(file("rdb"))
+lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("engine"))
   .settings(
-    name    := "rdb",
-    version := "0.1.2",
+    name    := "rdb-engine",
+    version := "0.1.3",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
@@ -91,7 +91,7 @@ lazy val rdb = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 lazy val cli = crossProject(JVMPlatform, NativePlatform)
   .in(file("cli"))
-  .dependsOn(rdb)
+  .dependsOn(engine)
   .settings(
     name    := "rdb-cli",
     version := "0.0.1",
@@ -113,11 +113,11 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
 lazy val root = project
   .in(file("."))
   .aggregate(
-    rdb.js, rdb.jvm, rdb.native,
+    engine.js, engine.jvm, engine.native,
     cli.jvm, cli.native,
   )
   .settings(
-    name                := "rdb-root",
+    name                := "rdb",
     publish / skip      := true,
     publishLocal / skip := true,
   )
