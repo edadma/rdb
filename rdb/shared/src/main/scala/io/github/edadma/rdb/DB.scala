@@ -11,6 +11,7 @@ abstract class DB:
 
   protected val tables = new mutable.HashMap[String, Table]
   protected[rdb] val types = new mutable.HashMap[String, Type]
+  protected[rdb] val indexes = new mutable.HashMap[String, IndexMeta]
 
   def tableNames: Iterable[String] = tables.keys
 
@@ -30,7 +31,14 @@ abstract class DB:
     registerTable(name, table)
     table
 
-  def dropTable(name: String): Unit = tables.remove(name)
+  def dropTable(name: String): Unit =
+    // Remove indexes for this table
+    val toRemove = indexes.filter(_._2.tableName == name).keys.toSeq
+    for idx <- toRemove do indexes.remove(idx)
+    tables.get(name).foreach { t =>
+      t.tableIndexes.clear()
+    }
+    tables.remove(name)
 
   def renameTable(oldName: String, newName: String): Unit =
     val table = tables.remove(oldName).getOrElse(sys.error(s"table '$oldName' not found"))
@@ -50,6 +58,17 @@ abstract class DB:
 
   infix def getType(name: String): Option[Type] = types get name
 
+  def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
+
+  def dropIndex(indexName: String): Unit =
+    indexes.get(indexName) match
+      case Some(meta) =>
+        tables.get(meta.tableName).foreach(_.tableIndexes.remove(indexName))
+        indexes.remove(indexName)
+      case None => sys.error(s"index '$indexName' not found")
+
+  def hasIndex(name: String): Boolean = indexes contains name
+
   def beginTransaction(): Unit = ()
   def commitTransaction(): Unit = ()
   def rollbackTransaction(): Unit = ()
@@ -67,6 +86,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   private var _meta: Metadata = Metadata(Vector.empty)
   protected[rdb] var primaryKey: Option[PrimaryKeySpec] = None
   protected[rdb] val constraints                       = new ArrayBuffer[Spec]
+  protected[rdb] val tableIndexes                      = new mutable.HashMap[String, TableIndex]
 
   specs foreach {
     case s: ColumnSpec => createColumn(s)

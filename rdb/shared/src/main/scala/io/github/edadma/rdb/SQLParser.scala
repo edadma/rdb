@@ -649,6 +649,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case t ~ cascade => DropTableCommand(t, false, cascade.contains("CASCADE"))
     })
 
+  lazy val createIndex: P[Command] =
+    kw("CREATE") ~> opt(kw("UNIQUE")) ~ kw("INDEX") ~ identifier ~ kw("ON") ~ identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ {
+      case u ~ _ ~ name ~ _ ~ table ~ cols =>
+        CreateIndexCommand(name, table, cols, u.isDefined)
+    }
+
   lazy val dropIndex: P[Command] =
     (kw("DROP") ~> kw("INDEX") ~> kw("IF") ~> kw("EXISTS") ~> identifier ^^ { name => 
       DropIndexCommand(name, true) 
@@ -788,6 +794,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       query ^^ QueryCommand.apply |
       insert |
       createTable |
+      createIndex |
       dropTable |
       dropIndex |
       dropType |

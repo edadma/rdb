@@ -158,10 +158,21 @@ def executeSQL(sql: String)(using db: DB): Seq[Result] =
           count += 1
 
         DeleteResult(count)
+      case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
+        if !db.hasTable(tableName) then problem(tid, s"unknown table: $tableName")
+        if db.hasIndex(indexName) then problem(id, s"index '$indexName' already exists")
+        val t = db.getTable(tableName).get
+        for col @ Ident(colName) <- columns do
+          if !t.hasColumn(colName) then problem(col, s"column '$colName' not found in table '$tableName'")
+        db.createIndex(indexName, tableName, columns.map(_.name), unique)
+        CreateIndexResult(indexName)
       case DropIndexCommand(id @ Ident(name), ifExists) =>
-        // Index operations not implemented yet
-        if (!ifExists) problem(id, s"indexes not implemented yet")
-        DropIndexResult(name)
+        if !db.hasIndex(name) then
+          if !ifExists then problem(id, s"index '$name' not found")
+          DropIndexResult(name)
+        else
+          db.dropIndex(name)
+          DropIndexResult(name)
       case DropTypeCommand(id @ Ident(name), ifExists, cascade) =>
         if (!db.hasType(name)) {
           if (!ifExists) problem(id, s"unknown type: $name")

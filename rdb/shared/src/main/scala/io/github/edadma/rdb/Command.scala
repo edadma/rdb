@@ -18,7 +18,8 @@ case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], cond: Option[Expr])
 case class DeleteCommand(table: Ident, cond: Option[Expr])                                               extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration)                                       extends Command
 case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Boolean = false)         extends Command
-case class DropIndexCommand(name: Ident, ifExists: Boolean = false)                                    extends Command  
+case class CreateIndexCommand(name: Ident, table: Ident, columns: Seq[Ident], unique: Boolean)         extends Command
+case class DropIndexCommand(name: Ident, ifExists: Boolean = false)                                    extends Command
 case class DropTypeCommand(name: Ident, ifExists: Boolean = false, cascade: Boolean = false)          extends Command
 case object BeginCommand    extends Command
 case object CommitCommand   extends Command

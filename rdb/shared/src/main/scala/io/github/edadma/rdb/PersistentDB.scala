@@ -88,6 +88,9 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       val pt = table.asInstanceOf[PersistentTable]
       pt.headerPage = batch.allocate()
       pt.writeHeaderPage(batch)
+      table.primaryKey.foreach { pk =>
+        createPersistentIndex(s"${name}_pkey", name, pk.columns, unique = true, batch)
+      }
       writeCatalogInBatch(batch)
     }
     table
@@ -121,6 +124,56 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     super.dropType(name)
     persistCatalog()
 
+  override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
+    store.modify { batch =>
+      createPersistentIndex(indexName, tableName, columnNames, unique, batch)
+      writeCatalogInBatch(batch)
+    }
+
+  override def dropIndex(indexName: String): Unit =
+    if inTransaction then sys.error("DDL not allowed inside a transaction")
+    super.dropIndex(indexName)
+    persistCatalog()
+
+  private def createPersistentIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, batch: WriteBatch): Unit =
+    val table = tables(tableName)
+    val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
+
+    given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
+    val keyCodec = StowCodec.valueSeq(using batch, store.pageSize)
+    val tree = StowBPlusTree.create[IndexedSeq[Value], (PageId, Int)](
+      50, store, batch, keyCodec, StowCodec.pageIdPair,
+    )
+
+    // Populate from existing data
+    val pt = table.asInstanceOf[PersistentTable]
+    val enumTypes = types.collect { case (n, e: EnumType) => (n, e) }.toMap
+    var rowId = 0L
+    var currentPageId = pt.firstDataPage
+
+    while currentPageId != NoPage do
+      val pageData = batch.read(currentPageId)
+      val page = SlottedPage.wrap(pageData)
+      for i <- 0 until page.slotCount do
+        page.getSlot(i).foreach { slotData =>
+          val (values, _) = deserializeRow(slotData, table.columns.length, store, enumTypes)
+          val baseKey = colIndices.map(values(_))
+          val key = if unique then baseKey else baseKey :+ NumberValue(rowId.toInt)
+          if unique then
+            if tree.insertIfNotFound(key, (currentPageId, i)) then
+              sys.error(s"could not create unique index '$indexName': duplicate key found")
+          else
+            tree.insert(key, (currentPageId, i))
+          rowId += 1
+        }
+      currentPageId = page.nextPage
+
+    val meta = IndexMeta(indexName, tableName, columnNames, unique, tree.treeRecordPage, rowId)
+    val idx = PersistentTableIndex(meta, colIndices, rowId)
+    indexes(indexName) = meta
+    table.tableIndexes(indexName) = idx
+
   private[rdb] def persistCatalog(): Unit =
     if inTransaction then sys.error("DDL not allowed inside a transaction")
     store.modify { batch =>
@@ -145,7 +198,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       )
     }
 
-    val catalogBytes = serializeCatalog(types.toMap, entries, batch, store.pageSize)
+    val indexEntries = indexes.map { (_, meta) =>
+      CatalogIndexEntry(meta.name, meta.tableName, meta.columns, meta.unique, meta.treeRecordPage, meta.nextRowId)
+    }
+
+    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize)
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
@@ -159,7 +216,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     // Read catalog chain — we need to figure out the total length
     // Read the catalog data using a page-walking approach
     val catalogBytes = readCatalogChain(metaRoot)
-    val (enums, tableEntries) = deserializeCatalog(catalogBytes, store)
+    val (enums, tableEntries, indexEntries) = deserializeCatalog(catalogBytes, store)
 
     // Restore enum types
     for (eName, eType) <- enums do types(eName) = eType
@@ -173,6 +230,15 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       table.firstDataPage = fdp
       table.restoreAutoState(autoState)
       tables(entry.name) = table
+
+    // Restore indexes
+    for entry <- indexEntries do
+      val meta = IndexMeta(entry.name, entry.tableName, entry.columns, entry.unique, entry.treeRecordPage, entry.nextRowId)
+      indexes(entry.name) = meta
+      tables.get(entry.tableName).foreach { table =>
+        val colIndices = entry.columns.map(c => table.meta.columnMap(c)._1).toIndexedSeq
+        table.tableIndexes(entry.name) = PersistentTableIndex(meta, colIndices, entry.nextRowId)
+      }
 
   private def readCatalogChain(firstPage: PageId): Array[Byte] =
     // First pass: count total bytes
@@ -225,16 +291,37 @@ class PersistentTable(
 
   protected def addColumn(spec: ColumnSpec): Unit = {} // handled by catalog persistence
 
+  private def openIndexTree(pidx: PersistentTableIndex, batch: WriteBatch): StowBPlusTree[IndexedSeq[Value], (PageId, Int)] =
+    given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
+    val keyCodec = StowCodec.valueSeq(using batch, store.pageSize)
+    StowBPlusTree.open[IndexedSeq[Value], (PageId, Int)](
+      50, store, batch, pidx.meta.treeRecordPage, keyCodec, StowCodec.pageIdPair,
+    )
+
   protected def addRow(row: Seq[Value]): Unit =
     db.withBatch { batch =>
       val oldFirstDataPage = firstDataPage
       val rowBytes = serializeRow(row, batch, store.pageSize)
-      insertRowBytes(rowBytes, batch)
+      val (insertedPageId, insertedSlotIndex) = insertRowBytes(rowBytes, batch)
+
+      // Insert into all indexes
+      for (idxName, idx) <- tableIndexes do
+        val pidx = idx.asInstanceOf[PersistentTableIndex]
+        val tree = openIndexTree(pidx, batch)
+        val baseKey = pidx.columnIndices.map(i => row(i))
+        if pidx.meta.unique then
+          if tree.insertIfNotFound(baseKey, (insertedPageId, insertedSlotIndex)) then
+            sys.error(s"duplicate key value violates unique constraint \"${pidx.meta.name}\"")
+        else
+          val key = baseKey :+ NumberValue(pidx.nextRowId.toInt)
+          pidx.nextRowId += 1
+          tree.insert(key, (insertedPageId, insertedSlotIndex))
+
       if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
         writeHeaderPage(batch)
     }
 
-  private def insertRowBytes(rowBytes: Array[Byte], batch: WriteBatch): Unit =
+  private def insertRowBytes(rowBytes: Array[Byte], batch: WriteBatch): (PageId, Int) =
     // Try to find a data page with room
     var prevPageId: PageId = NoPage
     var currentPageId      = firstDataPage
@@ -243,8 +330,9 @@ class PersistentTable(
       val pageData = batch.read(currentPageId)
       val page     = SlottedPage.wrap(pageData)
       if page.addSlot(rowBytes) then
+        val slotIdx = page.slotCount - 1
         batch.write(currentPageId, page.data)
-        return
+        return (currentPageId, slotIdx)
       prevPageId = currentPageId
       currentPageId = page.nextPage
 
@@ -263,6 +351,7 @@ class PersistentTable(
       batch.write(prevPageId, prevPage.data)
 
     batch.write(newPageId, newPage.data)
+    (newPageId, 0)
 
   def iterator(ctx: Seq[Row]): RowIterator =
     // Collect all rows from all data pages
@@ -302,6 +391,17 @@ class PersistentTable(
         val enumTypes = db.types.collect { case (n, e: EnumType) => (n, e) }.toMap
         val currentSlotData = page.getSlot(slotIndex).getOrElse(sys.error("slot is tombstone during update"))
         val (currentValues, currentChains) = deserializeRow(currentSlotData, columns.length, store, enumTypes)
+
+        // Remove old index entries
+        for (idxName, idx) <- tableIndexes do
+          val pidx = idx.asInstanceOf[PersistentTableIndex]
+          val tree = openIndexTree(pidx, batch)
+          if pidx.meta.unique then
+            val oldKey = pidx.columnIndices.map(currentValues(_))
+            tree.delete(oldKey)
+          else
+            removeNonUniqueEntry(pidx, batch, currentValues, pageId, slotIndex)
+
         val updatedValues = currentValues.toArray
 
         // Apply updates
@@ -320,28 +420,74 @@ class PersistentTable(
         // Serialize new row
         val newRowBytes = serializeRow(updatedValues.toIndexedSeq, batch, store.pageSize)
 
-        // Try to update in place
-        if !page.updateSlot(slotIndex, newRowBytes) then
-          // Doesn't fit — tombstone old slot, insert in a new slot/page
-          page.removeSlot(slotIndex)
-          batch.write(pageId, page.data)
-          insertRowBytes(newRowBytes, batch)
-        else
-          batch.write(pageId, page.data)
+        // Write row (may move to new location)
+        val (newPageId, newSlotIndex) =
+          if page.updateSlot(slotIndex, newRowBytes) then
+            batch.write(pageId, page.data)
+            (pageId, slotIndex)
+          else
+            page.removeSlot(slotIndex)
+            batch.write(pageId, page.data)
+            insertRowBytes(newRowBytes, batch)
+
+        // Insert new index entries
+        for (idxName, idx) <- tableIndexes do
+          val pidx = idx.asInstanceOf[PersistentTableIndex]
+          val tree = openIndexTree(pidx, batch)
+          val newKey = pidx.columnIndices.map(i => updatedValues(i): Value)
+          if pidx.meta.unique then
+            if tree.insertIfNotFound(newKey, (newPageId, newSlotIndex)) then
+              sys.error(s"duplicate key value violates unique constraint \"${pidx.meta.name}\"")
+          else
+            val key = newKey :+ NumberValue(pidx.nextRowId.toInt)
+            pidx.nextRowId += 1
+            tree.insert(key, (newPageId, newSlotIndex))
       }
 
   private def makeDeleter(pageId: PageId, slotIndex: Int, chains: IndexedSeq[Option[ChainRef]]): () => Unit =
     () =>
       db.withBatch { batch =>
+        // Remove from all indexes before deleting the row
+        if tableIndexes.nonEmpty then
+          val enumTypes = db.types.collect { case (n, e: EnumType) => (n, e) }.toMap
+          val pageData = batch.read(pageId)
+          val page     = SlottedPage.wrap(pageData)
+          page.getSlot(slotIndex).foreach { slotData =>
+            val (values, _) = deserializeRow(slotData, columns.length, store, enumTypes)
+            for (idxName, idx) <- tableIndexes do
+              val pidx = idx.asInstanceOf[PersistentTableIndex]
+              val tree = openIndexTree(pidx, batch)
+              if pidx.meta.unique then
+                val key = pidx.columnIndices.map(values(_))
+                tree.delete(key)
+              else
+                removeNonUniqueEntry(pidx, batch, values, pageId, slotIndex)
+          }
+
         // Free chain pages
         for chainOpt <- chains; ref <- chainOpt do
           freeChain(ref.firstPage, batch, store.pageSize)
 
-        val pageData = batch.read(pageId)
-        val page     = SlottedPage.wrap(pageData)
-        page.removeSlot(slotIndex)
-        batch.write(pageId, page.data)
+        val pageData2 = batch.read(pageId)
+        val page2     = SlottedPage.wrap(pageData2)
+        page2.removeSlot(slotIndex)
+        batch.write(pageId, page2.data)
       }
+
+  private def removeNonUniqueEntry(pidx: PersistentTableIndex, batch: WriteBatch, values: IndexedSeq[Value], targetPageId: PageId, targetSlotIndex: Int): Unit =
+    import io.github.edadma.bptree.Bound
+    val tree = openIndexTree(pidx, batch)
+    val baseKey = pidx.columnIndices.map(values(_))
+    val iter = tree.boundedIterator((Bound.Gte, baseKey))
+    var found = false
+    while iter.hasNext && !found do
+      val (k, v) = iter.next()
+      val prefix = k.take(baseKey.length)
+      if ValueSeqOrdering.compare(prefix, baseKey) != 0 then
+        found = true // went past the prefix range
+      else if v == (targetPageId, targetSlotIndex) then
+        tree.delete(k)
+        found = true
 
   protected def addColumnData(defaultValue: Value): Unit =
     // columns.length is now N+1 (createColumn already called), but old rows have N columns

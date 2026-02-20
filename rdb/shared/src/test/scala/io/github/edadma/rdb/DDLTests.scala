@@ -497,7 +497,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      result should include("indexes not implemented yet")
+      result should include("index 'test_index' not found")
     }
 
     "parses DROP INDEX IF EXISTS syntax" in {

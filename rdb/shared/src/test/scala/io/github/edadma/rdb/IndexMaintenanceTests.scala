@@ -1,0 +1,251 @@
+package io.github.edadma.rdb
+
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
+
+class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
+
+  private def execDB(sql: String): (Seq[Result], DB) =
+    given db: DB = new MemoryDB
+    (executeSQL(sql), db)
+
+  private def queryTable(sql: String): TableValue =
+    given DB = new MemoryDB
+    executeSQL(sql).collect { case QueryResult(t) => t }.last
+
+  "INSERT maintains indexes" - {
+    "unique index rejects duplicate on insert" in {
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (1, 'Bob');
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "non-unique index allows duplicate values on insert" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE INDEX idx ON t (name);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Alice');
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 2
+    }
+
+    "insert adds entry to index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 2
+      idx.tree.search(IndexedSeq(NumberValue(1))).isDefined shouldBe true
+      idx.tree.search(IndexedSeq(NumberValue(2))).isDefined shouldBe true
+    }
+
+    "PK constraint enforced via auto-index" in {
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, PRIMARY KEY (id));
+            |INSERT INTO t (id) VALUES (1);
+            |INSERT INTO t (id) VALUES (1);
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
+      }
+    }
+  }
+
+  "DELETE maintains indexes" - {
+    "delete removes entry from unique index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |DELETE FROM t WHERE id = 1;
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 1
+      idx.tree.search(IndexedSeq(NumberValue(1))).isDefined shouldBe false
+      idx.tree.search(IndexedSeq(NumberValue(2))).isDefined shouldBe true
+    }
+
+    "delete removes entry from non-unique index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE INDEX idx ON t (name);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |DELETE FROM t WHERE id = 1;
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 1
+    }
+
+    "re-insert after delete works" in {
+      val table = queryTable(
+        """
+          |CREATE TABLE t (id INTEGER, PRIMARY KEY (id));
+          |INSERT INTO t (id) VALUES (1);
+          |DELETE FROM t WHERE id = 1;
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT * FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+    }
+
+    "delete all rows empties index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |INSERT INTO t (id, name) VALUES (2, 'Bob');
+          |DELETE FROM t;
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 0
+    }
+  }
+
+  "UPDATE maintains indexes" - {
+    "update changes index entry for unique index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |UPDATE t SET id = 10 WHERE id = 1;
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 1
+      idx.tree.search(IndexedSeq(NumberValue(1))).isDefined shouldBe false
+      idx.tree.search(IndexedSeq(NumberValue(10))).isDefined shouldBe true
+    }
+
+    "update violating unique constraint fails" in {
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |CREATE UNIQUE INDEX idx ON t (id);
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (2, 'Bob');
+            |UPDATE t SET id = 2 WHERE id = 1;
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "update non-indexed column preserves index" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t (id);
+          |INSERT INTO t (id, name) VALUES (1, 'Alice');
+          |UPDATE t SET name = 'Bob' WHERE id = 1;
+          |""".trim.stripMargin
+      )
+
+      val idx = db.getTable("t").get.tableIndexes("idx").asInstanceOf[MemoryTableIndex]
+      idx.tree.iterator.size shouldBe 1
+      idx.tree.search(IndexedSeq(NumberValue(1))).isDefined shouldBe true
+    }
+  }
+
+class PersistentIndexMaintenanceTests extends PersistentTestBase:
+
+  "PersistentDB index maintenance" - {
+    "unique index enforced on insert" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id) VALUES (1);")
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id) VALUES (1);")
+      }
+      db.close()
+    }
+
+    "delete removes from index, re-insert works" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id) VALUES (1);")
+      executeSQL("DELETE FROM t WHERE id = 1;")
+      executeSQL("INSERT INTO t (id) VALUES (1);")
+
+      val result = executeSQL("SELECT * FROM t;")
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      db.close()
+    }
+
+    "index survives close/reopen with DML" in {
+      val db1 = PersistentDB.create(tmpFile, pageSize)
+      given DB = db1
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      db1.close()
+
+      // Reopen and verify PK constraint still works
+      val db2 = PersistentDB.open(tmpFile)
+
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")(using db2)
+      }
+
+      // But a new unique value should work
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Charlie');")(using db2)
+      val result = executeSQL("SELECT * FROM t;")(using db2)
+      val table = result.collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+      db2.close()
+    }
+
+    "update enforces unique constraint" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given DB = db
+
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
+      }
+      db.close()
+    }
+  }

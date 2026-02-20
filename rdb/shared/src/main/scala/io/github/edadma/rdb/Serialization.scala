@@ -526,6 +526,7 @@ def deserializeTableHeader(pageData: Array[Byte], store: PageStore): (PageId, Ma
 def serializeCatalog(
     enumTypes: Iterable[(String, Type)],
     tableEntries: Iterable[CatalogTableEntry],
+    indexEntries: Iterable[CatalogIndexEntry],
     batch: WriteBatch,
     pageSize: Int,
 ): Array[Byte] =
@@ -605,6 +606,17 @@ def serializeCatalog(
           for col <- refCols do writeString(out, col)
         case _ => // skip non-serializable constraints
 
+  // Indexes
+  out.writeShort(indexEntries.size)
+  for entry <- indexEntries do
+    writeString(out, entry.name)
+    writeString(out, entry.tableName)
+    out.writeByte(if entry.unique then 1 else 0)
+    out.writeInt(entry.treeRecordPage)
+    out.writeLong(entry.nextRowId)
+    out.writeShort(entry.columns.size)
+    for col <- entry.columns do writeString(out, col)
+
   out.flush()
   baos.toByteArray
 
@@ -616,10 +628,19 @@ case class CatalogTableEntry(
     constraints: Seq[Spec],
 )
 
+case class CatalogIndexEntry(
+    name: String,
+    tableName: String,
+    columns: Seq[String],
+    unique: Boolean,
+    treeRecordPage: PageId,
+    nextRowId: Long,
+)
+
 def deserializeCatalog(
     data: Array[Byte],
     store: PageStore,
-): (Seq[(String, EnumType)], Seq[CatalogTableEntry]) =
+): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry]) =
   val in = new DataInputStream(new ByteArrayInputStream(data))
 
   // Enum types
@@ -704,7 +725,21 @@ def deserializeCatalog(
 
     tables += CatalogTableEntry(name, headerPage, columns.toSeq, primaryKey, allConstraints)
 
-  (enums.toSeq, tables.toSeq)
+  // Indexes (may not be present in older catalogs)
+  val indexEntries = new ArrayBuffer[CatalogIndexEntry]
+  if in.available() > 0 then
+    val indexCount = in.readUnsignedShort()
+    for _ <- 0 until indexCount do
+      val idxName = readString(in)
+      val idxTableName = readString(in)
+      val idxUnique = in.readByte() != 0
+      val idxTreeRecordPage = in.readInt()
+      val idxNextRowId = in.readLong()
+      val idxColCount = in.readUnsignedShort()
+      val idxCols = (0 until idxColCount).map(_ => readString(in))
+      indexEntries += CatalogIndexEntry(idxName, idxTableName, idxCols, idxUnique, idxTreeRecordPage, idxNextRowId)
+
+  (enums.toSeq, tables.toSeq, indexEntries.toSeq)
 
 private def writeString(out: DataOutputStream, s: String): Unit =
   val bytes = s.getBytes("UTF-8")
