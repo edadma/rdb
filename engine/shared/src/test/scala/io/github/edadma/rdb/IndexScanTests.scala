@@ -183,4 +183,179 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
     ids shouldBe Set(1, 3)
   }
 
+  // --- Composite index scan tests ---
+
+  "composite full match on 3-column non-unique index" in {
+    val t = query(
+      """
+        |CREATE TABLE events (
+        |  id SERIAL,
+        |  year INT,
+        |  month INT,
+        |  day INT,
+        |  label TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE INDEX idx_ymd ON events (year, month, day);
+        |INSERT INTO events (year, month, day, label) VALUES (2024, 1, 15, 'a');
+        |INSERT INTO events (year, month, day, label) VALUES (2024, 1, 20, 'b');
+        |INSERT INTO events (year, month, day, label) VALUES (2024, 2, 15, 'c');
+        |INSERT INTO events (year, month, day, label) VALUES (2025, 1, 15, 'd');
+        |SELECT label FROM events WHERE year = 2024 AND month = 1 AND day = 15;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 1
+    t.data.head.data(0) shouldBe TextValue("a")
+  }
+
+  "composite prefix match 2-of-3 columns" in {
+    val t = query(
+      """
+        |CREATE TABLE events2 (
+        |  id SERIAL,
+        |  year INT,
+        |  month INT,
+        |  day INT,
+        |  label TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE INDEX idx_ymd2 ON events2 (year, month, day);
+        |INSERT INTO events2 (year, month, day, label) VALUES (2024, 1, 10, 'a');
+        |INSERT INTO events2 (year, month, day, label) VALUES (2024, 1, 20, 'b');
+        |INSERT INTO events2 (year, month, day, label) VALUES (2024, 2, 10, 'c');
+        |INSERT INTO events2 (year, month, day, label) VALUES (2025, 1, 10, 'd');
+        |SELECT label FROM events2 WHERE year = 2024 AND month = 1;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val labels = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    labels shouldBe Set("a", "b")
+  }
+
+  "composite prefix match 1-of-3 columns falls back to single-column or scan" in {
+    val t = query(
+      """
+        |CREATE TABLE events3 (
+        |  id SERIAL,
+        |  year INT,
+        |  month INT,
+        |  day INT,
+        |  label TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE INDEX idx_ymd3 ON events3 (year, month, day);
+        |INSERT INTO events3 (year, month, day, label) VALUES (2024, 1, 10, 'a');
+        |INSERT INTO events3 (year, month, day, label) VALUES (2024, 2, 20, 'b');
+        |INSERT INTO events3 (year, month, day, label) VALUES (2025, 1, 10, 'c');
+        |SELECT label FROM events3 WHERE year = 2024;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val labels = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    labels shouldBe Set("a", "b")
+  }
+
+  "composite with residual filter on non-indexed column" in {
+    val t = query(
+      """
+        |CREATE TABLE sales (
+        |  id SERIAL,
+        |  region TEXT,
+        |  year INT,
+        |  amount INT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE INDEX idx_ry ON sales (region, year);
+        |INSERT INTO sales (region, year, amount) VALUES ('east', 2024, 100);
+        |INSERT INTO sales (region, year, amount) VALUES ('east', 2024, 500);
+        |INSERT INTO sales (region, year, amount) VALUES ('east', 2025, 200);
+        |INSERT INTO sales (region, year, amount) VALUES ('west', 2024, 300);
+        |SELECT amount FROM sales WHERE region = 'east' AND year = 2024 AND amount > 200;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 1
+    t.data.head.data(0).asInstanceOf[NumberValue].value.intValue shouldBe 500
+  }
+
+  "composite full match on unique index" in {
+    val t = query(
+      """
+        |CREATE TABLE coords (
+        |  x INT,
+        |  y INT,
+        |  label TEXT
+        |);
+        |CREATE UNIQUE INDEX idx_xy ON coords (x, y);
+        |INSERT INTO coords (x, y, label) VALUES (1, 2, 'a');
+        |INSERT INTO coords (x, y, label) VALUES (1, 3, 'b');
+        |INSERT INTO coords (x, y, label) VALUES (2, 2, 'c');
+        |SELECT label FROM coords WHERE x = 1 AND y = 2;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 1
+    t.data.head.data(0) shouldBe TextValue("a")
+  }
+
+  "composite prefix match on unique index" in {
+    val t = query(
+      """
+        |CREATE TABLE coords2 (
+        |  x INT,
+        |  y INT,
+        |  label TEXT
+        |);
+        |CREATE UNIQUE INDEX idx_xy2 ON coords2 (x, y);
+        |INSERT INTO coords2 (x, y, label) VALUES (1, 2, 'a');
+        |INSERT INTO coords2 (x, y, label) VALUES (1, 3, 'b');
+        |INSERT INTO coords2 (x, y, label) VALUES (2, 2, 'c');
+        |SELECT label FROM coords2 WHERE x = 1;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val labels = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    labels shouldBe Set("a", "b")
+  }
+
+  "composite conjuncts in reverse order" in {
+    val t = query(
+      """
+        |CREATE TABLE pairs (
+        |  a INT,
+        |  b INT,
+        |  val TEXT
+        |);
+        |CREATE INDEX idx_ab ON pairs (a, b);
+        |INSERT INTO pairs (a, b, val) VALUES (1, 10, 'x');
+        |INSERT INTO pairs (a, b, val) VALUES (1, 20, 'y');
+        |INSERT INTO pairs (a, b, val) VALUES (2, 10, 'z');
+        |SELECT val FROM pairs WHERE b = 10 AND a = 1;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 1
+    t.data.head.data(0) shouldBe TextValue("x")
+  }
+
+  "composite gap in prefix becomes residual" in {
+    val t = query(
+      """
+        |CREATE TABLE triples (
+        |  a INT,
+        |  b INT,
+        |  c INT,
+        |  label TEXT
+        |);
+        |CREATE INDEX idx_abc ON triples (a, b, c);
+        |INSERT INTO triples (a, b, c, label) VALUES (1, 10, 100, 'hit');
+        |INSERT INTO triples (a, b, c, label) VALUES (1, 20, 100, 'also');
+        |INSERT INTO triples (a, b, c, label) VALUES (1, 10, 200, 'miss');
+        |INSERT INTO triples (a, b, c, label) VALUES (2, 10, 100, 'nope');
+        |SELECT label FROM triples WHERE a = 1 AND c = 100;
+        |""".stripMargin,
+    )
+    // Gap at b: only prefix a=1 used, c=100 becomes residual filter
+    t.data.length shouldBe 2
+    val labels = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    labels shouldBe Set("hit", "also")
+  }
+
 }

@@ -163,7 +163,17 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
     index match
       case midx: MemoryTableIndex =>
         if midx.meta.unique then
-          Some(midx.tree.search(key).map(node => Iterator(nodeToRow(node))).getOrElse(Iterator.empty))
+          if key.length == midx.meta.columns.length then
+            // Full key: exact lookup
+            Some(midx.tree.search(key).map(node => Iterator(nodeToRow(node))).getOrElse(Iterator.empty))
+          else
+            // Prefix key: bounded scan with prefix match
+            val iter = midx.tree.boundedIterator((Bound.Gte, key))
+            val matching = iter.takeWhile { case (k, _) =>
+              val prefix = k.take(key.length)
+              ValueSeqOrdering.compare(prefix, key) == 0
+            }.map { case (_, node) => nodeToRow(node) }
+            Some(matching)
         else
           val iter = midx.tree.boundedIterator((Bound.Gte, key))
           val matching = iter.takeWhile { case (k, _) =>

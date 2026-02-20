@@ -326,9 +326,46 @@ private def isNonColumnExpr(table: Table, expr: Expr): Boolean =
 def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
   val conjuncts = flattenAnd(cond)
 
-  // Try to find an equality match: col = expr or expr = col
-  def tryEquality: Option[(TableIndex, Expr, Int)] =
-    conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
+  // Try composite index: collect all col = expr equalities, find best multi-column index with longest contiguous prefix
+  def tryComposite: Option[Process] =
+    // Build map: column name → (value expression, conjunct index) from equality conjuncts
+    val colMap = mutable.Map[String, (Expr, Int)]()
+    conjuncts.zipWithIndex.foreach { case (conj, idx) =>
+      conj match
+        case BinaryExpr(left, "=", right) =>
+          isColumnOf(table, left).foreach { col =>
+            if isNonColumnExpr(table, right) && !colMap.contains(col) then colMap(col) = (right, idx)
+          }
+          isColumnOf(table, right).foreach { col =>
+            if isNonColumnExpr(table, left) && !colMap.contains(col) then colMap(col) = (left, idx)
+          }
+        case _ =>
+    }
+    if colMap.isEmpty then return None
+
+    // For each multi-column index, compute longest contiguous prefix covered by equalities
+    val candidates = table.tableIndexes.values.toSeq.filter(_.meta.columns.length > 1).flatMap { idx =>
+      val prefix = idx.meta.columns.takeWhile(c => colMap.contains(c))
+      if prefix.length >= 2 then // only worth it for 2+ columns matched
+        val keyExprs = prefix.map(c => colMap(c)._1)
+        val usedIndices = prefix.map(c => colMap(c)._2).toSet
+        Some((idx, keyExprs, usedIndices, prefix.length, idx.meta.unique))
+      else None
+    }
+    if candidates.isEmpty then return None
+
+    // Score: more prefix columns first, then unique > non-unique
+    val (bestIdx, keyExprs, usedIndices, _, _) = candidates.sortBy { case (_, _, _, prefixLen, unique) =>
+      (-prefixLen, if unique then 0 else 1)
+    }.head
+
+    val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if !usedIndices.contains(i) => c }
+    val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+    Some(IndexScanProcess(table, bestIdx, PointLookup(keyExprs), residual))
+
+  // Try to find a single-column equality match: col = expr or expr = col
+  def tryEquality: Option[Process] =
+    val found = conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
       conj match
         case BinaryExpr(left, "=", right) =>
           isColumnOf(table, left).flatMap(col => findIndex(table, col).filter(_ => isNonColumnExpr(table, right)).map((ti, _) => (ti, right, idx)))
@@ -336,8 +373,14 @@ def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
         case _ => None
     }.sortBy { case (idx, _, _) => if idx.meta.unique then 0 else 1 }.headOption
 
+    found.map { case (idx, keyExpr, usedIdx) =>
+      val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != usedIdx => c }
+      val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+      IndexScanProcess(table, idx, PointLookup(Seq(keyExpr)), residual)
+    }
+
   // Try to find a range match: lower <= col AND col <= upper (from BETWEEN rewrite)
-  def tryRange: Option[(TableIndex, Expr, Expr, Int, Int)] =
+  def tryRange: Option[Process] =
     val leComps = conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
       conj match
         case BinaryExpr(lower, "<=", colExpr) =>
@@ -350,22 +393,17 @@ def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
           isColumnOf(table, colExpr).flatMap(col => findIndex(table, col).map((ti, _) => (col, ti, upper, idx)))
         case _ => None
     }
-    for
+    val rangeMatch = for
       (col1, idx1, lower, li) <- leComps.headOption
       (col2, idx2, upper, ui) <- geComps.find((c, _, _, i) => c == col1 && i != li)
     yield (idx1, lower, upper, li, ui)
 
-  tryEquality match
-    case Some((idx, keyExpr, usedIdx)) =>
-      val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != usedIdx => c }
+    rangeMatch.map { case (idx, lower, upper, li, ui) =>
+      val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != li && i != ui => c }
       val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
-      Some(IndexScanProcess(table, idx, PointLookup(Seq(keyExpr)), residual))
-    case None =>
-      tryRange match
-        case Some((idx, lower, upper, li, ui)) =>
-          val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != li && i != ui => c }
-          val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
-          Some(IndexScanProcess(table, idx, RangeLookup(Seq(lower), Seq(upper)), residual))
-        case None => None
+      IndexScanProcess(table, idx, RangeLookup(Seq(lower), Seq(upper)), residual)
+    }
+
+  tryComposite.orElse(tryEquality).orElse(tryRange)
 
 def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
