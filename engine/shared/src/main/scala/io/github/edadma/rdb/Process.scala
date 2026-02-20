@@ -30,6 +30,8 @@ case class SeqScanProcess(input: Process, cond: Expr) extends Process:
 sealed trait IndexLookup
 case class PointLookup(keyExprs: Seq[Expr]) extends IndexLookup
 case class RangeLookup(lowerExprs: Seq[Expr], upperExprs: Seq[Expr]) extends IndexLookup
+case class MultiPointLookup(keyExprsList: Seq[Seq[Expr]]) extends IndexLookup
+case class InQueryLookup(query: Expr) extends IndexLookup
 
 case class IndexScanProcess(table: Table, index: TableIndex, lookup: IndexLookup, residual: Option[Expr]) extends Process:
   val meta: Metadata = table.meta
@@ -42,6 +44,17 @@ case class IndexScanProcess(table: Table, index: TableIndex, lookup: IndexLookup
         val lo = lower.map(e => eval(e, ctx)).toIndexedSeq
         val hi = upper.map(e => eval(e, ctx)).toIndexedSeq
         table.indexRangeScan(index, lo, hi).getOrElse(table.iterator(ctx))
+      case MultiPointLookup(keyExprsList) =>
+        keyExprsList.iterator.flatMap { keyExprs =>
+          val key = keyExprs.map(e => eval(e, ctx)).toIndexedSeq
+          table.indexPointScan(index, key).getOrElse(Iterator.empty)
+        }
+      case InQueryLookup(query) =>
+        val res = teval(query, ctx)
+        if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
+        res.data.map(_.data.head).distinct.iterator.flatMap { v =>
+          table.indexPointScan(index, IndexedSeq(v)).getOrElse(Iterator.empty)
+        }
     residual match
       case Some(cond) => baseIter.filter(row => beval(cond, row +: ctx))
       case None       => baseIter

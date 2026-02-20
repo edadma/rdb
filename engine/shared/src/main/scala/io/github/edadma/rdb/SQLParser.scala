@@ -474,6 +474,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val booleanPrimary: P[Expr] = positioned(
     kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
+      expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ kw("ARRAY") ~ "[" ~ expressions ~ "]" ~ ")" ^^ {
+        case e ~ _ ~ _ ~ _ ~ _ ~ _ ~ es ~ _ ~ _ => InSeqExpr(e, "IN", es)
+      } |
+      expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ query ~ ")" ^^ {
+        case e ~ _ ~ _ ~ _ ~ q ~ _ => InQueryExpr(e, "IN", q)
+      } |
       expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       expression ~ (kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN" | kw("BETWEEN")) ~ expression ~ kw(
         "AND",

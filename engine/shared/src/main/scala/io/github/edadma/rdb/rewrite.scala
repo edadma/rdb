@@ -404,6 +404,28 @@ def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
       IndexScanProcess(table, idx, RangeLookup(Seq(lower), Seq(upper)), residual)
     }
 
-  tryComposite.orElse(tryEquality).orElse(tryRange)
+  def tryInList: Option[Process] =
+    conjuncts.zipWithIndex.flatMap { case (conj, idx) =>
+      conj match
+        case InSeqExpr(col, op, exprs) if !op.contains("NOT") =>
+          isColumnOf(table, col).flatMap(colName =>
+            findIndex(table, colName).map { case (tableIdx, _) =>
+              val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != idx => c }
+              val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+              IndexScanProcess(table, tableIdx, MultiPointLookup(exprs.map(e => Seq(e))), residual)
+            }
+          )
+        case InQueryExpr(col, op, query) if !op.contains("NOT") =>
+          isColumnOf(table, col).flatMap(colName =>
+            findIndex(table, colName).map { case (tableIdx, _) =>
+              val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != idx => c }
+              val residual = residualConjuncts.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+              IndexScanProcess(table, tableIdx, InQueryLookup(query), residual)
+            }
+          )
+        case _ => None
+    }.headOption
+
+  tryComposite.orElse(tryEquality).orElse(tryInList).orElse(tryRange)
 
 def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

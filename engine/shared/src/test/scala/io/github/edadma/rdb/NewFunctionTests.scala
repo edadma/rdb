@@ -431,6 +431,67 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "starts_with" - {
+    "returns true when string starts with prefix" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT starts_with('hello world', 'hello') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "returns false when string does not start with prefix" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT starts_with('hello world', 'world') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "works with column values" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name TEXT);
+          |INSERT INTO t (name) VALUES ('apple'), ('banana'), ('avocado');
+          |SELECT name FROM t WHERE starts_with(name, 'a') = TRUE;
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 2
+      val names = table.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+      names shouldBe Set("apple", "avocado")
+    }
+  }
+
+  "ends_with" - {
+    "returns true when string ends with suffix" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT ends_with('hello world', 'world') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "returns false when string does not end with suffix" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT ends_with('hello world', 'hello') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
   // New aggregate functions
 
   "string_agg" - {

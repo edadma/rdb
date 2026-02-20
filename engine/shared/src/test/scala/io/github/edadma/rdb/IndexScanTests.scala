@@ -358,4 +358,164 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
     labels shouldBe Set("hit", "also")
   }
 
+  // --- IN / ANY index scan tests ---
+
+  "IN list on indexed column uses index" in {
+    val t = query(
+      """
+        |CREATE TABLE colors (
+        |  id SERIAL,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO colors (name) VALUES ('red');
+        |INSERT INTO colors (name) VALUES ('green');
+        |INSERT INTO colors (name) VALUES ('blue');
+        |INSERT INTO colors (name) VALUES ('yellow');
+        |INSERT INTO colors (name) VALUES ('purple');
+        |SELECT name FROM colors WHERE id IN (2, 4);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val names = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    names shouldBe Set("green", "yellow")
+  }
+
+  "= ANY(ARRAY[...]) on indexed column" in {
+    val t = query(
+      """
+        |CREATE TABLE fruits (
+        |  id SERIAL,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO fruits (name) VALUES ('apple');
+        |INSERT INTO fruits (name) VALUES ('banana');
+        |INSERT INTO fruits (name) VALUES ('cherry');
+        |INSERT INTO fruits (name) VALUES ('date');
+        |SELECT name FROM fruits WHERE id = ANY(ARRAY[1, 3]);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val names = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    names shouldBe Set("apple", "cherry")
+  }
+
+  "= ANY(subquery) returns correct results" in {
+    val t = query(
+      """
+        |CREATE TABLE departments (
+        |  id SERIAL,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE TABLE employees (
+        |  id SERIAL,
+        |  dept_id INT,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO departments (name) VALUES ('Engineering');
+        |INSERT INTO departments (name) VALUES ('Marketing');
+        |INSERT INTO departments (name) VALUES ('Sales');
+        |INSERT INTO employees (dept_id, name) VALUES (1, 'Alice');
+        |INSERT INTO employees (dept_id, name) VALUES (2, 'Bob');
+        |INSERT INTO employees (dept_id, name) VALUES (1, 'Charlie');
+        |INSERT INTO employees (dept_id, name) VALUES (3, 'Diana');
+        |SELECT name FROM departments WHERE id = ANY(SELECT dept_id FROM employees);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 3
+    val names = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    names shouldBe Set("Engineering", "Marketing", "Sales")
+  }
+
+  "IN subquery on indexed column" in {
+    val t = query(
+      """
+        |CREATE TABLE categories (
+        |  id SERIAL,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |CREATE TABLE products2 (
+        |  id SERIAL,
+        |  cat_id INT,
+        |  name TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO categories (name) VALUES ('Electronics');
+        |INSERT INTO categories (name) VALUES ('Books');
+        |INSERT INTO categories (name) VALUES ('Clothing');
+        |INSERT INTO products2 (cat_id, name) VALUES (1, 'Phone');
+        |INSERT INTO products2 (cat_id, name) VALUES (2, 'Novel');
+        |SELECT name FROM categories WHERE id IN (SELECT cat_id FROM products2);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val names = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    names shouldBe Set("Electronics", "Books")
+  }
+
+  "IN list with residual filter on non-indexed column" in {
+    val t = query(
+      """
+        |CREATE TABLE widgets (
+        |  id SERIAL,
+        |  color TEXT,
+        |  weight INT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO widgets (color, weight) VALUES ('red', 10);
+        |INSERT INTO widgets (color, weight) VALUES ('blue', 20);
+        |INSERT INTO widgets (color, weight) VALUES ('red', 30);
+        |INSERT INTO widgets (color, weight) VALUES ('green', 40);
+        |SELECT color, weight FROM widgets WHERE id IN (1, 2, 3) AND weight > 15;
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val results = t.data.map(r => (r.data(0).asInstanceOf[TextValue].s, r.data(1).asInstanceOf[NumberValue].value.intValue)).toSet
+    results shouldBe Set(("blue", 20), ("red", 30))
+  }
+
+  "NOT IN still works correctly (no index optimization)" in {
+    val t = query(
+      """
+        |CREATE TABLE letters (
+        |  id SERIAL,
+        |  ch TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO letters (ch) VALUES ('a');
+        |INSERT INTO letters (ch) VALUES ('b');
+        |INSERT INTO letters (ch) VALUES ('c');
+        |INSERT INTO letters (ch) VALUES ('d');
+        |SELECT ch FROM letters WHERE id NOT IN (2, 4);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val chs = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    chs shouldBe Set("a", "c")
+  }
+
+  "= ANY(ARRAY[...]) on non-indexed column falls back to scan" in {
+    val t = query(
+      """
+        |CREATE TABLE animals (
+        |  id SERIAL,
+        |  species TEXT,
+        |  PRIMARY KEY (id)
+        |);
+        |INSERT INTO animals (species) VALUES ('cat');
+        |INSERT INTO animals (species) VALUES ('dog');
+        |INSERT INTO animals (species) VALUES ('bird');
+        |INSERT INTO animals (species) VALUES ('fish');
+        |SELECT species FROM animals WHERE species = ANY(ARRAY['cat', 'fish']);
+        |""".stripMargin,
+    )
+    t.data.length shouldBe 2
+    val species = t.data.map(_.data(0).asInstanceOf[TextValue].s).toSet
+    species shouldBe Set("cat", "fish")
+  }
+
 }

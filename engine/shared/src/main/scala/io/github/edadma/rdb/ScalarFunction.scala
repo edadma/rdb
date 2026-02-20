@@ -412,6 +412,17 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(NumberValue(_, n)) => TextValue(n.intValue.toChar.toString) },
       TextType,
     ),
+    // starts_with / ends_with
+    ScalarFunction(
+      "starts_with",
+      { case Seq(TextValue(s), TextValue(prefix)) => BooleanValue(s.startsWith(prefix)) },
+      BooleanType,
+    ),
+    ScalarFunction(
+      "ends_with",
+      { case Seq(TextValue(s), TextValue(suffix)) => BooleanValue(s.endsWith(suffix)) },
+      BooleanType,
+    ),
     // regexp_replace(text, pattern, replacement)
     ScalarFunction(
       "regexp_replace",
