@@ -153,6 +153,15 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
   protected def hasNullInColumn(index: Int): Boolean =
     data.nodeIterator.exists(_.element(index).isNull)
 
+  def truncate(): Unit =
+    for node <- data.nodeIterator.toList do node.unlink
+    autoMap.clear()
+    for (idxName, idx) <- tableIndexes do
+      given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
+      val midx = idx.asInstanceOf[MemoryTableIndex]
+      val newTree = new MemoryBPlusTree[IndexedSeq[Value], DLListNode[Array[Value]]](50)
+      tableIndexes(idxName) = MemoryTableIndex(midx.meta, midx.columnIndices, newTree, 0L)
+
   def iterator(ctx: Seq[Row]): RowIterator =
     data.nodeIterator map (n => Row(n.element to immutable.ArraySeq, meta, Some(updater(n)), Some(deleter(n))))
 

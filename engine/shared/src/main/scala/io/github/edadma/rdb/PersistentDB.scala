@@ -630,6 +630,23 @@ class PersistentTable(
 
     firstDataPage = NoPage
 
+  def truncate(): Unit =
+    store.modify { batch =>
+      freeAllDataPages(batch)
+      // Clear and rebuild index trees
+      for (idxName, idx) <- tableIndexes do
+        val pidx = idx.asInstanceOf[PersistentTableIndex]
+        given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
+        val keyCodec = StowCodec.valueSeq(using batch, store.pageSize)
+        val tree = openIndexTree(pidx, batch)
+        // Delete all entries by iterating
+        val allKeys = tree.iterator.map(_._1).toVector
+        for key <- allKeys do tree.delete(key)
+        tableIndexes(idxName) = PersistentTableIndex(pidx.meta.copy(nextRowId = 0), pidx.columnIndices, 0L)
+      autoMap.clear()
+      writeHeaderPage(batch)
+    }
+
   // Override DDL methods to persist catalog after schema changes
   override def addColumnToTable(spec: ColumnSpec, defaultValue: Value): Unit =
     super.addColumnToTable(spec, defaultValue)

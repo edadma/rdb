@@ -289,6 +289,17 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
           count += 1
 
         DeleteResult(count)
+      case TruncateCommand(id @ Ident(table)) =>
+        val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
+        // Enforce FK constraints: fail if any child table has rows referencing this table
+        val childFKs = db.childForeignKeys(table)
+        for (childTable, fk) <- childFKs do
+          for row <- childTable.iterator(Nil) do
+            val childValues = fk.columns.map(c => row.data(childTable.columnMap(c)))
+            if !childValues.forall(_.isNull) then
+              sys.error(s"cannot truncate table '$table': rows in '${childTable.name}' reference it")
+        t.truncate()
+        TruncateResult(table)
       case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
         if !db.hasTable(tableName) then problem(tid, s"unknown table: $tableName")
         if db.hasIndex(indexName) then problem(id, s"index '$indexName' already exists")

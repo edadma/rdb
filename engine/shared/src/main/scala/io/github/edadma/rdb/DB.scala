@@ -266,6 +266,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   protected def dropColumnData(index: Int): Unit
   protected def convertColumnData(index: Int, newType: Type): Unit
   protected def hasNullInColumn(index: Int): Boolean
+  def truncate(): Unit
 
   protected def rebuildMeta(): Unit =
     _meta = Metadata(columns.to(immutable.ArraySeq).map(s => ColumnMetadata(Some(name), s.name, s.typ)))

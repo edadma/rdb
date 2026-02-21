@@ -12,6 +12,7 @@ case class DropTypeResult(name: String)                             extends Resu
 case class CreateTypeResult(typ: String)                            extends Result
 case class UpdateResult(rows: Int)                                  extends Result
 case class DeleteResult(rows: Int)                                  extends Result
+case class TruncateResult(table: String)                            extends Result
 case class AlterTableResult()                                       extends Result
 case class PrepareResult(name: String)    extends Result
 case class DeallocateResult(name: String) extends Result

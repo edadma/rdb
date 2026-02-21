@@ -25,6 +25,7 @@ case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraint
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
 case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], from: Option[Seq[Expr]], cond: Option[Expr]) extends Command
 case class DeleteCommand(table: Ident, cond: Option[Expr])                                               extends Command
+case class TruncateCommand(table: Ident)                                                                 extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration)                                       extends Command
 case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Boolean = false)         extends Command
 case class CreateIndexCommand(name: Ident, table: Ident, columns: Seq[Ident], unique: Boolean)         extends Command

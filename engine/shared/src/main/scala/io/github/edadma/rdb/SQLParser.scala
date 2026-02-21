@@ -64,7 +64,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "real", "references", "rename", "restrict", "returning", "right", "rollback",
       "select", "serial", "set", "smallint", "smallserial", "some",
       "table", "text", "then", "time", "timestamp", "to", "transaction",
-      "true", "type",
+      "true", "truncate", "type",
       "union", "unique", "update", "uuid",
       "values",
       "when", "where", "with", "without",
@@ -546,6 +546,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       DeleteCommand(t, c)
     }
 
+  lazy val truncate: P[Command] =
+    kw("TRUNCATE") ~> opt(kw("TABLE")) ~> identifier ^^ TruncateCommand.apply
+
   lazy val baseTyp: P[Either[Type, Ident]] =
     kw("BOOLEAN") ^^^ Left(BooleanType)
       | kw("SMALLINT") ^^^ Left(SmallintType)
@@ -674,6 +677,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       createType |
       update |
       delete |
+      truncate |
       alterTable
 
   lazy val commands: P[Seq[Command]] = rep1sep(command, ";") <~ opt(";")
