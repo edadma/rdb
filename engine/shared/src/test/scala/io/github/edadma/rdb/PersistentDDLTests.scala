@@ -116,8 +116,10 @@ class PersistentDDLTests extends PersistentTestBase:
       locally {
         val db = PersistentDB.open(tmpFile)
         given Session = db.connect()
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id) VALUES (1);")
+        suppressStderr {
+          assertThrows[RuntimeException] {
+            executeSQL("INSERT INTO t (id) VALUES (1);")
+          }
         }
         db.close()
       }

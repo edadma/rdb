@@ -188,31 +188,35 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
 
     "inline PRIMARY KEY implies NOT NULL" in {
       // inserting NULL into a PK column should fail
-      val ex = intercept[Exception] {
-        test(
-          """
-            |CREATE TABLE t2 (
-            | id INT PRIMARY KEY,
-            | name TEXT
-            |);
-            |INSERT INTO t2 (id, name) VALUES (NULL, 'test');
-            |""".trim.stripMargin
-        )
+      val ex = suppressStderr {
+        intercept[Exception] {
+          test(
+            """
+              |CREATE TABLE t2 (
+              | id INT PRIMARY KEY,
+              | name TEXT
+              |);
+              |INSERT INTO t2 (id, name) VALUES (NULL, 'test');
+              |""".trim.stripMargin
+          )
+        }
       }
       ex.getMessage should include("is required")
     }
 
     "column-level + table-level PRIMARY KEY conflict" in {
-      val ex = intercept[Exception] {
-        test(
-          """
-            |CREATE TABLE t3 (
-            | id INT PRIMARY KEY,
-            | name TEXT,
-            | PRIMARY KEY (id)
-            |);
-            |""".trim.stripMargin
+      val ex = suppressStderr {
+        intercept[Exception] {
+          test(
+            """
+              |CREATE TABLE t3 (
+              | id INT PRIMARY KEY,
+              | name TEXT,
+              | PRIMARY KEY (id)
+              |);
+              |""".trim.stripMargin
         )
+        }
       }
       ex.getMessage should include("column-level and table-level PRIMARY KEY")
     }

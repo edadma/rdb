@@ -196,8 +196,10 @@ class PersistentTransactionTests extends PersistentTestBase:
       executeSQL("BEGIN;")
 
       // Insert a NULL into a NOT NULL column — should fail
-      intercept[Exception] {
-        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+      suppressStderr {
+        intercept[Exception] {
+          executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+        }
       }
 
       // Subsequent DML should be rejected
@@ -221,8 +223,10 @@ class PersistentTransactionTests extends PersistentTestBase:
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
-      intercept[Exception] {
-        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+      suppressStderr {
+        intercept[Exception] {
+          executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
+        }
       }
 
       executeSQL("ROLLBACK;")
@@ -245,8 +249,10 @@ class PersistentTransactionTests extends PersistentTestBase:
       executeSQL("INSERT INTO t (id) VALUES (1);")
       executeSQL("BEGIN;")
 
-      intercept[Exception] {
-        executeSQL("INSERT INTO t (id) VALUES (NULL);")
+      suppressStderr {
+        intercept[Exception] {
+          executeSQL("INSERT INTO t (id) VALUES (NULL);")
+        }
       }
 
       the[RuntimeException] thrownBy {

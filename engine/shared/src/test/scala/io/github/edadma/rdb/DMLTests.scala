@@ -326,13 +326,15 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "quoted uppercase column not accessible via unquoted name" in {
-      an[Exception] should be thrownBy query(
-        """
-          |CREATE TABLE t ("UPPER" TEXT);
-          |INSERT INTO t ("UPPER") VALUES ('val');
-          |SELECT UPPER FROM t;
-          |""".trim.stripMargin
-      )
+      suppressStderr {
+        an[Exception] should be thrownBy query(
+          """
+            |CREATE TABLE t ("UPPER" TEXT);
+            |INSERT INTO t ("UPPER") VALUES ('val');
+            |SELECT UPPER FROM t;
+            |""".trim.stripMargin
+        )
+      }
     }
 
     "quoted table name preserves case" in {

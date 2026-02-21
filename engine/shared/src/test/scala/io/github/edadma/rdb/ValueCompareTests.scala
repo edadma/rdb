@@ -2,8 +2,12 @@ package io.github.edadma.rdb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import java.io.{ByteArrayOutputStream, PrintStream}
 
 class ValueCompareTests extends AnyFreeSpec with Matchers {
+
+  private def suppressStderr[A](block: => A): A =
+    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
 
   "NullValue comparison" - {
     "null equals null" in {
@@ -129,14 +133,18 @@ class ValueCompareTests extends AnyFreeSpec with Matchers {
 
   "non-orderable types should throw" - {
     "ArrayValue" in {
-      an[RuntimeException] should be thrownBy {
-        ArrayValue(IndexedSeq(NumberValue(1))).compare(ArrayValue(IndexedSeq(NumberValue(2))))
+      suppressStderr {
+        an[RuntimeException] should be thrownBy {
+          ArrayValue(IndexedSeq(NumberValue(1))).compare(ArrayValue(IndexedSeq(NumberValue(2))))
+        }
       }
     }
 
     "ObjectValue" in {
-      an[RuntimeException] should be thrownBy {
-        ObjectValue(Seq("a" -> NumberValue(1))).compare(ObjectValue(Seq("b" -> NumberValue(2))))
+      suppressStderr {
+        an[RuntimeException] should be thrownBy {
+          ObjectValue(Seq("a" -> NumberValue(1))).compare(ObjectValue(Seq("b" -> NumberValue(2))))
+        }
       }
     }
   }

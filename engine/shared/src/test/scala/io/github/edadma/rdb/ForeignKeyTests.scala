@@ -2,8 +2,12 @@ package io.github.edadma.rdb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import java.io.{ByteArrayOutputStream, PrintStream}
 
 class ForeignKeyTests extends AnyFreeSpec with Matchers:
+
+  private def suppressStderr[A](block: => A): A =
+    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
 
   private def execDB(sql: String): (Seq[Result], DB) =
     given session: Session = new MemoryDB().connect()
@@ -38,8 +42,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Alice', 99);")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Alice', 99);")
+        }
       }
     }
 
@@ -88,8 +94,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Alice', 99);")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Alice', 99);")
+        }
       }
       // Valid insert works
       executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Alice', 1);")
@@ -116,8 +124,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
       // Valid
       executeSQL("INSERT INTO child (x, y) VALUES (1, 2);")
       // Invalid
-      assertThrows[RuntimeException] {
-        executeSQL("INSERT INTO child (x, y) VALUES (1, 3);")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("INSERT INTO child (x, y) VALUES (1, 3);")
+        }
       }
     }
   }
@@ -138,8 +148,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |INSERT INTO employees (name, dept_id) VALUES ('Alice', 1);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("DELETE FROM departments WHERE id = 1;")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("DELETE FROM departments WHERE id = 1;")
+        }
       }
     }
 
@@ -247,8 +259,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |INSERT INTO employees (name, dept_id) VALUES ('Alice', 1);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("UPDATE departments SET id = 99 WHERE id = 1;")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("UPDATE departments SET id = 99 WHERE id = 1;")
+        }
       }
     }
 
@@ -301,8 +315,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |INSERT INTO employees (name, dept_id) VALUES ('Alice', 1);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("UPDATE employees SET dept_id = 99 WHERE name = 'Alice';")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("UPDATE employees SET dept_id = 99 WHERE name = 'Alice';")
+        }
       }
     }
 
@@ -330,30 +346,34 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
   "DDL" - {
     "CREATE TABLE with FK to non-existent table fails" in {
       given session: Session = new MemoryDB().connect()
-      assertThrows[RuntimeException] {
-        executeSQL(
-          """CREATE TABLE child (
-            |  id INTEGER,
-            |  parent_id INTEGER,
-            |  FOREIGN KEY (parent_id) REFERENCES nonexistent(id)
-            |);
-            |""".stripMargin
-        )
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL(
+            """CREATE TABLE child (
+              |  id INTEGER,
+              |  parent_id INTEGER,
+              |  FOREIGN KEY (parent_id) REFERENCES nonexistent(id)
+              |);
+              |""".stripMargin
+          )
+        }
       }
     }
 
     "CREATE TABLE with FK to non-existent column fails" in {
       given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));")
-      assertThrows[RuntimeException] {
-        executeSQL(
-          """CREATE TABLE child (
-            |  id INTEGER,
-            |  parent_id INTEGER,
-            |  FOREIGN KEY (parent_id) REFERENCES parent(nope)
-            |);
-            |""".stripMargin
-        )
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL(
+            """CREATE TABLE child (
+              |  id INTEGER,
+              |  parent_id INTEGER,
+              |  FOREIGN KEY (parent_id) REFERENCES parent(nope)
+              |);
+              |""".stripMargin
+          )
+        }
       }
     }
 
@@ -368,8 +388,10 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |);
           |""".stripMargin
       )
-      assertThrows[RuntimeException] {
-        executeSQL("DROP TABLE departments;")
+      suppressStderr {
+        assertThrows[RuntimeException] {
+          executeSQL("DROP TABLE departments;")
+        }
       }
     }
 

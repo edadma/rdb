@@ -172,6 +172,18 @@ Executes one or more SQL statements separated by `;`. Returns an array of result
 |--------|------|---------|-------------|
 | `rowMode` | `'object' \| 'array'` | constructor default | Row format for this call |
 
+### `db.prepare(sql)`
+
+Creates a prepared statement with `$1`, `$2`, ... parameter placeholders. Returns a statement object with an `execute(params, options?)` method.
+
+```javascript
+const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
+const [{ rows }] = stmt.execute([42]);
+
+// With options
+const [{ rows }] = stmt.execute([42], { rowMode: 'array' });
+```
+
 ### Result Types
 
 Every result has a `command` field for easy discrimination:

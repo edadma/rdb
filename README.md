@@ -73,7 +73,7 @@ const arrayDb = new ConnectSQL({ rowMode: 'array' });
 ```scala
 import io.github.edadma.rdb.*
 
-given DB = new MemoryDB
+given Session = new MemoryDB().connect()
 
 val results = executeSQL("""
   CREATE TABLE products (
@@ -103,7 +103,8 @@ results.foreach(println)
 import io.github.edadma.rdb.*
 
 // Create a new persistent database
-given DB = PersistentDB.create("mydata.db", 4096)
+val db = PersistentDB.create("mydata.db", 4096)
+given Session = db.connect()
 
 executeSQL("""
   CREATE TABLE users (
@@ -119,12 +120,13 @@ executeSQL("""
 db.close()
 
 // Reopen existing database — all tables, data, and auto-increment state are restored
-given DB = PersistentDB.open("mydata.db")
+val db2 = PersistentDB.open("mydata.db")
+given Session = db2.connect()
 
 val results = executeSQL("SELECT * FROM users")
 results.foreach(println)
 
-db.close()
+db2.close()
 ```
 
 Persistent databases use crash-safe atomic writes via [stow](https://github.com/edadma/stow), with copy-on-write pages and double-buffered headers. All DDL and DML operations are durable — the catalog (table definitions, enum types, auto-increment state) and row data are persisted automatically.
@@ -525,11 +527,15 @@ class ConnectSQL {
 
 ```scala
 // In-memory database
-given DB = new MemoryDB
+given Session = new MemoryDB().connect()
 
 // Persistent database — create new or reopen existing
-given DB = PersistentDB.create("path/to/db", pageSize = 4096)
-given DB = PersistentDB.open("path/to/db")
+val db = PersistentDB.create("path/to/db", pageSize = 4096)
+given Session = db.connect()
+
+// Reopen existing
+val db = PersistentDB.open("path/to/db")
+given Session = db.connect()
 
 // Execute SQL and get results
 val results: Seq[Result] = executeSQL("SELECT * FROM users")
