@@ -80,6 +80,29 @@ class SessionTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "Auto-increment rollback semantics" - {
+    "auto-increment not reset by rollback (PostgreSQL semantics)" in {
+      val db = new MemoryDB
+      val s1 = db.connect()
+      val s2 = db.connect()
+
+      executeSQL("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT);")(using s1)
+      executeSQL("INSERT INTO t (name) VALUES ('base');")(using s1)
+
+      executeSQL("BEGIN;")(using s1)
+      executeSQL("INSERT INTO t (name) VALUES ('from_s1');")(using s1)
+      executeSQL("INSERT INTO t (name) VALUES ('from_s2');")(using s2)
+      executeSQL("ROLLBACK;")(using s1)
+
+      // This should not conflict with s2's row
+      executeSQL("INSERT INTO t (name) VALUES ('post');")(using s1)
+
+      val table = executeSQL("SELECT * FROM t ORDER BY id;")(using s1)
+        .collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 3
+    }
+  }
+
   "Per-session prepared statements" - {
     "prepared statements are per-session" in {
       val db = new MemoryDB

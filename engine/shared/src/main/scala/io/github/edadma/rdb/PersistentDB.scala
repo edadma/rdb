@@ -7,8 +7,6 @@ import scala.collection.mutable.ArrayBuffer
 
 private case class TransactionSnapshot(
     firstDataPages: Map[String, PageId],
-    autoMaps: Map[String, Map[String, Value]],
-    indexNextRowIds: Map[String, Map[String, Long]],
 )
 
 class PersistentDB private (val store: FilePageStore) extends DB:
@@ -20,21 +18,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
 
   override def snapshot(): TransactionHandle =
     if activeTxn.isDefined then sys.error("PersistentDB supports only one active transaction at a time")
-    // Snapshot per-table state
     val fdpSnap = tables.map { (n, t) =>
       n -> t.asInstanceOf[PersistentTable].firstDataPage
     }.toMap
-    val autoSnap = tables.map { (n, t) =>
-      n -> t.asInstanceOf[PersistentTable].autoMap.toMap
-    }.toMap
-    val idxSnap = tables.map { (n, t) =>
-      n -> t.tableIndexes.map { (idxName, idx) =>
-        idxName -> idx.asInstanceOf[PersistentTableIndex].nextRowId
-      }.toMap
-    }.toMap
     val txn = store.beginTransaction()
     activeTxn = Some(txn)
-    new PersistentTransactionHandle(txn, TransactionSnapshot(fdpSnap, autoSnap, idxSnap))
+    new PersistentTransactionHandle(txn, TransactionSnapshot(fdpSnap))
 
   override def commitSnapshot(handle: TransactionHandle): Unit =
     val h = handle.asInstanceOf[PersistentTransactionHandle]
@@ -44,24 +33,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
   override def rollbackSnapshot(handle: TransactionHandle): Unit =
     val h = handle.asInstanceOf[PersistentTransactionHandle]
     h.txn.rollback()
-    // Restore snapshots
     val snap = h.snap
     for (n, fdp) <- snap.firstDataPages do
       tables.get(n).foreach { t =>
         val pt = t.asInstanceOf[PersistentTable]
         pt.firstDataPage = fdp
-      }
-    for (n, am) <- snap.autoMaps do
-      tables.get(n).foreach { t =>
-        t.asInstanceOf[PersistentTable].autoMap.clear()
-        t.asInstanceOf[PersistentTable].autoMap ++= am
-      }
-    for (n, idxMap) <- snap.indexNextRowIds do
-      tables.get(n).foreach { t =>
-        for (idxName, nrid) <- idxMap do
-          t.tableIndexes.get(idxName).foreach { idx =>
-            idx.asInstanceOf[PersistentTableIndex].nextRowId = nrid
-          }
       }
     activeTxn = None
 

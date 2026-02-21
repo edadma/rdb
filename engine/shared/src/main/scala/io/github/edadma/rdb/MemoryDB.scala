@@ -21,20 +21,10 @@ class MemoryDB extends DB:
 
   private class MemoryTransactionHandle(
       val undoLog: mutable.ArrayBuffer[UndoEntry],
-      val autoMapSnapshot: Map[String, Map[String, Value]],
-      val indexNextRowIdSnapshot: Map[String, Map[String, Long]],
   ) extends TransactionHandle
 
   override def snapshot(): TransactionHandle =
-    val autoSnap = tables.map { case (tname, t) =>
-      tname -> t.asInstanceOf[MemoryTable].autoMap.toMap
-    }.toMap
-    val idxSnap = tables.map { case (tname, t) =>
-      tname -> t.tableIndexes.map { case (iname, idx) =>
-        iname -> idx.asInstanceOf[MemoryTableIndex].nextRowId
-      }.toMap
-    }.toMap
-    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry], autoSnap, idxSnap)
+    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry])
 
   override def commitSnapshot(handle: TransactionHandle): Unit = ()
 
@@ -49,23 +39,6 @@ class MemoryDB extends DB:
         case UndoInsert(table, node) => table.undoInsert(node)
         case UndoDelete(table, data) => table.undoDelete(data)
         case UndoUpdate(table, node, oldData) => table.undoUpdate(node, oldData)
-
-    // Restore auto-increment state from snapshot
-    for (tname, autoState) <- h.autoMapSnapshot do
-      tables.get(tname).foreach { t =>
-        val mt = t.asInstanceOf[MemoryTable]
-        mt.autoMap.clear()
-        mt.autoMap ++= autoState
-      }
-
-    // Restore index nextRowId from snapshot
-    for (tname, idxMap) <- h.indexNextRowIdSnapshot do
-      tables.get(tname).foreach { t =>
-        for (idxName, nrid) <- idxMap do
-          t.tableIndexes.get(idxName).foreach { idx =>
-            idx.asInstanceOf[MemoryTableIndex].nextRowId = nrid
-          }
-      }
 
     currentUndoLog = savedUndoLog
 

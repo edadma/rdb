@@ -66,7 +66,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       table.data(0).data(1) shouldBe TextValue("Alice")
     }
 
-    "ROLLBACK restores auto-increment state" in withDB { db =>
+    "ROLLBACK does not reset auto-increment (PostgreSQL semantics)" in withDB { db =>
       given Session = db
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
       executeSQL("INSERT INTO t (name) VALUES ('first');")
@@ -78,7 +78,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 2
       table.data(0).data(0) shouldBe NumberValue(1)
-      table.data(1).data(0) shouldBe NumberValue(2)
+      table.data(1).data(0) shouldBe NumberValue(3)
     }
 
     "ROLLBACK restores unique index" in withDB { db =>

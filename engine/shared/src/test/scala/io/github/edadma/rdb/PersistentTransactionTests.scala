@@ -64,7 +64,7 @@ class PersistentTransactionTests extends PersistentTestBase:
       db.close()
     }
 
-    "ROLLBACK restores auto-increment state" in {
+    "ROLLBACK does not reset auto-increment (PostgreSQL semantics)" in {
       val db = PersistentDB.create(tmpFile, pageSize)
       given Session = db.connect()
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
@@ -73,12 +73,11 @@ class PersistentTransactionTests extends PersistentTestBase:
       executeSQL("INSERT INTO t (name) VALUES ('second');")
       executeSQL("ROLLBACK;")
 
-      // The next insert after rollback should reuse the rolled-back counter
       executeSQL("INSERT INTO t (name) VALUES ('actual_second');")
       val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 2
       table.data(0).data(0) shouldBe NumberValue(1)
-      table.data(1).data(0) shouldBe NumberValue(2)
+      table.data(1).data(0) shouldBe NumberValue(3)
       db.close()
     }
 
