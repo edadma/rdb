@@ -25,7 +25,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb" % "0.1.2"
+libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.4"
 ```
 
 ## Basic Usage
@@ -152,15 +152,25 @@ Persistent databases use crash-safe atomic writes via [stow](https://github.com/
 | `ENUM` | Custom enumerated types (via `CREATE TYPE ... AS ENUM`) |
 | `INT[]`, `TEXT[]`, etc. | Typed arrays (any base type with `[]` suffix) |
 
+### SQL Compatibility
+
+RDB follows PostgreSQL conventions:
+
+- **Case-insensitive keywords** — `SELECT`, `select`, and `Select` are equivalent
+- **Unquoted identifier folding** — unquoted identifiers fold to lowercase (`CREATE TABLE Users` → table name `users`)
+- **Double-quoted identifiers** — preserve case (`"MixedCase"` stays as-is)
+- **String escaping** — doubled single quotes (`'it''s'`) and E-strings (`E'it\'s'`)
+- **Operators** — both `!=` and `<>` for not-equal
+
 ### Type Casting
 
-Use the `::` operator or `CAST` to convert between types:
+Use the `::` operator or `CAST(expr AS type)` to convert between types:
 
 ```sql
 SELECT '2024-06-15'::DATE;
-SELECT '14:30:00'::TIME;
+SELECT CAST('14:30:00' AS TIME);
 SELECT '2 hours 30 minutes'::INTERVAL;
-SELECT val::TEXT;
+SELECT CAST(val AS TEXT);
 SELECT '42'::INT;
 SELECT 1::BOOLEAN;
 SELECT EXTRACT(year FROM created_at);
@@ -177,16 +187,33 @@ CREATE TABLE orders (
   amount NUMERIC(10,2),
   status order_status,
   tags INT[],
-  metadata JSON
+  metadata JSON,
+  PRIMARY KEY (id)
 );
+
+CREATE TABLE IF NOT EXISTS orders (...);
+
+-- Foreign key constraints
+CREATE TABLE line_items (
+  id SERIAL,
+  order_id UUID REFERENCES orders (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  product TEXT NOT NULL
+);
+
+-- Indexes
+CREATE INDEX idx_orders_status ON orders (status);
+CREATE UNIQUE INDEX idx_orders_email ON orders (email);
 
 ALTER TABLE orders ADD COLUMN notes TEXT;
 ALTER TABLE orders DROP COLUMN notes;
 ALTER TABLE orders RENAME COLUMN amount TO total;
 ALTER TABLE orders RENAME TO purchases;
 
+TRUNCATE TABLE orders;
+
 DROP TABLE orders;
 DROP TABLE IF EXISTS orders;
+DROP INDEX idx_orders_status;
 DROP TYPE order_status CASCADE;
 ```
 
@@ -200,9 +227,22 @@ INSERT INTO orders (customer_name, amount)
 VALUES ('Bob Johnson', 75.50)
 RETURNING id;
 
+-- Insert from a query
+INSERT INTO archive (customer_name, amount)
+SELECT customer_name, amount FROM orders WHERE status = 'delivered';
+
 UPDATE orders SET status = 'shipped' WHERE amount > 100;
 
+-- Bulk update from a values list (PostgreSQL UPDATE...FROM)
+UPDATE orders
+  SET status = d.status
+  FROM (VALUES ('ord-1', 'shipped'), ('ord-2', 'delivered'))
+       AS d (id, status)
+  WHERE orders.id = d.id;
+
 DELETE FROM orders WHERE status = 'delivered';
+
+TRUNCATE TABLE orders;   -- fast table reset, resets serial sequences
 ```
 
 ### Queries
@@ -232,6 +272,14 @@ WHERE EXISTS (
   WHERE o.customer_id = c.id AND o.amount > 100
 );
 
+-- LATERAL joins (correlated subqueries in FROM)
+SELECT c.name, recent.amount
+FROM customers c,
+LATERAL (SELECT amount FROM orders WHERE customer_id = c.id ORDER BY created_at DESC LIMIT 1) AS recent;
+
+-- VALUES as a source with column aliases
+SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS t (id, name);
+
 -- Set operations
 SELECT name FROM customers
 UNION
@@ -246,9 +294,13 @@ FROM orders;
 SELECT * FROM products WHERE name LIKE '%phone%';
 SELECT * FROM products WHERE name ILIKE '%Phone%';
 
--- BETWEEN, IN
+-- BETWEEN, IN, ANY
 SELECT * FROM orders WHERE amount BETWEEN 10 AND 100;
 SELECT * FROM orders WHERE status IN ('pending', 'shipped');
+SELECT * FROM orders WHERE status = ANY(ARRAY['pending', 'shipped']);
+
+-- OVERLAPS (date/time range overlap test)
+SELECT (DATE '2024-01-01', DATE '2024-01-31') OVERLAPS (DATE '2024-01-15', DATE '2024-02-15');
 
 -- DISTINCT
 SELECT DISTINCT category FROM products;
@@ -292,6 +344,8 @@ SELECT date_trunc('month', now());                      -- truncate
 | `ascii(text)` / `chr(int)` | Character/code point conversion |
 | `regexp_replace(text, pat, repl [, flags])` | Regex replace (`'g'` for global) |
 | `regexp_match(text, pattern)` | First regex match as array |
+| `starts_with(text, prefix)` | True if text starts with prefix |
+| `ends_with(text, suffix)` | True if text ends with suffix |
 
 #### Numeric
 | Function | Description |
@@ -357,6 +411,36 @@ SELECT date_trunc('month', now());                      -- truncate
 | `string_agg(text, separator)` | Concatenate with separator |
 | `array_agg(expr)` | Collect values into array |
 | `bool_and(expr)` / `bool_or(expr)` | Logical AND/OR across rows |
+| `variance(expr)` / `var_samp(expr)` | Sample variance |
+| `var_pop(expr)` | Population variance |
+| `stddev(expr)` / `stddev_samp(expr)` | Sample standard deviation |
+| `stddev_pop(expr)` | Population standard deviation |
+
+### Transactions
+
+```sql
+BEGIN;
+INSERT INTO accounts (name, balance) VALUES ('Alice', 1000);
+UPDATE accounts SET balance = balance - 100 WHERE name = 'Alice';
+COMMIT;
+
+-- Or roll back on error
+BEGIN;
+UPDATE accounts SET balance = balance - 9999 WHERE name = 'Alice';
+ROLLBACK;
+```
+
+### Prepared Statements
+
+```sql
+PREPARE get_user AS SELECT * FROM users WHERE id = $1;
+EXECUTE get_user(42);
+DEALLOCATE get_user;
+
+-- Parameterized inserts
+PREPARE add_user AS INSERT INTO users (name, email) VALUES ($1, $2);
+EXECUTE add_user('Alice', 'alice@example.com');
+```
 
 ## API Reference
 
@@ -426,6 +510,8 @@ sealed trait Result
 case class QueryResult(table: TableValue) extends Result
 case class InsertResult(obj: Map[String, Value], table: TableValue) extends Result
 case class CreateTableResult(table: String) extends Result
+case class DropTableResult(table: String) extends Result
+case class TruncateResult(table: String) extends Result
 case class UpdateResult(rows: Int) extends Result
 case class DeleteResult(rows: Int) extends Result
 ```

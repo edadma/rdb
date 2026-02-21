@@ -52,7 +52,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
   .settings(
     name    := "rdb-engine",
-    version := "0.1.3",
+    version := "0.1.4",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
