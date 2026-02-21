@@ -1,7 +1,5 @@
 # @edadma/rdb
 
-[![npm version](https://badge.fury.io/js/%40edadma%2Frdb.svg)](https://www.npmjs.com/package/@edadma/rdb)
-
 A lightweight, in-memory SQL database for JavaScript and TypeScript. No native dependencies, no external services — just import and query. Follows PostgreSQL conventions for SQL syntax, identifier handling, and type casting.
 
 ## Installation
