@@ -341,6 +341,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
       case pk: PrimaryKeySpec => pk.name.contains(constraintName)
       case u: UniqueSpec => u.name.contains(constraintName)
       case fk: ForeignKeySpec => fk.name.contains(constraintName)
+      case c: CheckSpec => c.name.contains(constraintName)
       case _ => false
     }
     if idx < 0 then sys.error(s"constraint '$constraintName' not found")
@@ -411,6 +412,14 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
           if arr(idx).isNull then
             sys.error(s"null value in column \"$colName\" violates not-null constraint")
       }
+
+      // Enforce CHECK constraints
+      val checks = constraints.collect { case c: CheckSpec => c }
+      if checks.nonEmpty then
+        val row = Row(arr.toIndexedSeq, meta, None, None)
+        for c <- checks do
+          if !beval(c.parsedExpr, Seq(row)) then
+            sys.error(s"new row violates check constraint${c.name.map(n => s""" "$n"""").getOrElse("")}")
 
       if returning.isDefined then
         val idx =
@@ -492,3 +501,4 @@ case class ForeignKeySpec(
     onDelete: ReferentialAction = ReferentialAction.NoAction,
     onUpdate: ReferentialAction = ReferentialAction.NoAction,
 ) extends Spec
+case class CheckSpec(exprSource: String, parsedExpr: Expr, name: Option[String] = None) extends Spec

@@ -499,6 +499,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
           case cols ~ table ~ refCols ~ onDel ~ onUpd => (name: Option[String]) =>
             ForeignKeyConstraint(name, cols, table, refCols, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
         }
+      | kw("CHECK") ~> ("(" ~> booleanExpression <~ ")") ^^ { expr =>
+          (name: Option[String]) => CheckConstraint(name, expr)
+        }
 
   lazy val createTable: P[Command] =
     kw("CREATE") ~> kw("TABLE") ~> opt(kw("IF") ~> kw("NOT") ~> kw("EXISTS")) ~ identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
@@ -594,10 +597,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause)) ^^ {
-      case c ~ t ~ n ~ u ~ d ~ r =>
+    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause)) ~ opt(kw("CHECK") ~> ("(" ~> booleanExpression <~ ")")) ^^ {
+      case c ~ t ~ n ~ u ~ d ~ r ~ chk =>
         val refs = r.map { case table ~ column ~ onDel ~ onUpd => (table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction)) }
-        ColumnDesc(c, t, n.isDefined, u.isDefined, d, refs)
+        ColumnDesc(c, t, n.isDefined, u.isDefined, d, refs, chk)
     }
 
   lazy val alterTable: P[Command] =

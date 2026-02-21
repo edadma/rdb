@@ -13,6 +13,7 @@ case class ForeignKeyConstraint(
     onDelete: ReferentialAction = ReferentialAction.NoAction,
     onUpdate: ReferentialAction = ReferentialAction.NoAction,
 ) extends TableConstraint
+case class CheckConstraint(name: Option[String], expression: Expr) extends TableConstraint
 
 trait Command
 
@@ -46,6 +47,7 @@ case class ColumnDesc(
     unique: Boolean,
     default: Option[Expr],
     references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)], // Single column foreign key: (table, column, onDelete, onUpdate)
+    check: Option[Expr] = None,
 )
 
 trait TableAlteration

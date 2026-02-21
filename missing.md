@@ -161,5 +161,5 @@ PostgreSQL provides:
 | EXPLAIN | **no** | EXPLAIN, EXPLAIN ANALYZE |
 | Temp tables | **no** | CREATE TEMP TABLE |
 | GENERATED columns | **no** | GENERATED ALWAYS AS (expr) |
-| CHECK constraints | **no** | CHECK (expr) |
+| CHECK constraints | yes | — |
 | EXCLUDE constraints | **no** | EXCLUDE USING |

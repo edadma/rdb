@@ -142,7 +142,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
 
           val names = new mutable.HashSet[String]
 
-          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references) =>
+          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references, _) =>
             if names contains name then problem(id, s"duplicate column name: $name")
 
             names += name
@@ -167,13 +167,21 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
             )
           }
 
-          val constraintSpecs = constraints map {
+          val constraintSpecs: Seq[Spec] = constraints.map {
             case PrimaryKeyConstraint(name, cols) =>
               PrimaryKeySpec(cols.map(_.name), name)
             case UniqueConstraint(name, cols) =>
               UniqueSpec(cols.map(_.name), name)
             case ForeignKeyConstraint(name, cols, refTable, refCols, onDel, onUpd) =>
               ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name, onDel, onUpd)
+            case CheckConstraint(name, expr) =>
+              CheckSpec(exprToSQL(expr), expr, name)
+          }
+
+          // Convert column-level CHECK constraints to CheckSpec
+          val columnCheckSpecs: Seq[CheckSpec] = columns.collect {
+            case ColumnDesc(_, _, _, _, _, _, Some(expr)) =>
+              CheckSpec(exprToSQL(expr), expr, None)
           }
 
           // Validate FK references
@@ -196,7 +204,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
                     problem(id, s"referenced column '$col' not found in table '${fk.referencedTable}'")
               case _ =>
 
-          val allSpecs = columnSpecs ++ constraintSpecs
+          val allSpecs = columnSpecs ++ constraintSpecs ++ columnCheckSpecs
           db.createTable(table, allSpecs)
           CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
@@ -231,6 +239,8 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
         val updatedColSet = cols.toSet
         val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
+        val checkConstraints = t.constraints.collect { case c: CheckSpec => c }
+
         def applyUpdate(targetRow: Row, evalRow: Row): Unit =
           targetRow.updater match
             case None    => problem(id, "not updatable")
@@ -239,6 +249,15 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
               for (col, value) <- updates do
                 if pkCols.contains(col) && value.isNull then
                   sys.error(s"null value in column \"$col\" violates not-null constraint")
+              // Enforce CHECK constraints on the updated row
+              if checkConstraints.nonEmpty then
+                val newRowData = targetRow.data.toArray
+                for (col, value) <- updates do
+                  newRowData(t.columnMap(col)) = value
+                val checkRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
+                for c <- checkConstraints do
+                  if !beval(c.parsedExpr, Seq(checkRow)) then
+                    sys.error(s"new row violates check constraint${c.name.map(n => s""" "$n"""").getOrElse("")}")
               db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(updates))
               if childFKs.nonEmpty then
                 val newRowData = targetRow.data.toArray
@@ -326,7 +345,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
       case AlterTableCommand(id @ Ident(table), alter) =>
         val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         alter match
-          case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references)) =>
+          case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _)) =>
             if t.hasColumn(colName) then problem(cid, s"column '$colName' already exists")
             val typ = typeDesc match
               case Left(primitive) => primitive
@@ -360,6 +379,8 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
               case PrimaryKeyConstraint(cname, cols) => PrimaryKeySpec(cols.map(_.name), cname)
               case ForeignKeyConstraint(cname, cols, refTable, refCols, onDel, onUpd) =>
                 ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), cname, onDel, onUpd)
+              case CheckConstraint(cname, expr) =>
+                CheckSpec(exprToSQL(expr), expr, cname)
             t.addConstraintToTable(spec)
           case DropConstraintTableAlteration(cid @ Ident(constraintName)) =>
             t.dropConstraintFromTable(constraintName)

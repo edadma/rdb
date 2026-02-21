@@ -608,6 +608,12 @@ def serializeCatalog(
           for col <- refCols do writeString(out, col)
           out.writeByte(onDelete.ordinal)
           out.writeByte(onUpdate.ordinal)
+        case CheckSpec(exprSource, _, name) =>
+          out.writeByte(4)
+          name match
+            case Some(n) => out.writeByte(1); writeString(out, n)
+            case None    => out.writeByte(0)
+          writeString(out, exprSource)
         case _ => // skip non-serializable constraints
 
   // Indexes
@@ -735,6 +741,12 @@ def deserializeCatalog(
           val onDelete  = ReferentialAction.fromOrdinal(in.readByte())
           val onUpdate  = ReferentialAction.fromOrdinal(in.readByte())
           constraints += ForeignKeySpec(cols, refTable, refCols, cName, onDelete, onUpdate)
+        case 4 => // CheckSpec
+          val hasName = in.readByte() != 0
+          val cName   = if hasName then Some(readString(in)) else None
+          val exprSource = readString(in)
+          val parsed = SQLParser.parse(exprSource, SQLParser.booleanExpression)
+          constraints += CheckSpec(exprSource, parsed, cName)
         case other => sys.error(s"unknown constraint type tag: $other")
 
     // Add PK to constraints list for reconstruction
