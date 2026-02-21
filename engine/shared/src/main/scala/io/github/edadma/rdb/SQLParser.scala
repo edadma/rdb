@@ -27,6 +27,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       ">",
       "=",
       "!=",
+      "<>",
       ",",
       "&",
       "|",
@@ -303,7 +304,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val in: P[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
 
   lazy val comparison: P[String] =
-    "<=" | ">=" | "<" | ">" | "=" | "!=" | kw("LIKE") | kw("ILIKE") | (kw("NOT") ~ kw("LIKE") ^^^ "NOT LIKE" | kw(
+    "<=" | ">=" | "<>" ^^^ "!=" | "<" | ">" | "=" | "!=" | kw("LIKE") | kw("ILIKE") | (kw("NOT") ~ kw("LIKE") ^^^ "NOT LIKE" | kw(
       "NOT",
     ) ~ kw("ILIKE") ^^^ "NOT ILIKE")
 

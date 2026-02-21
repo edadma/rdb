@@ -182,4 +182,31 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
       res.last shouldBe DeleteResult(0)
     }
   }
+
+  "<> operator" - {
+    "filters with <> same as !=" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name FROM employees WHERE department <> 'Engineering' ORDER BY name;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe TextValue("Bob")
+      table.data(1).data(0) shouldBe TextValue("Diana")
+    }
+
+    "<> with integer values" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name FROM employees WHERE salary <> 75000 ORDER BY name;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 3
+      table.data.map(_.data(0)) should not contain TextValue("Alice")
+    }
+  }
 }
