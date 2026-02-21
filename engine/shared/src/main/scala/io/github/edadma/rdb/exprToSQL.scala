@@ -48,6 +48,11 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       val l = if lp < prec then s"($ls)" else ls
       val r = if rp <= prec then s"($rs)" else rs
       (s"$l $op $r", prec)
+    case QuantifiedCompareExpr(value, op, quantifier, expr) =>
+      val (vs, vp) = exprToSQLInner(value)
+      val v = if vp < 4 then s"($vs)" else vs
+      val (es, _) = exprToSQLInner(expr)
+      (s"$v $op $quantifier($es)", 4)
     case InSeqExpr(value, op, exprs) =>
       val (vs, vp) = exprToSQLInner(value)
       val v = if vp < 4 then s"($vs)" else vs

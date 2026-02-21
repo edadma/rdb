@@ -30,7 +30,7 @@
 | Null test | IS NULL, IS NOT NULL | IS DISTINCT FROM, IS NOT DISTINCT FROM |
 | Boolean test | IS TRUE, IS FALSE, IS UNKNOWN | — |
 | Range | BETWEEN, NOT BETWEEN, OVERLAPS | BETWEEN SYMMETRIC |
-| Set | IN, NOT IN, EXISTS | ANY/SOME, ALL (array/subquery quantifiers) |
+| Set | IN, NOT IN, EXISTS, ANY/SOME, ALL | — |
 | JSON | — | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?|` `?&` |
 | Array | — | `@>` `<@` `&&` (overlap), `||` (array concat operator) |
 | Cast | CAST(x AS type), `::` | — |

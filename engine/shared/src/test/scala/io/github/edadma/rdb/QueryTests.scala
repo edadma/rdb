@@ -431,4 +431,220 @@ class QueryTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  // ── Boolean test operators ────────────────────────────────────────────
+
+  "IS TRUE" - {
+    "true value IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "false value IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "NULL IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS FALSE" - {
+    "false value IS FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "true value IS FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS UNKNOWN" - {
+    "NULL IS UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "true IS UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS NOT TRUE" - {
+    "false IS NOT TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS NOT TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "NULL IS NOT TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS NOT TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  "IS NOT FALSE" - {
+    "true IS NOT FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS NOT FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  "IS NOT UNKNOWN" - {
+    "true IS NOT UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS NOT UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  // ── ANY/ALL quantified comparisons ─────────────────────────────────
+
+  "= ANY(column)" - {
+    "returns matching rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, tags INT[]);
+          |INSERT INTO t (id, tags) VALUES (1, ARRAY[10, 20, 30]), (2, ARRAY[40, 50, 60]);
+          |SELECT id FROM t WHERE 20 = ANY(tags);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+
+    "returns no rows when no match" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, tags INT[]);
+          |INSERT INTO t (id, tags) VALUES (1, ARRAY[10, 20, 30]);
+          |SELECT id FROM t WHERE 99 = ANY(tags);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 0
+    }
+  }
+
+  "> ANY(column)" - {
+    "returns rows where value greater than any element" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, vals INT[]);
+          |INSERT INTO t (id, vals) VALUES (1, ARRAY[5, 10, 15]), (2, ARRAY[20, 30]);
+          |SELECT id FROM t WHERE 7 > ANY(vals);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+  }
+
+  "= ALL(ARRAY[...])" - {
+    "matches when all elements equal" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1), (2);
+          |SELECT id FROM t WHERE 5 = ALL(ARRAY[5, 5, 5]);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 2
+    }
+  }
+
+  "< ALL(column)" - {
+    "returns rows where value less than all elements" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, vals INT[]);
+          |INSERT INTO t (id, vals) VALUES (1, ARRAY[10, 20, 30]), (2, ARRAY[3, 4, 5]);
+          |SELECT id FROM t WHERE 5 < ALL(vals);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+  }
+
+  "= ALL(column)" - {
+    "returns no rows when not all match" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, vals INT[]);
+          |INSERT INTO t (id, vals) VALUES (1, ARRAY[5, 5, 6]), (2, ARRAY[7, 7, 7]);
+          |SELECT id FROM t WHERE 5 = ALL(vals);
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 0
+    }
+  }
+
 }

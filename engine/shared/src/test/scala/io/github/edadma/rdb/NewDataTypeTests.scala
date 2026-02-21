@@ -709,4 +709,52 @@ class NewDataTypeTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0) shouldBe TextValue("42   ")
     }
   }
+
+  // ── VARCHAR type ────────────────────────────────────────────────────
+
+  "VARCHAR type" - {
+    "creates table with VARCHAR(n) column" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name VARCHAR(5));
+          |INSERT INTO t (name) VALUES ('hello');
+          |SELECT name FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("hello")
+    }
+
+    "truncates values exceeding length" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name VARCHAR(3));
+          |INSERT INTO t (name) VALUES ('hello');
+          |SELECT name FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("hel")
+    }
+
+    "does not pad short values (unlike CHAR)" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name VARCHAR(10));
+          |INSERT INTO t (name) VALUES ('hi');
+          |SELECT length(name) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(2)
+    }
+
+    "bare VARCHAR without length acts as TEXT" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name VARCHAR);
+          |INSERT INTO t (name) VALUES ('this can be any length');
+          |SELECT name FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("this can be any length")
+    }
+  }
 }

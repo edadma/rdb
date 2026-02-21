@@ -288,6 +288,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ query ~ ")" ^^ {
         case e ~ _ ~ _ ~ _ ~ q ~ _ => InQueryExpr(e, "IN", q)
       } |
+      expression ~ comparison ~ (kw("ANY") | kw("SOME") | kw("ALL")) ~ "(" ~ expression ~ ")" ^^ {
+        case e ~ c ~ q ~ _ ~ arr ~ _ =>
+          QuantifiedCompareExpr(e, c, if q == "SOME" then "ANY" else q, arr)
+      } |
       expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       expression ~ (kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN" | kw("BETWEEN")) ~ expression ~ kw(
         "AND",

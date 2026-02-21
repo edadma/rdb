@@ -331,4 +331,194 @@ class ScalarFunctionTests extends AnyFreeSpec with Matchers with Testing {
       res.length shouldBe 2
     }
   }
+
+  // ── translate ─────────────────────────────────────────────────────────
+
+  "translate" - {
+    "replaces characters" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT translate('hello', 'helo', 'HELO') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("HELLO")
+    }
+
+    "deletes characters with shorter to string" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT translate('hello world', 'lo', 'L') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("heLL wrLd")
+    }
+
+    "PostgreSQL-style vowel removal" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT translate('abcdef', 'ace', 'XY') FROM t;
+          |""".trim.stripMargin
+      )
+      // a->X, c->Y, e->deleted (no mapping)
+      table.data(0).data(0) shouldBe TextValue("XbYdf")
+    }
+  }
+
+  // ── btrim ─────────────────────────────────────────────────────────────
+
+  "btrim" - {
+    "trims whitespace with no second arg" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT btrim('  hello  ') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("hello")
+    }
+
+    "trims specific characters" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT btrim('xxhelloxx', 'x') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("hello")
+    }
+
+    "trims multiple characters from set" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT btrim('xyxhelloyx', 'xy') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("hello")
+    }
+
+    "returns empty string when all characters trimmed" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT btrim('aaa', 'a') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("")
+    }
+  }
+
+  // ── quote_literal ─────────────────────────────────────────────────────
+
+  "quote_literal" - {
+    "wraps string in single quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_literal('hello') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("'hello'")
+    }
+
+    "escapes embedded single quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_literal(E'it\'s') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("'it''s'")
+    }
+
+    "returns NULL for NULL input" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT quote_literal(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
+
+  // ── quote_ident ───────────────────────────────────────────────────────
+
+  "quote_ident" - {
+    "wraps string in double quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_ident('column') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("\"column\"")
+    }
+
+    "escapes embedded double quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_ident('a"b') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("\"a\"\"b\"")
+    }
+  }
+
+  // ── clock_timestamp ───────────────────────────────────────────────────
+
+  "clock_timestamp" - {
+    "returns a timestamp value" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT clock_timestamp() FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).vtyp shouldBe TimestampType
+    }
+  }
+
+  // ── regexp_split_to_array ─────────────────────────────────────────────
+
+  "regexp_split_to_array" - {
+    "splits string by regex" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT array_length(regexp_split_to_array('one-two-three', '-')) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(3)
+    }
+
+    "splits by regex pattern" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT array_to_string(regexp_split_to_array('a1b2c3', '[0-9]'), ',') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("a,b,c,")
+    }
+  }
 }

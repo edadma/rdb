@@ -76,6 +76,8 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       CaseExpr(whens map { case When(when, expr) => When(rewrite(when), rewrite(expr)) }, els map rewrite)
     case InSeqExpr(value, op, exprs)       => InSeqExpr(rewrite(value), op, exprs map rewrite)
     case InQueryExpr(value, op, array)     => InQueryExpr(rewrite(value), op, rewrite(array))
+    case QuantifiedCompareExpr(value, op, quantifier, expr) =>
+      QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
       scalarFunction get func.toLowerCase match

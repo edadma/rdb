@@ -44,6 +44,21 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       lookup(lookupName, ctx) match
         case None      => problem(c, s"'$lookupName' not found")
         case Some(res) => res
+    case QuantifiedCompareExpr(value, op, quantifier, expr) =>
+      val v = eval(value, ctx)
+      val arr = eval(expr, ctx) match
+        case ArrayValue(elems) => elems
+        case other => problem(expr, s"ANY/ALL requires an array, got ${other.vtyp.name}")
+
+      def cmp(item: Value): Boolean = op match
+        case "="  => v.compare(item) == 0
+        case "!=" => v.compare(item) != 0
+        case "<"  => v < item
+        case ">"  => v > item
+        case "<=" => v <= item
+        case ">=" => v >= item
+
+      BooleanValue(if quantifier == "ANY" then arr.exists(cmp) else arr.forall(cmp))
     case InSeqExpr(value, op, exprs) =>
       val v = eval(value, ctx)
 

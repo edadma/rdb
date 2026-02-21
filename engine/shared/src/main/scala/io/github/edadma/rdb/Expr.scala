@@ -30,6 +30,7 @@ case class AggregateFunctionExpr(f: AggregateFunctionInstance, args: Seq[Expr]) 
 case class VariableInstanceExpr(v: VariableInstance)                      extends Expr
 case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr])           extends Expr
 case class InQueryExpr(value: Expr, op: String, query: Expr)              extends Expr
+case class QuantifiedCompareExpr(value: Expr, op: String, quantifier: String, expr: Expr) extends Expr
 case class SubqueryExpr(query: Expr)                                      extends Expr
 case class StarExpr()                                                     extends Expr
 case class TableStarExpr(table: Ident)                                    extends Expr

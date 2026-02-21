@@ -316,4 +316,111 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
       table.data.head.data(0) shouldBe TextValue("Engineering")
     }
   }
+
+  // ── every aggregate ─────────────────────────────────────────────────
+
+  "every" - {
+    "returns true when all true" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE), (TRUE), (TRUE);
+          |SELECT every(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "returns false when any false" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE), (FALSE), (TRUE);
+          |SELECT every(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "with GROUP BY" in {
+      val table = query(
+        """
+          |CREATE TABLE t (grp TEXT, val BOOLEAN);
+          |INSERT INTO t (grp, val) VALUES ('a', TRUE), ('a', TRUE), ('b', TRUE), ('b', FALSE);
+          |SELECT grp, every(val) FROM t GROUP BY grp ORDER BY grp;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(1) shouldBe BooleanValue(true)
+      table.data(1).data(1) shouldBe BooleanValue(false)
+    }
+  }
+
+  // ── Bitwise aggregates ──────────────────────────────────────────────
+
+  "bit_and" - {
+    "AND across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (12), (10), (14);
+          |SELECT bit_and(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 12=1100, 10=1010, 14=1110 => AND = 1000 = 8
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 8L
+    }
+  }
+
+  "bit_or" - {
+    "OR across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (1), (2), (4);
+          |SELECT bit_or(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 1|2|4 = 7
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 7L
+    }
+  }
+
+  "bit_xor" - {
+    "XOR across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (7), (3), (5);
+          |SELECT bit_xor(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 7^3=4, 4^5=1
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 1L
+    }
+  }
+
+  "bitwise aggregates null handling" - {
+    "skip nulls" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (7), (NULL), (3);
+          |SELECT bit_and(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 7 & 3 = 3
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 3L
+    }
+
+    "all-null returns NULL" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (NULL), (NULL);
+          |SELECT bit_or(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
 }

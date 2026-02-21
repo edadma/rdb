@@ -592,4 +592,278 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0) shouldBe BooleanValue(false)
     }
   }
+
+  // ── Math functions ──────────────────────────────────────────────────
+
+  "cbrt" - {
+    "returns cube root" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT cbrt(27) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 3.0 +- 0.0001
+    }
+
+    "returns cube root of negative number" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT cbrt(-8) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe -2.0 +- 0.0001
+    }
+  }
+
+  "div" - {
+    "performs integer division" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT div(7, 2) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 3.0
+    }
+
+    "truncates toward zero" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT div(17, 5) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 3.0
+    }
+  }
+
+  "factorial" - {
+    "computes factorial of 5" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT factorial(5) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 120.0
+    }
+
+    "computes factorial of 0" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT factorial(0) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 1.0
+    }
+
+    "computes factorial of 1" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT factorial(1) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 1.0
+    }
+  }
+
+  "gcd" - {
+    "computes greatest common divisor" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT gcd(12, 8) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 4.0
+    }
+
+    "gcd with zero" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT gcd(7, 0) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 7.0
+    }
+  }
+
+  "lcm" - {
+    "computes least common multiple" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT lcm(4, 6) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 12.0
+    }
+
+    "lcm with zero" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT lcm(5, 0) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 0.0
+    }
+  }
+
+  "sinh" - {
+    "computes hyperbolic sine of 0" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT sinh(0) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(0.0)
+    }
+
+    "computes hyperbolic sine of 1" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT sinh(1) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe math.sinh(1.0) +- 0.0001
+    }
+  }
+
+  "cosh" - {
+    "computes hyperbolic cosine of 0" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT cosh(0) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(1.0)
+    }
+  }
+
+  "tanh" - {
+    "computes hyperbolic tangent of 0" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT tanh(0) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(0.0)
+    }
+  }
+
+  "asinh" - {
+    "computes inverse hyperbolic sine" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT asinh(0) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 0.0 +- 0.0001
+    }
+
+    "round-trips with sinh" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT asinh(sinh(1.5)) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 1.5 +- 0.0001
+    }
+  }
+
+  "acosh" - {
+    "computes inverse hyperbolic cosine of 1" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT acosh(1) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 0.0 +- 0.0001
+    }
+
+    "round-trips with cosh" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT acosh(cosh(2.0)) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 2.0 +- 0.0001
+    }
+  }
+
+  "atanh" - {
+    "computes inverse hyperbolic tangent of 0" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT atanh(0) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 0.0 +- 0.0001
+    }
+
+    "round-trips with tanh" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT atanh(tanh(0.5)) FROM t;
+          |""".trim.stripMargin
+      )
+      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      v shouldBe 0.5 +- 0.0001
+    }
+  }
+
 }
