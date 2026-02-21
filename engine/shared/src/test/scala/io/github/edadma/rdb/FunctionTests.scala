@@ -271,6 +271,71 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "CAST(expr AS type) syntax" - {
+    "cast string to integer" in {
+      val table = query("SELECT CAST('42' AS integer);")
+
+      table.data.head.data(0) shouldBe NumberValue(DIntType, 42)
+    }
+
+    "cast integer to text" in {
+      val table = query("SELECT CAST(123 AS text);")
+
+      table.data.head.data(0) shouldBe TextValue("123")
+    }
+
+    "cast string to double precision" in {
+      val table = query("SELECT CAST('3.14' AS double precision);")
+
+      table.data.head.data(0) shouldBe NumberValue(DDoubleType, 3.14)
+    }
+
+    "cast in WHERE clause" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES ('10'), ('20'), ('30');
+          |SELECT val FROM t WHERE CAST(val AS integer) > 15 ORDER BY val;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe TextValue("20")
+      table.data(1).data(0) shouldBe TextValue("30")
+    }
+
+    "cast column reference" in {
+      val table = query(
+        """
+          |CREATE TABLE t (price INT);
+          |INSERT INTO t (price) VALUES (100), (250);
+          |SELECT CAST(price AS text) FROM t ORDER BY price;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TextValue("100")
+      table.data(1).data(0) shouldBe TextValue("250")
+    }
+
+    "cast nested in expression" in {
+      val table = query("SELECT CAST('10' AS integer) + 5;")
+
+      table.data.head.data(0) shouldBe NumberValue(DIntType, 15)
+    }
+
+    "cast NULL" in {
+      val table = query("SELECT CAST(NULL AS integer);")
+
+      table.data.head.data(0).isNull shouldBe true
+    }
+
+    "CAST and :: produce same result" in {
+      val table = query("SELECT CAST('99' AS integer), '99'::integer;")
+
+      table.data.head.data(0) shouldBe table.data.head.data(1)
+    }
+  }
+
   "HAVING clause" - {
     "filters groups based on aggregate conditions" in {
       val result = test(

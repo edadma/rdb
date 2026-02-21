@@ -45,7 +45,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     reserved ++= Seq(
       "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
       "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
-      "cascade", "case", "char", "check", "column", "commit", "constraint",
+      "cascade", "case", "cast", "char", "check", "column", "commit", "constraint",
       "create", "cross", "current_timestamp",
       "database", "date", "deallocate", "decimal", "default", "delete", "desc",
       "distinct", "double", "drop",
@@ -397,6 +397,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       stringLit ^^ StringExpr.apply |
       kw("NULL") ^^^ NullExpr() |
       kw("ARRAY") ~> "[" ~> repsep(expression, ",") <~ "]" ^^ ArrayExpr.apply |
+      kw("CAST") ~> "(" ~> expression ~ kw("AS") ~ castType <~ ")" ^^ { case e ~ _ ~ t => CastExpr(e, t) } |
       kw("EXTRACT") ~> "(" ~> extractField ~ kw("FROM") ~ expression <~ ")" ^^ { case field ~ _ ~ source =>
         ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source))
       } |
