@@ -20,7 +20,7 @@ CREATE TABLE employees (
   department TEXT,
   salary INT,
   PRIMARY KEY (id)
-);
+  );
 
 INSERT INTO employees (name, department, salary) VALUES
   ('Alice', 'Engineering', 95000),
@@ -30,9 +30,9 @@ INSERT INTO employees (name, department, salary) VALUES
   ('Eve', 'Engineering', 102000);
 
 SELECT department, COUNT(*) AS count, AVG(salary) AS avg_salary
-FROM employees
-GROUP BY department
-ORDER BY avg_salary DESC;
+  FROM employees
+  GROUP BY department
+  ORDER BY avg_salary DESC;
 `
 
 function formatValue(v: any): string {

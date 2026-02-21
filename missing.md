@@ -13,7 +13,7 @@
 | Binary | bytea | — |
 | Date/Time | date, time, timestamp, timestamptz, interval | timetz |
 | UUID | uuid | — |
-| JSON | json | jsonb |
+| JSON | json, jsonb (stored as parsed/binary internally) | — |
 | Array | type[] | — |
 | Enum | CREATE TYPE ... AS ENUM | — |
 | Not in rdb | — | bit/varbit, inet/cidr/macaddr, point/line/box/circle/polygon/path, tsquery/tsvector, xml, range types (int4range, daterange, ...), composite types, domains |
