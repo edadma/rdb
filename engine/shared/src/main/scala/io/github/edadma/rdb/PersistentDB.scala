@@ -15,9 +15,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
   val name = "persistent DB"
 
   private var activeTxn: Option[Transaction] = None
-  private var txnSnapshot: Option[TransactionSnapshot] = None
 
-  override def snapshot(): Unit =
+  private class PersistentTransactionHandle(val txn: Transaction, val snap: TransactionSnapshot) extends TransactionHandle
+
+  override def snapshot(): TransactionHandle =
+    if activeTxn.isDefined then sys.error("PersistentDB supports only one active transaction at a time")
     // Snapshot per-table state
     val fdpSnap = tables.map { (n, t) =>
       n -> t.asInstanceOf[PersistentTable].firstDataPage
@@ -30,20 +32,20 @@ class PersistentDB private (val store: FilePageStore) extends DB:
         idxName -> idx.asInstanceOf[PersistentTableIndex].nextRowId
       }.toMap
     }.toMap
-    txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap, idxSnap))
-    activeTxn = Some(store.beginTransaction())
+    val txn = store.beginTransaction()
+    activeTxn = Some(txn)
+    new PersistentTransactionHandle(txn, TransactionSnapshot(fdpSnap, autoSnap, idxSnap))
 
-  override def commitSnapshot(): Unit =
-    val txn = activeTxn.getOrElse(sys.error("no active transaction"))
-    txn.commit()
+  override def commitSnapshot(handle: TransactionHandle): Unit =
+    val h = handle.asInstanceOf[PersistentTransactionHandle]
+    h.txn.commit()
     activeTxn = None
-    txnSnapshot = None
 
-  override def rollbackSnapshot(): Unit =
-    val txn = activeTxn.getOrElse(sys.error("no active transaction"))
-    txn.rollback()
+  override def rollbackSnapshot(handle: TransactionHandle): Unit =
+    val h = handle.asInstanceOf[PersistentTransactionHandle]
+    h.txn.rollback()
     // Restore snapshots
-    val snap = txnSnapshot.get
+    val snap = h.snap
     for (n, fdp) <- snap.firstDataPages do
       tables.get(n).foreach { t =>
         val pt = t.asInstanceOf[PersistentTable]
@@ -62,7 +64,6 @@ class PersistentDB private (val store: FilePageStore) extends DB:
           }
       }
     activeTxn = None
-    txnSnapshot = None
 
   private[rdb] def withBatch(fn: WriteBatch => Unit): Unit =
     activeTxn match

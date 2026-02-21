@@ -5,6 +5,9 @@ import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
 
+trait TransactionHandle
+object NoOpTransactionHandle extends TransactionHandle
+
 abstract class DB:
 
   val name: String
@@ -70,9 +73,11 @@ abstract class DB:
 
   def hasIndex(name: String): Boolean = indexes contains name
 
-  def snapshot(): Unit = ()
-  def commitSnapshot(): Unit = ()
-  def rollbackSnapshot(): Unit = ()
+  def snapshot(): TransactionHandle = NoOpTransactionHandle
+  def commitSnapshot(handle: TransactionHandle): Unit = ()
+  def rollbackSnapshot(handle: TransactionHandle): Unit = ()
+  def activateHandle(handle: TransactionHandle): Unit = ()
+  def deactivateHandle(): Unit = ()
 
   def connect(): Session = new Session(this)
 

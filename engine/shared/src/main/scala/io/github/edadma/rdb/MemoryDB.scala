@@ -9,70 +9,89 @@ import scala.collection.mutable
 class MemoryDB extends DB:
   val name = "in-memory DB"
 
-  private var _snapshot: Option[MemorySnapshot] = None
+  // Undo log types
+  private sealed trait UndoEntry
+  private case class UndoInsert(table: MemoryTable, node: DLListNode[Array[Value]]) extends UndoEntry
+  private case class UndoDelete(table: MemoryTable, data: Array[Value]) extends UndoEntry
+  private case class UndoUpdate(table: MemoryTable, node: DLListNode[Array[Value]], oldData: Array[Value]) extends UndoEntry
 
-  private case class TableSnapshot(
-      rows: Seq[Array[Value]],        // deep-copied row arrays
-      autoMap: Map[String, Value],
-      indexNextRowIds: Map[String, Long],
-  )
+  // The currently active undo log (set during DML execution within a transaction)
+  private var currentUndoLog: Option[mutable.ArrayBuffer[UndoEntry]] = None
+  private var activationDepth: Int = 0
 
-  private case class MemorySnapshot(
-      tables: Map[String, TableSnapshot],
-  )
+  private class MemoryTransactionHandle(
+      val undoLog: mutable.ArrayBuffer[UndoEntry],
+      val autoMapSnapshot: Map[String, Map[String, Value]],
+      val indexNextRowIdSnapshot: Map[String, Map[String, Long]],
+  ) extends TransactionHandle
 
-  override def snapshot(): Unit =
-    // Snapshot all tables
-    val tableSnapshots = tables.map { case (tname, t) =>
-      val mt = t.asInstanceOf[MemoryTable]
-      val rows = mt.data.nodeIterator.map(_.element.clone()).toSeq
-      val autoState = mt.autoMap.toMap
-      val indexRowIds = mt.tableIndexes.map { case (iname, idx) =>
+  override def snapshot(): TransactionHandle =
+    val autoSnap = tables.map { case (tname, t) =>
+      tname -> t.asInstanceOf[MemoryTable].autoMap.toMap
+    }.toMap
+    val idxSnap = tables.map { case (tname, t) =>
+      tname -> t.tableIndexes.map { case (iname, idx) =>
         iname -> idx.asInstanceOf[MemoryTableIndex].nextRowId
       }.toMap
-      tname -> TableSnapshot(rows, autoState, indexRowIds)
     }.toMap
-    _snapshot = Some(MemorySnapshot(tableSnapshots))
+    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry], autoSnap, idxSnap)
 
-  override def commitSnapshot(): Unit =
-    _snapshot = None
+  override def commitSnapshot(handle: TransactionHandle): Unit = ()
 
-  override def rollbackSnapshot(): Unit =
-    for snap <- _snapshot; (tname, ts) <- snap.tables; t <- tables.get(tname) do
-      val mt = t.asInstanceOf[MemoryTable]
+  override def rollbackSnapshot(handle: TransactionHandle): Unit =
+    val h = handle.asInstanceOf[MemoryTransactionHandle]
+    val savedUndoLog = currentUndoLog
+    currentUndoLog = None // Prevent recording undo entries during rollback
 
-      // Restore data
-      mt.data.clear()
-      for row <- ts.rows do mt.data.appendElement(row.clone())
+    // Replay undo log in reverse to undo this transaction's changes
+    for entry <- h.undoLog.reverseIterator do
+      entry match
+        case UndoInsert(table, node) => table.undoInsert(node)
+        case UndoDelete(table, data) => table.undoDelete(data)
+        case UndoUpdate(table, node, oldData) => table.undoUpdate(node, oldData)
 
-      // Restore auto-increment state
-      mt.autoMap.clear()
-      mt.autoMap ++= ts.autoMap
+    // Restore auto-increment state from snapshot
+    for (tname, autoState) <- h.autoMapSnapshot do
+      tables.get(tname).foreach { t =>
+        val mt = t.asInstanceOf[MemoryTable]
+        mt.autoMap.clear()
+        mt.autoMap ++= autoState
+      }
 
-      // Rebuild all indexes from restored data with fresh trees
-      given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
-      val idxEntries = mt.tableIndexes.toSeq
-      for (idxName, idx) <- idxEntries do
-        val midx = idx.asInstanceOf[MemoryTableIndex]
-        val newTree = new MemoryBPlusTree[IndexedSeq[Value], DLListNode[Array[Value]]](50)
+    // Restore index nextRowId from snapshot
+    for (tname, idxMap) <- h.indexNextRowIdSnapshot do
+      tables.get(tname).foreach { t =>
+        for (idxName, nrid) <- idxMap do
+          t.tableIndexes.get(idxName).foreach { idx =>
+            idx.asInstanceOf[MemoryTableIndex].nextRowId = nrid
+          }
+      }
 
-        var rowId = 0L
-        for node <- mt.data.nodeIterator do
-          val baseKey = midx.columnIndices.map(i => node.element(i): Value)
-          if midx.meta.unique then
-            newTree.insert(baseKey, node)
-          else
-            val key = baseKey :+ NumberValue(rowId.toInt)
-            newTree.insert(key, node)
-            rowId += 1
+    currentUndoLog = savedUndoLog
 
-        val restoredRowId = ts.indexNextRowIds.getOrElse(idxName, 0L)
-        val newIdx = MemoryTableIndex(midx.meta, midx.columnIndices, newTree, rowId.max(restoredRowId))
-        mt.tableIndexes(idxName) = newIdx
+  override def activateHandle(handle: TransactionHandle): Unit =
+    activationDepth += 1
+    if activationDepth == 1 then
+      currentUndoLog = Some(handle.asInstanceOf[MemoryTransactionHandle].undoLog)
 
-    _snapshot = None
+  override def deactivateHandle(): Unit =
+    activationDepth -= 1
+    if activationDepth == 0 then
+      currentUndoLog = None
 
-  protected def addTable(name: String, specs: Seq[Spec]) = new MemoryTable(name, specs)
+  // Called by MemoryTable after a successful insert
+  private[rdb] def recordInsert(table: MemoryTable, node: DLListNode[Array[Value]]): Unit =
+    currentUndoLog.foreach(_ += UndoInsert(table, node))
+
+  // Called by MemoryTable before a delete
+  private[rdb] def recordDelete(table: MemoryTable, data: Array[Value]): Unit =
+    currentUndoLog.foreach(_ += UndoDelete(table, data))
+
+  // Called by MemoryTable before an update
+  private[rdb] def recordUpdate(table: MemoryTable, node: DLListNode[Array[Value]], oldData: Array[Value]): Unit =
+    currentUndoLog.foreach(_ += UndoUpdate(table, node, oldData))
+
+  protected def addTable(name: String, specs: Seq[Spec]) = new MemoryTable(name, specs, this)
 
   protected def addEnum(name: String, labels: Seq[String]): EnumType = EnumType(name, labels.toIndexedSeq)
 
@@ -106,7 +125,7 @@ class MemoryDB extends DB:
     indexes(indexName) = meta
     table.tableIndexes(indexName) = idx
 
-class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
+class MemoryTable(name: String, specs: Seq[Spec], private[rdb] val db: MemoryDB) extends Table(name, specs):
   private[rdb] val data = new DLList[Array[Value]]
 
   protected def addColumn(spec: ColumnSpec): Unit = {}
@@ -216,6 +235,9 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
         node.unlink
         throw e
 
+    // Record successful insert for transaction undo log
+    db.recordInsert(this, node)
+
   class Updater private[MemoryTable] (node: DLListNode[Array[Value]]) extends (Seq[(String, Value)] => Unit):
     def apply(update: Seq[(String, Value)]): Unit =
       val row = node.element
@@ -274,6 +296,9 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
               midx.tree.insert(key, n)
           throw e
 
+      // Record successful update for transaction undo log
+      db.recordUpdate(MemoryTable.this, node, oldValues)
+
     override def toString: String = "[MemoryDB Updater]"
 
   private def updater(node: DLListNode[Array[Value]]) = new Updater(node)
@@ -281,6 +306,7 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
   class Deleter private[MemoryTable] (node: DLListNode[Array[Value]]) extends (() => Unit):
     def apply(): Unit =
       val row = node.element
+      val savedData = row.clone()
 
       // Remove from all indexes
       for (idxName, idx) <- tableIndexes do
@@ -293,9 +319,59 @@ class MemoryTable(name: String, specs: Seq[Spec]) extends Table(name, specs):
 
       node.unlink
 
+      // Record successful delete for transaction undo log
+      db.recordDelete(MemoryTable.this, savedData)
+
     override def toString: String = "[MemoryDB Deleter]"
 
   private def deleter(node: DLListNode[Array[Value]]) = new Deleter(node)
+
+  // Undo methods for transaction rollback
+  private[rdb] def undoInsert(node: DLListNode[Array[Value]]): Unit =
+    val row = node.element
+    for (idxName, idx) <- tableIndexes do
+      val midx = idx.asInstanceOf[MemoryTableIndex]
+      val baseKey = midx.columnIndices.map(i => row(i): Value)
+      if midx.meta.unique then
+        midx.tree.delete(baseKey)
+      else
+        removeNonUniqueEntry(midx, baseKey, node)
+    node.unlink
+
+  private[rdb] def undoDelete(rowData: Array[Value]): Unit =
+    val node = data.appendElement(rowData)
+    for (idxName, idx) <- tableIndexes do
+      val midx = idx.asInstanceOf[MemoryTableIndex]
+      val baseKey = midx.columnIndices.map(i => rowData(i): Value)
+      if midx.meta.unique then
+        midx.tree.insert(baseKey, node)
+      else
+        val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
+        midx.nextRowId += 1
+        midx.tree.insert(key, node)
+
+  private[rdb] def undoUpdate(node: DLListNode[Array[Value]], oldData: Array[Value]): Unit =
+    val currentRow = node.element
+    // Remove current index entries
+    for (idxName, idx) <- tableIndexes do
+      val midx = idx.asInstanceOf[MemoryTableIndex]
+      val baseKey = midx.columnIndices.map(i => currentRow(i): Value)
+      if midx.meta.unique then
+        midx.tree.delete(baseKey)
+      else
+        removeNonUniqueEntry(midx, baseKey, node)
+    // Restore old data
+    System.arraycopy(oldData, 0, node.element, 0, oldData.length)
+    // Re-insert old index entries
+    for (idxName, idx) <- tableIndexes do
+      val midx = idx.asInstanceOf[MemoryTableIndex]
+      val baseKey = midx.columnIndices.map(i => oldData(i): Value)
+      if midx.meta.unique then
+        midx.tree.insert(baseKey, node)
+      else
+        val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
+        midx.nextRowId += 1
+        midx.tree.insert(key, node)
 
   private def removeNonUniqueEntry(midx: MemoryTableIndex, baseKey: IndexedSeq[Value], node: DLListNode[Array[Value]]): Unit =
     // For non-unique indexes, scan from the base key prefix to find the entry with this node

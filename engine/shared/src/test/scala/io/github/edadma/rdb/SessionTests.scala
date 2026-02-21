@@ -51,6 +51,35 @@ class SessionTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "Interleaved transactions on same DB" - {
+    "rollback in session 1 does not discard session 2's committed insert" in {
+      val db = new MemoryDB
+      val s1 = db.connect()
+      val s2 = db.connect()
+
+      executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")(using s1)
+
+      // s1 starts a transaction and inserts a row
+      executeSQL("BEGIN;")(using s1)
+      executeSQL("INSERT INTO t (id, v) VALUES (1, 'from s1');")(using s1)
+
+      // s2 starts its own transaction and inserts a different row
+      executeSQL("BEGIN;")(using s2)
+      executeSQL("INSERT INTO t (id, v) VALUES (2, 'from s2');")(using s2)
+      executeSQL("COMMIT;")(using s2)
+
+      // s1 rolls back — should undo only its own insert
+      executeSQL("ROLLBACK;")(using s1)
+
+      // The row inserted by s2 must survive
+      val rows = executeSQL("SELECT * FROM t ORDER BY id;")(using s1)
+        .collect { case QueryResult(t) => t }.head.data
+      rows.length shouldBe 1
+      rows(0).data(0) shouldBe NumberValue(2)
+      rows(0).data(1) shouldBe TextValue("from s2")
+    }
+  }
+
   "Per-session prepared statements" - {
     "prepared statements are per-session" in {
       val db = new MemoryDB

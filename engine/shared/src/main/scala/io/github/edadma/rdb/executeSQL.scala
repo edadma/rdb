@@ -22,11 +22,14 @@ private[rdb] def executeCommands(cs: Seq[Command])(using session: Session): Seq[
   def guardTransaction[T](fn: => T): T =
     if session.isTransactionAborted then sys.error("current transaction is aborted, use ROLLBACK")
     if session.inTransaction then
+      session.activateHandle()
       try fn
       catch
         case e: Throwable =>
           session.markTransactionAborted()
           throw e
+      finally
+        session.deactivateHandle()
     else fn
 
   def guardDDL(): Unit =
