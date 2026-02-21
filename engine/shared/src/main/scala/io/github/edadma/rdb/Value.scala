@@ -241,4 +241,15 @@ case class ArrayValue(data: IndexedSeq[Value]) extends Value(ArrayType) with Arr
 case class ObjectValue(properties: Seq[(String, Value)]) extends Value(ObjectType):
   override def toText: TextValue = TextValue(render)
 
+  def get(key: String): Option[Value] = properties.collectFirst { case (k, v) if k == key => v }
+  def keys: Seq[String] = properties.map(_._1)
+
   def string: String = properties.map({ case (k, v) => s"\"$k\": ${v.render}" }).mkString("{", ", ", "}")
+
+def jsonContains(left: Value, right: Value): Boolean =
+  (left, right) match
+    case (ObjectValue(lp), ObjectValue(rp)) =>
+      rp.forall { case (k, rv) => lp.exists { case (lk, lv) => lk == k && jsonContains(lv, rv) } }
+    case (ArrayValue(ld), ArrayValue(rd)) =>
+      rd.forall(rv => ld.exists(lv => jsonContains(lv, rv)))
+    case (l, r) => l == r

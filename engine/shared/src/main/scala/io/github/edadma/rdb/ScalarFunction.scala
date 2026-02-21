@@ -798,7 +798,7 @@ val scalarFunction: Map[String, ScalarFunction] =
       },
       BooleanType,
     ),
-  ).map(f => f.name -> f).toMap
+  ).map(f => f.name -> f).toMap ++ jsonScalarFunctions
 
 // Convert SQL date format patterns to Java DateTimeFormatter patterns
 private def sqlToJavaDateFormat(fmt: String): DateTimeFormatter =

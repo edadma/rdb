@@ -98,12 +98,14 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val e = rewrite(expr)
 
       UnaryExpr(op, e) setType e.typ
-    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "AND" | "OR"), right) =>
+    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "AND" | "OR" | "->" | "#>" | "||"), right) =>
       val l = rewrite(left)
       val r = rewrite(right)
 
       BinaryExpr(l, op, r) setType l.typ
-    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE"), right) =>
+    case BinaryExpr(left, op @ ("->>" | "#>>"), right) =>
+      BinaryExpr(rewrite(left), op, rewrite(right)) setType TextType
+    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE" | "@>" | "<@" | "?" | "?|" | "?&"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
     case OverlapsExpr(s1, e1, s2, e2) =>
       BinaryExpr(

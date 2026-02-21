@@ -353,6 +353,54 @@ val aggregateFunction: Map[String, AggregateFunction] =
       def instantiate: (AggregateFunctionInstance, Type) =
         aggregateFunction("bool_and").instantiate
     },
+    new AggregateFunction("json_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("json_agg"):
+            val elems = new scala.collection.mutable.ArrayBuffer[Value]
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v) =>
+                elems += v
+                ArrayValue(elems.toIndexedSeq)
+
+            def result: Value =
+              if elems.isEmpty then NullValue()
+              else ArrayValue(elems.toIndexedSeq)
+
+            def init(): Unit = elems.clear()
+          ,
+          ArrayType,
+        )
+    },
+    new AggregateFunction("jsonb_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        aggregateFunction("json_agg").instantiate
+    },
+    new AggregateFunction("json_object_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("json_object_agg"):
+            val pairs = new scala.collection.mutable.ArrayBuffer[(String, Value)]
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(k, v) =>
+                pairs += ((k.string, v))
+                ObjectValue(pairs.toSeq)
+
+            def result: Value =
+              if pairs.isEmpty then NullValue()
+              else ObjectValue(pairs.toSeq)
+
+            def init(): Unit = pairs.clear()
+          ,
+          ObjectType,
+        )
+    },
+    new AggregateFunction("jsonb_object_agg") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        aggregateFunction("json_object_agg").instantiate
+    },
   ) map (f => f.name -> f) toMap
 
 private def varianceInstance(n: String, sample: Boolean): AggregateFunctionInstance =

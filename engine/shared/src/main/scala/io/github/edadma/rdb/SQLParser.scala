@@ -45,6 +45,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "]",
       ";",
       "$",
+      "->>",
+      "->",
+      "#>>",
+      "#>",
+      "@>",
+      "<@",
+      "?|",
+      "?&",
+      "?",
     )
     reserved ++= Seq(
       "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
@@ -281,7 +290,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val booleanPrimary: P[Expr] = positioned(
-    kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
+    expression ~ ("@>" | "<@") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
+      expression ~ ("?&" | "?|" | "?") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
+      kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
       expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ kw("ARRAY") ~ "[" ~ expressions ~ "]" ~ ")" ^^ {
         case e ~ _ ~ _ ~ _ ~ _ ~ _ ~ es ~ _ ~ _ => InSeqExpr(e, "IN", es)
       } |
@@ -374,8 +385,14 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val castExpression: P[Expr] = positioned(
-    primary ~ "::" ~ castType ^^ { case e ~ _ ~ t => CastExpr(e, t) }
-      | primary,
+    jsonAccess ~ "::" ~ castType ^^ { case e ~ _ ~ t => CastExpr(e, t) }
+      | jsonAccess,
+  )
+
+  lazy val jsonAccess: P[Expr] = positioned(
+    jsonAccess ~ ("->>" | "->" | "#>>" | "#>") ~ primary ^^ { case l ~ o ~ r =>
+      BinaryExpr(l, o, r)
+    } | primary,
   )
 
   lazy val pair: P[(Ident, Expr)] =

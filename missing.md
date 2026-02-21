@@ -31,7 +31,7 @@
 | Boolean test | IS TRUE, IS FALSE, IS UNKNOWN | — |
 | Range | BETWEEN, NOT BETWEEN, OVERLAPS | BETWEEN SYMMETRIC |
 | Set | IN, NOT IN, EXISTS, ANY/SOME, ALL | — |
-| JSON | — | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?|` `?&` |
+| JSON | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?\|` `?&` `\|\|` (merge) | — |
 | Array | — | `@>` `<@` `&&` (overlap), `||` (array concat operator) |
 | Cast | CAST(x AS type), `::` | — |
 | Bitwise | `&` `|` `#` `~` `<<` `>>` | — |
@@ -99,6 +99,17 @@ octet_length, encode, decode
 
 gen_random_uuid
 
+### JSON — have
+
+jsonb_typeof, json_typeof, jsonb_array_length, jsonb_object_keys, jsonb_keys, jsonb_extract_path, jsonb_extract_path_text, jsonb_set, jsonb_insert, jsonb_strip_nulls, jsonb_pretty, jsonb_build_object, jsonb_build_array, to_jsonb, to_json
+
+### JSON — missing
+
+- jsonb_each(json), jsonb_each_text(json) — set-returning
+- jsonb_to_record(json) — expands to record type
+- jsonb_array_elements(json) — set-returning
+- jsonb_path_query(json, jsonpath) — SQL/JSON path
+
 ### Set-returning functions — missing
 
 - generate_series(start, stop, step)
@@ -108,11 +119,9 @@ gen_random_uuid
 
 ### Have
 
-count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, bit_and, bit_or, bit_xor, variance, var_samp, var_pop, stddev, stddev_samp, stddev_pop
+count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, bit_and, bit_or, bit_xor, variance, var_samp, var_pop, stddev, stddev_samp, stddev_pop, json_agg, jsonb_agg, json_object_agg, jsonb_object_agg
 
 ### Missing
-
-- json_agg, jsonb_agg, json_object_agg
 - corr, covar_pop, covar_samp
 - regr_avgx, regr_avgy, regr_count, regr_intercept, regr_r2, regr_slope, regr_sxx, regr_sxy, regr_syy
 - percentile_cont, percentile_disc, mode (ordered-set aggregates)

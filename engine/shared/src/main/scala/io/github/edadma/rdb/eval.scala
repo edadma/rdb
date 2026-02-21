@@ -91,10 +91,82 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case UnaryExpr("IS UNKNOWN", expr)     => BooleanValue(eval(expr, ctx).isNull)
     case UnaryExpr("IS NOT UNKNOWN", expr) => BooleanValue(!eval(expr, ctx).isNull)
     case BinaryExpr(left, "||", right) =>
-      val l = seval(left, ctx)
-      val r = seval(right, ctx)
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      (l, r) match
+        case (ObjectValue(lp), ObjectValue(rp)) =>
+          ObjectValue(lp.filterNot { case (k, _) => rp.exists(_._1 == k) } ++ rp)
+        case (ArrayValue(ld), ArrayValue(rd)) => ArrayValue(ld ++ rd)
+        case (ArrayValue(ld), rv)             => ArrayValue(ld :+ rv)
+        case (lv, ArrayValue(rd))             => ArrayValue(lv +: rd)
+        case _                                => TextValue(l.string ++ r.string)
+    case BinaryExpr(left, op @ ("->" | "->>"), right) =>
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      val raw = (l, r) match
+        case (ObjectValue(props), TextValue(key)) =>
+          props.collectFirst { case (k, v) if k == key => v }.getOrElse(NullValue())
+        case (ArrayValue(data), NumberValue(_, idx)) =>
+          val i = idx.intValue
+          val resolved = if i < 0 then data.length + i else i
+          if resolved >= 0 && resolved < data.length then data(resolved) else NullValue()
+        case _ => NullValue()
+      if op == "->>" then
+        raw match
+          case NullValue() => NullValue()
+          case v           => TextValue(v.string)
+      else raw
+    case BinaryExpr(left, op @ ("#>" | "#>>"), right) =>
+      val l = eval(left, ctx)
+      val path = eval(right, ctx) match
+        case ArrayValue(elems) => elems.map(_.string)
+        case other             => problem(right, s"path operator requires array, got ${other.vtyp.name}")
 
-      TextValue(l ++ r)
+      @tailrec
+      def navigate(v: Value, keys: Seq[String]): Value =
+        if keys.isEmpty then v
+        else
+          v match
+            case ObjectValue(props) =>
+              props.collectFirst { case (k, vv) if k == keys.head => vv } match
+                case Some(next) => navigate(next, keys.tail)
+                case None       => NullValue()
+            case ArrayValue(data) =>
+              scala.util.Try(keys.head.toInt).toOption match
+                case Some(idx) =>
+                  val resolved = if idx < 0 then data.length + idx else idx
+                  if resolved >= 0 && resolved < data.length then navigate(data(resolved), keys.tail)
+                  else NullValue()
+                case None => NullValue()
+            case _ => NullValue()
+
+      val raw = navigate(l, path)
+      if op == "#>>" then
+        raw match
+          case NullValue() => NullValue()
+          case v           => TextValue(v.string)
+      else raw
+    case BinaryExpr(left, "@>", right) =>
+      BooleanValue(jsonContains(eval(left, ctx), eval(right, ctx)))
+    case BinaryExpr(left, "<@", right) =>
+      BooleanValue(jsonContains(eval(right, ctx), eval(left, ctx)))
+    case BinaryExpr(left, "?", right) =>
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      BooleanValue(l match
+        case ObjectValue(props) => props.exists(_._1 == r.string)
+        case ArrayValue(data)   => data.exists(_.string == r.string)
+        case _                  => false)
+    case BinaryExpr(left, op @ ("?|" | "?&"), right) =>
+      val l = eval(left, ctx)
+      val keys = eval(right, ctx) match
+        case ArrayValue(elems) => elems.map(_.string)
+        case other             => problem(right, s"key-existence operator requires array, got ${other.vtyp.name}")
+      val exists: String => Boolean = l match
+        case ObjectValue(props) => k => props.exists(_._1 == k)
+        case ArrayValue(data)   => k => data.exists(_.string == k)
+        case _                  => _ => false
+      BooleanValue(if op == "?|" then keys.exists(exists) else keys.forall(exists))
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
       val or = op == "OR"
 
