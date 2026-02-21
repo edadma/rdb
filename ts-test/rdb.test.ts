@@ -1,7 +1,7 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
-const { ConnectSQL } = await import("../js/target/scala-3.8.1/rdb-opt/main.js");
+const { ConnectSQL } = await import("../engine/js/target/scala-3.8.1/rdb-engine-opt/main.js");
 
 describe("ConnectSQL", () => {
   let db: any;
@@ -42,6 +42,19 @@ describe("ConnectSQL", () => {
       const [res] = db.execute("ALTER TABLE alter_me ADD COLUMN name TEXT");
       assert.equal(res.command, "alter table");
     });
+
+    it("CREATE TABLE IF NOT EXISTS on existing table is no-op", () => {
+      db.execute("CREATE TABLE ifne (id INT)");
+      const [res] = db.execute("CREATE TABLE IF NOT EXISTS ifne (id INT)");
+      assert.equal(res.command, "create table");
+      assert.equal(res.table, "ifne");
+    });
+
+    it("CREATE INDEX returns correct result", () => {
+      db.execute("CREATE TABLE idx_t (id INT, name TEXT)");
+      const [res] = db.execute("CREATE INDEX idx_name ON idx_t (name)");
+      assert.equal(res.command, "create index");
+    });
   });
 
   describe("DML results", () => {
@@ -63,6 +76,26 @@ describe("ConnectSQL", () => {
       const [res] = db.execute("DELETE FROM t1 WHERE name = 'ToDelete'");
       assert.equal(res.command, "delete");
       assert.equal(typeof res.rows, "number");
+    });
+
+    it("TRUNCATE returns correct result", () => {
+      db.execute("CREATE TABLE trunc_t (id SERIAL, val TEXT)");
+      db.execute("INSERT INTO trunc_t (val) VALUES ('a'), ('b'), ('c')");
+      const [res] = db.execute("TRUNCATE TABLE trunc_t");
+      assert.equal(res.command, "truncate table");
+      assert.equal(res.table, "trunc_t");
+    });
+
+    it("TRUNCATE empties table and resets serial", () => {
+      db.execute("CREATE TABLE trunc2 (id SERIAL, val TEXT)");
+      db.execute("INSERT INTO trunc2 (val) VALUES ('a'), ('b')");
+      db.execute("TRUNCATE TABLE trunc2");
+      const [sel] = db.execute("SELECT * FROM trunc2");
+      assert.equal(sel.rows.length, 0);
+      // Serial resets — next insert gets id=1
+      db.execute("INSERT INTO trunc2 (val) VALUES ('new')");
+      const [check] = db.execute("SELECT id, val FROM trunc2", { rowMode: "array" });
+      assert.equal(check.rows[0][0], 1);
     });
   });
 
@@ -392,6 +425,177 @@ describe("ConnectSQL", () => {
     it("works with LIMIT", () => {
       const [res] = db.execute("SELECT DISTINCT color FROM colors ORDER BY color LIMIT 2");
       assert.equal(res.rows.length, 2);
+    });
+  });
+
+  describe("SQL compatibility", () => {
+    it("case-insensitive keywords", () => {
+      const d = new ConnectSQL();
+      d.execute("create table ci_kw (id int)");
+      d.execute("Insert Into ci_kw (id) Values (1)");
+      const [res] = d.execute("select * from ci_kw");
+      assert.equal(res.rows.length, 1);
+    });
+
+    it("unquoted identifiers fold to lowercase", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE MyTable (MyCol INT)");
+      d.execute("INSERT INTO mytable (mycol) VALUES (42)");
+      const [res] = d.execute("SELECT MYCOL FROM MYTABLE", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 42);
+    });
+
+    it("double-quoted identifiers preserve case", () => {
+      const d = new ConnectSQL();
+      d.execute('CREATE TABLE dq ("MixedCase" TEXT)');
+      d.execute('INSERT INTO dq ("MixedCase") VALUES (\'yes\')');
+      const [res] = d.execute('SELECT "MixedCase" FROM dq', { rowMode: "array" });
+      assert.equal(res.rows[0][0], "yes");
+    });
+
+    it("<> operator works as not-equal", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE neq (id INT)");
+      d.execute("INSERT INTO neq (id) VALUES (1), (2), (3)");
+      const [res] = d.execute("SELECT id FROM neq WHERE id <> 2", { rowMode: "array" });
+      assert.equal(res.rows.length, 2);
+    });
+
+    it("doubled single-quote string escaping", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE esc (val TEXT)");
+      d.execute("INSERT INTO esc (val) VALUES ('it''s')");
+      const [res] = d.execute("SELECT val FROM esc", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "it's");
+    });
+
+    it("CAST(expr AS type) syntax", () => {
+      const d = new ConnectSQL();
+      const [res] = d.execute("SELECT CAST('42' AS INT) AS val", { rowMode: "array" });
+      assert.equal(res.rows[0][0], 42);
+    });
+  });
+
+  describe("INSERT INTO ... SELECT", () => {
+    it("inserts rows from a query", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE src (id INT, name TEXT)");
+      d.execute("INSERT INTO src (id, name) VALUES (1, 'a'), (2, 'b'), (3, 'c')");
+      d.execute("CREATE TABLE dst (id INT, name TEXT)");
+      d.execute("INSERT INTO dst (id, name) SELECT id, name FROM src WHERE id > 1");
+      const [res] = d.execute("SELECT * FROM dst ORDER BY id", { rowMode: "array" });
+      assert.equal(res.rows.length, 2);
+      assert.equal(res.rows[0][0], 2);
+      assert.equal(res.rows[1][0], 3);
+    });
+  });
+
+  describe("UPDATE ... FROM", () => {
+    it("bulk updates with FROM clause", () => {
+      const d = new ConnectSQL();
+      d.execute(`
+        CREATE TABLE targets (id INT, val TEXT, PRIMARY KEY (id));
+        INSERT INTO targets (id, val) VALUES (1, 'old1'), (2, 'old2'), (3, 'old3')
+      `);
+      d.execute(`
+        UPDATE targets
+          SET val = d.val
+          FROM (VALUES (1, 'new1'), (3, 'new3')) AS d (id, val)
+          WHERE targets.id = d.id
+      `);
+      const [res] = d.execute("SELECT id, val FROM targets ORDER BY id", { rowMode: "array" });
+      assert.equal(res.rows[0][1], "new1");
+      assert.equal(res.rows[1][1], "old2");
+      assert.equal(res.rows[2][1], "new3");
+    });
+  });
+
+  describe("foreign keys", () => {
+    it("ON DELETE CASCADE removes child rows", () => {
+      const d = new ConnectSQL();
+      d.execute(`
+        CREATE TABLE parents (id INT, PRIMARY KEY (id));
+        INSERT INTO parents (id) VALUES (1), (2);
+        CREATE TABLE children (id INT, pid INT REFERENCES parents (id) ON DELETE CASCADE);
+        INSERT INTO children (id, pid) VALUES (10, 1), (20, 1), (30, 2)
+      `);
+      d.execute("DELETE FROM parents WHERE id = 1");
+      const [res] = d.execute("SELECT * FROM children", { rowMode: "array" });
+      assert.equal(res.rows.length, 1);
+      assert.equal(res.rows[0][1], 2);
+    });
+
+    it("FK violation throws error", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE pk_t (id INT, PRIMARY KEY (id))");
+      d.execute("CREATE TABLE fk_t (ref INT REFERENCES pk_t (id))");
+      assert.throws(() => d.execute("INSERT INTO fk_t (ref) VALUES (999)"));
+    });
+  });
+
+  describe("prepared statements", () => {
+    it("PREPARE and EXECUTE with parameters", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE prep (id INT, name TEXT)");
+      d.execute("INSERT INTO prep (id, name) VALUES (1, 'Alice'), (2, 'Bob')");
+      d.execute("PREPARE q AS SELECT name FROM prep WHERE id = $1");
+      const [res] = d.execute("EXECUTE q(2)", { rowMode: "array" });
+      assert.equal(res.rows[0][0], "Bob");
+    });
+
+    it("DEALLOCATE removes prepared statement", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE prep2 (id INT)");
+      d.execute("PREPARE s AS SELECT * FROM prep2");
+      d.execute("DEALLOCATE s");
+      assert.throws(() => d.execute("EXECUTE s"));
+    });
+  });
+
+  describe("LATERAL join", () => {
+    it("correlated subquery in FROM", () => {
+      const d = new ConnectSQL();
+      d.execute(`
+        CREATE TABLE depts (id INT, name TEXT, PRIMARY KEY (id));
+        INSERT INTO depts (id, name) VALUES (1, 'Eng'), (2, 'Sales');
+        CREATE TABLE emps (id INT, dept_id INT, salary INT);
+        INSERT INTO emps (id, dept_id, salary) VALUES
+          (1, 1, 100), (2, 1, 200), (3, 2, 150)
+      `);
+      const [res] = d.execute(`
+        SELECT depts.name, top.salary
+        FROM depts,
+        LATERAL (SELECT salary FROM emps WHERE emps.dept_id = depts.id ORDER BY salary DESC LIMIT 1) AS top
+        ORDER BY depts.name
+      `, { rowMode: "array" });
+      assert.equal(res.rows.length, 2);
+      assert.equal(res.rows[0][0], "Eng");
+      assert.equal(res.rows[0][1], 200);
+      assert.equal(res.rows[1][0], "Sales");
+      assert.equal(res.rows[1][1], 150);
+    });
+  });
+
+  describe("transactions", () => {
+    it("COMMIT persists changes", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE tx (id INT)");
+      d.execute("BEGIN");
+      d.execute("INSERT INTO tx (id) VALUES (1)");
+      d.execute("COMMIT");
+      const [res] = d.execute("SELECT * FROM tx");
+      assert.equal(res.rows.length, 1);
+    });
+
+    it("ROLLBACK discards changes", () => {
+      const d = new ConnectSQL();
+      d.execute("CREATE TABLE tx2 (id INT)");
+      d.execute("INSERT INTO tx2 (id) VALUES (1)");
+      d.execute("BEGIN");
+      d.execute("INSERT INTO tx2 (id) VALUES (2)");
+      d.execute("ROLLBACK");
+      const [res] = d.execute("SELECT * FROM tx2");
+      assert.equal(res.rows.length, 1);
     });
   });
 });

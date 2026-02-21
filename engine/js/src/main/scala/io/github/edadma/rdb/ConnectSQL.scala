@@ -93,8 +93,12 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "create type", `type` = typ)
       case DropTypeResult(name) =>
         js.Dynamic.literal(command = "drop type", `type` = name)
+      case CreateIndexResult(name) =>
+        js.Dynamic.literal(command = "create index", index = name)
       case DropIndexResult(name) =>
         js.Dynamic.literal(command = "drop index", index = name)
+      case TruncateResult(table) =>
+        js.Dynamic.literal(command = "truncate table", table = table)
       case AlterTableResult() =>
         js.Dynamic.literal(command = "alter table")
       case PrepareResult(name) =>
