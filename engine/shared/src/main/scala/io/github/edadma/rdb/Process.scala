@@ -125,7 +125,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Proc
         lookup(lookupName, ctx) match
           case None             => problem(c, s"'$lookupName' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
-      case (expr: Expr, idx) => ColumnMetadata(None, s"col_${idx + 1}", expr.typ)
+      case (expr: Expr, _) => ColumnMetadata(None, exprToSQL(expr), expr.typ)
     })
 
   def iterator(ctx: Seq[Row]): RowIterator =
