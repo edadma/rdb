@@ -65,6 +65,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       res.data.head.data.head
     case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx).nonEmpty)
     case UnaryExpr("-", expr)                              => BasicDAL.negate(neval(expr, ctx), NumberValue.from)
+    case UnaryExpr("~", expr)                              => NumberValue((~neval(expr, ctx).value.longValue).toDouble)
     case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx))
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
       BooleanValue(op.contains("NOT") ^ eval(expr, ctx).isNull)
@@ -136,6 +137,16 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val res = like(s, p, !op.contains("ILIKE"))
 
       BooleanValue(op.contains("NOT") ^ res)
+    case BinaryExpr(left, op @ ("&" | "|" | "#" | "<<" | ">>"), right) =>
+      val l = neval(left, ctx).value.longValue
+      val r = neval(right, ctx).value.longValue
+      NumberValue((op match
+        case "&"  => l & r
+        case "|"  => l | r
+        case "#"  => l ^ r
+        case "<<" => l << r.toInt
+        case ">>" => l >> r.toInt
+      ).toDouble)
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "%"), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)

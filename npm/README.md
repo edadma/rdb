@@ -148,7 +148,7 @@ DEALLOCATE name
 
 **Text:** `lower`, `upper`, `initcap`, `length`, `trim`, `ltrim`, `rtrim`, `btrim`, `substring`, `left`, `right`, `lpad`, `rpad`, `replace`, `translate`, `concat`, `concat_ws`, `repeat`, `reverse`, `position`, `split_part`, `ascii`, `chr`, `regexp_replace`, `regexp_match`, `starts_with`, `ends_with`
 
-**Numeric:** `abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `mod`, `%`, `power`, `sqrt`, `cbrt`, `exp`, `ln`, `log10`, `log`, `pi`, `degrees`, `radians`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `div`, `factorial`, `gcd`, `lcm`, `random`, `greatest`, `least`
+**Numeric:** `abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `mod`, `%`, `power`, `sqrt`, `cbrt`, `exp`, `ln`, `log10`, `log`, `pi`, `degrees`, `radians`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `div`, `factorial`, `gcd`, `lcm`, `random`, `greatest`, `least`, `&` (AND), `|` (OR), `#` (XOR), `~` (NOT), `<<` (shift left), `>>` (shift right)
 
 **Date/Time:** `now`, `current_date`, `current_time`, `date_part`, `EXTRACT`, `date_trunc`, `make_date`, `make_time`, `make_timestamp`, `make_interval`, `age`, `to_char`, `to_date`, `to_timestamp`, `to_number`, `isfinite`
 

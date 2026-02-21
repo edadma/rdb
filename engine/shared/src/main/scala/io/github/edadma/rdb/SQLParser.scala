@@ -32,6 +32,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "&",
       "|",
       "^",
+      "~",
+      "<<",
+      ">>",
+      "#",
       "@",
       "{",
       "}",
@@ -318,7 +322,14 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val expression: P[Expr] = concatenation
 
   lazy val concatenation: P[Expr] = positioned(
-    concatenation ~ "||" ~ additive ^^ { case l ~ o ~ r =>
+    concatenation ~ "||" ~ bitwise ^^ { case l ~ o ~ r =>
+      BinaryExpr(l, o, r)
+    } |
+      bitwise,
+  )
+
+  lazy val bitwise: P[Expr] = positioned(
+    bitwise ~ ("&" | "|" | "#" | "<<" | ">>") ~ additive ^^ { case l ~ o ~ r =>
       BinaryExpr(l, o, r)
     } |
       additive,
@@ -408,6 +419,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       jsonLiteral |
       caseExpression |
       "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
+      "~" ~> primary ^^ (e => UnaryExpr("~", e)) |
       kw("TABLE") ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
       "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
       "(" ~> expression <~ ")",

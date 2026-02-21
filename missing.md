@@ -34,7 +34,7 @@
 | JSON | — | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?|` `?&` |
 | Array | — | `@>` `<@` `&&` (overlap), `||` (array concat operator) |
 | Cast | CAST(x AS type), `::` | — |
-| Bitwise | — | `&` `|` `#` `~` `<<` `>>` |
+| Bitwise | `&` `|` `#` `~` `<<` `>>` | — |
 | Time zone | — | AT TIME ZONE |
 
 ## Scalar Functions

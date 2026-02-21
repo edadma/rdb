@@ -2,7 +2,7 @@ import xerial.sbt.Sonatype.sonatypeCentralHost
 
 ThisBuild / licenses               := Seq("ISC" -> url("https://opensource.org/licenses/ISC"))
 ThisBuild / versionScheme          := Some("semver-spec")
-ThisBuild / version                := "0.1.6"
+ThisBuild / version                := "0.1.7"
 ThisBuild / evictionErrorLevel     := Level.Warn
 ThisBuild / scalaVersion           := "3.8.1"
 ThisBuild / organization           := "io.github.edadma"
@@ -51,7 +51,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
   .settings(
     name    := "rdb-engine",
-    version := "0.1.6",
+    version := "0.1.7",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",

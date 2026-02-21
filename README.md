@@ -30,7 +30,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.6"
+libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.7"
 ```
 
 ## Basic Usage
@@ -375,6 +375,12 @@ SELECT date_trunc('month', now());                      -- truncate
 | `sinh` / `cosh` / `tanh` / `asinh` / `acosh` / `atanh` | Hyperbolic trigonometry |
 | `random()` | Random number [0, 1) |
 | `x % y` | Modulo operator |
+| `x & y` | Bitwise AND |
+| `x \| y` | Bitwise OR |
+| `x # y` | Bitwise XOR |
+| `~x` | Bitwise NOT |
+| `x << n` | Bit shift left |
+| `x >> n` | Bit shift right |
 | `greatest(a, b, ...)` / `least(a, b, ...)` | Max/min of values |
 
 #### Date/Time
