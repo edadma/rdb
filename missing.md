@@ -32,7 +32,7 @@
 | Range | BETWEEN, NOT BETWEEN, OVERLAPS | BETWEEN SYMMETRIC |
 | Set | IN, NOT IN, EXISTS, ANY/SOME, ALL | — |
 | JSON | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?\|` `?&` `\|\|` (merge) | — |
-| Array | — | `@>` `<@` `&&` (overlap), `||` (array concat operator) |
+| Array | `@>` `<@` `&&` (overlap) `\|\|` (concat) | — |
 | Cast | CAST(x AS type), `::` | — |
 | Bitwise | `&` `|` `#` `~` `<<` `>>` | — |
 | Time zone | — | AT TIME ZONE |

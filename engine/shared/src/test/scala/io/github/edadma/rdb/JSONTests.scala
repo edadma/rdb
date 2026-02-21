@@ -122,6 +122,31 @@ class JSONTests extends AnyFreeSpec with Matchers with Testing {
       )
       table.data.length shouldBe 1
     }
+
+    "&& array overlap" in {
+      val table = query(
+        """
+          |CREATE TABLE a (id INT, tags TEXT[]);
+          |INSERT INTO a (id, tags) VALUES (1, ARRAY['a', 'b', 'c']);
+          |INSERT INTO a (id, tags) VALUES (2, ARRAY['d', 'e']);
+          |INSERT INTO a (id, tags) VALUES (3, ARRAY['c', 'f']);
+          |SELECT id FROM a WHERE tags && ARRAY['b', 'c'];
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 2
+      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(1, 3)
+    }
+
+    "&& no overlap returns empty" in {
+      val table = query(
+        """
+          |CREATE TABLE a (id INT, tags TEXT[]);
+          |INSERT INTO a (id, tags) VALUES (1, ARRAY['a', 'b']);
+          |SELECT id FROM a WHERE tags && ARRAY['x', 'y'];
+          |""".trim.stripMargin
+      )
+      table.data.length shouldBe 0
+    }
   }
 
   // ── Key existence operators ?, ?|, ?& ──────────────────────────────

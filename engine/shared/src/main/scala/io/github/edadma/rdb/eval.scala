@@ -150,6 +150,12 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       BooleanValue(jsonContains(eval(left, ctx), eval(right, ctx)))
     case BinaryExpr(left, "<@", right) =>
       BooleanValue(jsonContains(eval(right, ctx), eval(left, ctx)))
+    case BinaryExpr(left, "&&", right) =>
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      BooleanValue((l, r) match
+        case (ArrayValue(ld), ArrayValue(rd)) => rd.exists(rv => ld.exists(_ == rv))
+        case _ => false)
     case BinaryExpr(left, "?", right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)

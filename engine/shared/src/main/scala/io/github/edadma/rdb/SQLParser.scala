@@ -54,6 +54,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "?|",
       "?&",
       "?",
+      "&&",
     )
     reserved ++= Seq(
       "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
@@ -290,7 +291,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val booleanPrimary: P[Expr] = positioned(
-    expression ~ ("@>" | "<@") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
+    expression ~ ("@>" | "<@" | "&&") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       expression ~ ("?&" | "?|" | "?") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
       kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
       expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ kw("ARRAY") ~ "[" ~ expressions ~ "]" ~ ")" ^^ {
