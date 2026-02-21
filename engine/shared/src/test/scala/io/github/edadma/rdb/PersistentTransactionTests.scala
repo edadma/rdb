@@ -5,7 +5,7 @@ class PersistentTransactionTests extends PersistentTestBase:
   "Transactions" - {
     "BEGIN/COMMIT persists inserts" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
       executeSQL("BEGIN;")
       executeSQL("INSERT INTO t (name) VALUES ('Alice');")
@@ -21,7 +21,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK undoes inserts" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
       executeSQL("INSERT INTO t (name) VALUES ('before');")
       executeSQL("BEGIN;")
@@ -36,7 +36,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK undoes deletes" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("BEGIN;")
@@ -51,7 +51,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK undoes updates" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("BEGIN;")
@@ -66,7 +66,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK restores auto-increment state" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
       executeSQL("INSERT INTO t (name) VALUES ('first');")
       executeSQL("BEGIN;")
@@ -84,7 +84,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "read-your-own-writes within transaction" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("BEGIN;")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'txn_row');")
@@ -98,7 +98,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "multiple DML operations in single transaction" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
@@ -121,7 +121,7 @@ class PersistentTransactionTests extends PersistentTestBase:
     "transaction survives reopen after commit" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
         executeSQL("BEGIN;")
         executeSQL("INSERT INTO t (name) VALUES ('persisted');")
@@ -131,7 +131,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
         table.data(0).data(0) shouldBe TextValue("persisted")
@@ -141,7 +141,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "DDL inside transaction fails" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER);")
       executeSQL("BEGIN;")
 
@@ -155,7 +155,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "auto-commit works as before" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'auto');")
 
@@ -167,7 +167,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "COMMIT without BEGIN fails" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER);")
 
       the[RuntimeException] thrownBy {
@@ -179,7 +179,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK without BEGIN fails" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER);")
 
       the[RuntimeException] thrownBy {
@@ -191,7 +191,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "error inside transaction marks it aborted" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
@@ -217,7 +217,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK after error allows new transaction" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
@@ -240,7 +240,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "SELECT in aborted transaction fails" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL);")
       executeSQL("INSERT INTO t (id) VALUES (1);")
       executeSQL("BEGIN;")
@@ -259,7 +259,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK restores unique index — re-insert same key" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("BEGIN;")
@@ -276,7 +276,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK restores non-unique index state" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -299,7 +299,7 @@ class PersistentTransactionTests extends PersistentTestBase:
 
     "ROLLBACK after delete restores index entry" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")

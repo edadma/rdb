@@ -8,7 +8,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
     "multiple tables persist independently" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("CREATE TABLE products (id SERIAL, title TEXT, price INTEGER, PRIMARY KEY (id));")
         executeSQL("INSERT INTO users (name) VALUES ('Alice');")
@@ -19,7 +19,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val users = executeSQL("SELECT name FROM users;").collect { case QueryResult(t) => t }.head
         val products = executeSQL("SELECT title, price FROM products ORDER BY price;").collect { case QueryResult(t) => t }.head
 
@@ -40,7 +40,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
     "many rows spanning multiple data pages" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, payload TEXT);")
         // Insert enough rows to fill multiple pages (each row ~100 bytes serialized)
         for i <- 1 to 100 do
@@ -50,7 +50,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 100
         table.data(0).data(0) shouldBe NumberValue(1)
@@ -62,7 +62,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
     "insert after delete reuses space" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         for i <- 1 to 20 do
           executeSQL(s"INSERT INTO t (id, v) VALUES ($i, 'row$i');")
@@ -76,7 +76,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 20
         table.data(0).data(0) shouldBe NumberValue(11)
@@ -90,7 +90,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, smallPageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         for i <- 1 to 20 do
           executeSQL(s"INSERT INTO t (id, name) VALUES ($i, 'name_$i');")
@@ -99,7 +99,7 @@ class PersistentMultiTableTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 20
         table.data(0).data(0) shouldBe NumberValue(1)

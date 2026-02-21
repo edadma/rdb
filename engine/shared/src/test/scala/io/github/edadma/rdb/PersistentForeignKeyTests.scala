@@ -5,7 +5,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
   "FK enforcement survives close/reopen" in {
     locally {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL(
         """CREATE TABLE departments (id INTEGER, name TEXT, PRIMARY KEY (id));
           |INSERT INTO departments (id, name) VALUES (1, 'Engineering');
@@ -24,7 +24,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
 
     locally {
       val db = PersistentDB.open(tmpFile)
-      given DB = db
+      given Session = db.connect()
       // FK enforcement still works after reopen
       assertThrows[RuntimeException] {
         executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Bob', 99);")
@@ -40,7 +40,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
   "CASCADE action persists across reopen" in {
     locally {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL(
         """CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));
           |INSERT INTO parent (id) VALUES (1);
@@ -58,7 +58,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
 
     locally {
       val db = PersistentDB.open(tmpFile)
-      given DB = db
+      given Session = db.connect()
       // CASCADE should still work
       executeSQL("DELETE FROM parent WHERE id = 1;")
       val t = executeSQL("SELECT * FROM child;").collect { case QueryResult(t) => t }.head
@@ -70,7 +70,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
   "inline column-level FK enforced after reopen" in {
     locally {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
       executeSQL(
         """CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));
           |INSERT INTO parent (id) VALUES (1);
@@ -86,7 +86,7 @@ class PersistentForeignKeyTests extends PersistentTestBase:
 
     locally {
       val db = PersistentDB.open(tmpFile)
-      given DB = db
+      given Session = db.connect()
       assertThrows[RuntimeException] {
         executeSQL("INSERT INTO child (parent_id) VALUES (99);")
       }

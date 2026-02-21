@@ -66,7 +66,7 @@ def resolveAliases(expr: Expr, aliases: Map[String, Expr]): Expr =
       CastExpr(resolveAliases(e, aliases), t) setType expr.typ
     case _ => expr
 
-def rewrite(expr: Expr)(using db: DB): Expr =
+def rewrite(expr: Expr)(using session: Session): Expr =
   expr match
     case _ if expr.typ != null              => expr
     case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
@@ -358,7 +358,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case ColumnAliasOperator(rel, Ident(alias), columns) =>
       ProcessOperator(ColumnAliasProcess(procRewrite(rel), alias, columns.map(_.name)))
     case TableOperator(id @ Ident(name))  =>
-      db.getTable(name) match
+      session.db.getTable(name) match
         case Some(t) => ProcessOperator(t)
         case None    => problem(id, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
@@ -417,7 +417,7 @@ private def isColumnOf(table: Table, expr: Expr): Option[String] =
 private def isNonColumnExpr(table: Table, expr: Expr): Boolean =
   isColumnOf(table, expr).isEmpty
 
-def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
+def tryIndexScan(table: Table, cond: Expr)(using Session): Option[Process] =
   val conjuncts = flattenAnd(cond)
 
   // Try composite index: collect all col = expr equalities, find best multi-column index with longest contiguous prefix
@@ -522,4 +522,4 @@ def tryIndexScan(table: Table, cond: Expr)(using DB): Option[Process] =
 
   tryComposite.orElse(tryEquality).orElse(tryInList).orElse(tryRange)
 
-def procRewrite(expr: Expr)(using db: DB): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc
+def procRewrite(expr: Expr)(using session: Session): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

@@ -13,7 +13,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
     Console.withErr(devNull)(block)
 
   private def test(sql: String): String =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     try {
       executeSQL(sql).toString
     } catch {
@@ -21,7 +21,7 @@ class DDLTests extends AnyFreeSpec with Matchers:
     }
 
   private def testExpectingError(sql: String): String =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     suppressStderr {
       try {
         executeSQL(sql).toString
@@ -31,11 +31,11 @@ class DDLTests extends AnyFreeSpec with Matchers:
     }
 
   private def testExpectingException(sql: String): Unit =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     suppressStderr { executeSQL(sql) }
 
   private def query(sql: String): TableValue =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     executeSQL(sql).collect { case QueryResult(t) => t }.last
 
   "ALTER TABLE ADD COLUMN" - {

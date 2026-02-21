@@ -10,7 +10,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE docs (id INTEGER, content TEXT);")
         db.getTable("docs").get.insert(Map("id" -> NumberValue(1), "content" -> TextValue(longText)), None)
         db.close()
@@ -18,7 +18,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, content FROM docs;").collect { case QueryResult(t) => t }.head
         table.data(0).data(1) shouldBe TextValue(longText)
         db.close()
@@ -30,7 +30,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (v BYTEA);")
         db.getTable("t").get.insert(Map("v" -> ByteaValue(bigData)), None)
         db.close()
@@ -38,7 +38,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         val result = table.data(0).data(0).asInstanceOf[ByteaValue].data
         result shouldBe bigData
@@ -51,7 +51,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(exact)), None)
         db.close()
@@ -59,7 +59,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(exact)
         db.close()
@@ -71,7 +71,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(overBy1)), None)
         db.close()
@@ -79,7 +79,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(overBy1)
         db.close()
@@ -91,7 +91,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (v TEXT);")
         db.getTable("t").get.insert(Map("v" -> TextValue(huge)), None)
         db.close()
@@ -99,7 +99,7 @@ class PersistentLargeValueTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue(huge)
         db.close()

@@ -6,11 +6,11 @@ import org.scalatest.matchers.should.Matchers
 class ForeignKeyTests extends AnyFreeSpec with Matchers:
 
   private def execDB(sql: String): (Seq[Result], DB) =
-    given db: DB = new MemoryDB
-    (executeSQL(sql), db)
+    given session: Session = new MemoryDB().connect()
+    (executeSQL(sql), session.db)
 
   private def setup: DB =
-    given db: DB = new MemoryDB
+    given session: Session = new MemoryDB().connect()
     executeSQL(
       """CREATE TABLE departments (
         |  id INTEGER,
@@ -21,13 +21,13 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
         |INSERT INTO departments (id, name) VALUES (2, 'Sales');
         |""".stripMargin
     )
-    db
+    session.db
 
   // ── INSERT ──────────────────────────────────────────────────────
 
   "INSERT" - {
     "rejects insert when parent row does not exist" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -44,7 +44,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "allows insert when parent row exists" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -61,7 +61,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "allows insert with NULL FK column" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -78,7 +78,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "enforces inline column-level REFERENCES" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -96,7 +96,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "composite FK enforcement" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL(
         """CREATE TABLE parent (
           |  a INTEGER,
@@ -126,7 +126,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
 
   "DELETE" - {
     "RESTRICT (default) rejects delete when child rows exist" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -144,7 +144,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "allows delete when no children reference the row" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -163,7 +163,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "CASCADE deletes child rows" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -184,7 +184,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "CASCADE multi-level" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL(
         """CREATE TABLE a (id INTEGER, PRIMARY KEY (id));
           |INSERT INTO a (id) VALUES (1);
@@ -212,7 +212,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "SET NULL sets child FK columns to NULL on parent delete" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -235,7 +235,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
 
   "UPDATE" - {
     "RESTRICT rejects update of referenced column when children exist" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -253,7 +253,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "CASCADE propagates new value to children" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -271,7 +271,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "SET NULL on parent update" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -289,7 +289,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "rejects update of FK column to non-existent parent" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -307,7 +307,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "allows update of non-FK columns freely" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -329,7 +329,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
 
   "DDL" - {
     "CREATE TABLE with FK to non-existent table fails" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       assertThrows[RuntimeException] {
         executeSQL(
           """CREATE TABLE child (
@@ -343,7 +343,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "CREATE TABLE with FK to non-existent column fails" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));")
       assertThrows[RuntimeException] {
         executeSQL(
@@ -358,7 +358,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "DROP TABLE blocked when referenced by FK" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -374,7 +374,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
     }
 
     "DROP TABLE CASCADE allowed when referenced" in {
-      given db: DB = setup
+      given session: Session = setup.connect()
       executeSQL(
         """CREATE TABLE employees (
           |  id SERIAL,
@@ -385,11 +385,11 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |""".stripMargin
       )
       executeSQL("DROP TABLE departments CASCADE;")
-      db.hasTable("departments") shouldBe false
+      session.db.hasTable("departments") shouldBe false
     }
 
     "ON DELETE CASCADE syntax parses and is stored" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));")
       executeSQL(
         """CREATE TABLE child (
@@ -399,7 +399,7 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
           |);
           |""".stripMargin
       )
-      val t = db.getTable("child").get
+      val t = session.db.getTable("child").get
       val fk = t.constraints.collect { case fk: ForeignKeySpec => fk }.head
       fk.onDelete shouldBe ReferentialAction.Cascade
       fk.onUpdate shouldBe ReferentialAction.SetNull

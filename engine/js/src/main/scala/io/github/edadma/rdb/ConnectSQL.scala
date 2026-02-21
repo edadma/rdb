@@ -9,7 +9,8 @@ import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 @JSExportTopLevel("ConnectSQL")
 class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
 
-  given db: DB = new MemoryDB()
+  private val db = new MemoryDB()
+  given session: Session = db.connect()
 
   private val defaultRowMode: String =
     options.toOption.flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption).getOrElse("object")
@@ -121,7 +122,7 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
     (executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray
 
   @JSExport
-  def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(db.prepare(sql))
+  def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))
 
   class PreparedStatementJS(ps: PreparedStatement):
     @JSExport
@@ -130,5 +131,5 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
         .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
         .getOrElse(defaultRowMode)
       val paramValues = params.map(fromJS).toIndexedSeq
-      val results = ps.execute(paramValues*)(using db)
+      val results = ps.execute(paramValues*)(using session)
       (results map (r => resultToJS(r, rowMode))).toJSArray

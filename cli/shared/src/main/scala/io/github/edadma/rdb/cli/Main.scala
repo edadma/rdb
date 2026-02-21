@@ -26,8 +26,9 @@ object Main:
         if f.exists() then PersistentDB.open(p)
         else PersistentDB.create(p, 4096)
 
-    val rl   = PlatformReadLine.create()
-    val repl = new Repl(db, rl)
+    val session = db.connect()
+    val rl      = PlatformReadLine.create()
+    val repl    = new Repl(session, rl)
 
     val batch = execute.nonEmpty || file.nonEmpty || stdin.value
 

@@ -6,38 +6,43 @@ import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.language.postfixOps
 
-def executeQuery(query: String)(using db: DB): QueryResult = executeSelect(SQLParser.parseQuery(query))
+def executeQuery(query: String)(using session: Session): QueryResult = executeSelect(SQLParser.parseQuery(query))
 
-def executeSelect(query: Expr)(using db: DB) =
+def executeSelect(query: Expr)(using session: Session) =
   QueryResult(eval(rewrite(query), Nil).asInstanceOf[TableValue])
 
-def executeSQL(sql: String)(using db: DB): Seq[Result] =
+def executeSQL(sql: String)(using session: Session): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
   executeCommands(cs)
 
-private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
+private[rdb] def executeCommands(cs: Seq[Command])(using session: Session): Seq[Result] =
+
+  val db = session.db
 
   def guardTransaction[T](fn: => T): T =
-    if db.isTransactionAborted then sys.error("current transaction is aborted, use ROLLBACK")
-    if db.inTransaction then
+    if session.isTransactionAborted then sys.error("current transaction is aborted, use ROLLBACK")
+    if session.inTransaction then
       try fn
       catch
         case e: Throwable =>
-          db.markTransactionAborted()
+          session.markTransactionAborted()
           throw e
     else fn
 
+  def guardDDL(): Unit =
+    if session.inTransaction then sys.error("DDL not allowed inside a transaction")
+
   cs map {
-    case BeginCommand    => db.beginTransaction(); BeginResult
-    case CommitCommand   => db.commitTransaction(); CommitResult
-    case RollbackCommand => db.rollbackTransaction(); RollbackResult
+    case BeginCommand    => session.beginTransaction(); BeginResult
+    case CommitCommand   => session.commitTransaction(); CommitResult
+    case RollbackCommand => session.rollbackTransaction(); RollbackResult
     case PrepareCommand(id @ Ident(name), cmds) =>
-      if db.preparedStatements.contains(name) then
+      if session.preparedStatements.contains(name) then
         problem(id, s"prepared statement '$name' already exists")
-      db.preparedStatements(name) = PreparedStatement(name, cmds)
+      session.preparedStatements(name) = PreparedStatement(name, cmds)
       PrepareResult(name)
     case ExecuteCommand(id @ Ident(name), paramExprs) =>
-      val ps = db.preparedStatements.getOrElse(name, problem(id, s"prepared statement '$name' not found"))
+      val ps = session.preparedStatements.getOrElse(name, problem(id, s"prepared statement '$name' not found"))
       val paramValues = paramExprs.map(e => eval(rewrite(e), Nil)).toIndexedSeq
       val saved = currentParams
       try
@@ -47,9 +52,9 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
       finally
         currentParams = saved
     case DeallocateCommand(id @ Ident(name)) =>
-      if !db.preparedStatements.contains(name) then
+      if !session.preparedStatements.contains(name) then
         problem(id, s"prepared statement '$name' not found")
-      db.preparedStatements.remove(name)
+      session.preparedStatements.remove(name)
       DeallocateResult(name)
     case cmd             => guardTransaction { cmd match
       case InsertCommand(id @ Ident(table), columns, rows, returning) =>
@@ -136,6 +141,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
         InsertResult(result, TableValue(Vector(row), metadata))
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists) =>
+        guardDDL()
         if (db hasTable table) && ifNotExists then CreateTableResult(table)
         else
           if db hasTable table then problem(id, s"duplicate table: $table")
@@ -217,6 +223,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
           db.createTable(table, allSpecs)
           CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
+        guardDDL()
         if (!db.hasTable(table)) {
           if (!ifExists) problem(id, s"unknown table: $table")
           else DropTableResult(table) // IF EXISTS allows missing table
@@ -230,6 +237,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
           DropTableResult(table)
         }
       case CreateEnumCommand(id @ Ident(name), labels) =>
+        guardDDL()
         if db hasType name then problem(id, s"duplicate type '$name'")
 
         db.createEnum(name, labels)
@@ -329,6 +337,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
         t.truncate()
         TruncateResult(table)
       case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
+        guardDDL()
         if !db.hasTable(tableName) then problem(tid, s"unknown table: $tableName")
         if db.hasIndex(indexName) then problem(id, s"index '$indexName' already exists")
         val t = db.getTable(tableName).get
@@ -337,6 +346,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
         db.createIndex(indexName, tableName, columns.map(_.name), unique)
         CreateIndexResult(indexName)
       case DropIndexCommand(id @ Ident(name), ifExists) =>
+        guardDDL()
         if !db.hasIndex(name) then
           if !ifExists then problem(id, s"index '$name' not found")
           DropIndexResult(name)
@@ -344,6 +354,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
           db.dropIndex(name)
           DropIndexResult(name)
       case DropTypeCommand(id @ Ident(name), ifExists, cascade) =>
+        guardDDL()
         if (!db.hasType(name)) {
           if (!ifExists) problem(id, s"unknown type: $name")
           else DropTypeResult(name)
@@ -352,6 +363,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
           DropTypeResult(name)
         }
       case AlterTableCommand(id @ Ident(table), alter) =>
+        guardDDL()
         val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         alter match
           case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _)) =>

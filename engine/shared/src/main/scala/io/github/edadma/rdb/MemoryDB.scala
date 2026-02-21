@@ -9,10 +9,7 @@ import scala.collection.mutable
 class MemoryDB extends DB:
   val name = "in-memory DB"
 
-  // Transaction state
-  private var _inTransaction = false
-  private var _aborted = false
-  private var snapshot: Option[MemorySnapshot] = None
+  private var _snapshot: Option[MemorySnapshot] = None
 
   private case class TableSnapshot(
       rows: Seq[Array[Value]],        // deep-copied row arrays
@@ -24,15 +21,7 @@ class MemoryDB extends DB:
       tables: Map[String, TableSnapshot],
   )
 
-  override def inTransaction: Boolean = _inTransaction
-  override def isTransactionAborted: Boolean = _aborted
-  override def markTransactionAborted(): Unit = _aborted = true
-
-  override def beginTransaction(): Unit =
-    if _inTransaction then sys.error("already in a transaction")
-    _inTransaction = true
-    _aborted = false
-
+  override def snapshot(): Unit =
     // Snapshot all tables
     val tableSnapshots = tables.map { case (tname, t) =>
       val mt = t.asInstanceOf[MemoryTable]
@@ -43,20 +32,13 @@ class MemoryDB extends DB:
       }.toMap
       tname -> TableSnapshot(rows, autoState, indexRowIds)
     }.toMap
-    snapshot = Some(MemorySnapshot(tableSnapshots))
+    _snapshot = Some(MemorySnapshot(tableSnapshots))
 
-  override def commitTransaction(): Unit =
-    if !_inTransaction then sys.error("no active transaction")
-    _inTransaction = false
-    _aborted = false
-    snapshot = None
+  override def commitSnapshot(): Unit =
+    _snapshot = None
 
-  override def rollbackTransaction(): Unit =
-    if !_inTransaction then sys.error("no active transaction")
-    _inTransaction = false
-    _aborted = false
-
-    for snap <- snapshot; (tname, ts) <- snap.tables; t <- tables.get(tname) do
+  override def rollbackSnapshot(): Unit =
+    for snap <- _snapshot; (tname, ts) <- snap.tables; t <- tables.get(tname) do
       val mt = t.asInstanceOf[MemoryTable]
 
       // Restore data
@@ -88,7 +70,7 @@ class MemoryDB extends DB:
         val newIdx = MemoryTableIndex(midx.meta, midx.columnIndices, newTree, rowId.max(restoredRowId))
         mt.tableIndexes(idxName) = newIdx
 
-    snapshot = None
+    _snapshot = None
 
   protected def addTable(name: String, specs: Seq[Spec]) = new MemoryTable(name, specs)
 
@@ -102,7 +84,6 @@ class MemoryDB extends DB:
     table
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
-    guardDDL()
     val table = tables(tableName).asInstanceOf[MemoryTable]
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
 

@@ -8,7 +8,7 @@ class PersistentBasicTests extends PersistentTestBase:
     "create table, insert, close, reopen, query" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE users (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO users (name) VALUES ('Alice');")
         executeSQL("INSERT INTO users (name) VALUES ('Bob');")
@@ -17,7 +17,7 @@ class PersistentBasicTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val results = executeSQL("SELECT id, name FROM users ORDER BY id;")
         val table = results.collect { case QueryResult(t) => t }.head
 
@@ -31,14 +31,14 @@ class PersistentBasicTests extends PersistentTestBase:
     "empty table persists" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE empty_table (id INTEGER, name TEXT);")
         db.close()
       }
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val results = executeSQL("SELECT * FROM empty_table;")
         val table = results.collect { case QueryResult(t) => t }.head
 
@@ -54,7 +54,7 @@ class PersistentBasicTests extends PersistentTestBase:
     "serial counter persists across reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE items (id SERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO items (name) VALUES ('first');")
         executeSQL("INSERT INTO items (name) VALUES ('second');")
@@ -63,7 +63,7 @@ class PersistentBasicTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO items (name) VALUES ('third');")
         val results = executeSQL("SELECT id, name FROM items ORDER BY id;")
         val table = results.collect { case QueryResult(t) => t }.head
@@ -79,7 +79,7 @@ class PersistentBasicTests extends PersistentTestBase:
     "smallserial counter persists" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE ss (id SMALLSERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO ss (name) VALUES ('a');")
         executeSQL("INSERT INTO ss (name) VALUES ('b');")
@@ -88,7 +88,7 @@ class PersistentBasicTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO ss (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM ss ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 3
@@ -100,7 +100,7 @@ class PersistentBasicTests extends PersistentTestBase:
     "bigserial counter persists" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE bs (id BIGSERIAL, name TEXT, PRIMARY KEY (id));")
         executeSQL("INSERT INTO bs (name) VALUES ('a');")
         executeSQL("INSERT INTO bs (name) VALUES ('b');")
@@ -109,7 +109,7 @@ class PersistentBasicTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO bs (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM bs ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 3

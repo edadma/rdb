@@ -7,12 +7,12 @@ import io.github.edadma.cross_platform.{createTempFile, deleteFile}
 class IndexDDLTests extends AnyFreeSpec with Matchers:
 
   private def exec(sql: String): Seq[Result] =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     executeSQL(sql)
 
   private def execDB(sql: String): (Seq[Result], DB) =
-    given db: DB = new MemoryDB
-    (executeSQL(sql), db)
+    given session: Session = new MemoryDB().connect()
+    (executeSQL(sql), session.db)
 
   "CREATE INDEX" - {
     "creates a non-unique index on a table" in {
@@ -245,7 +245,7 @@ class PersistentIndexDDLTests extends PersistentTestBase:
   "PersistentDB CREATE INDEX" - {
     "creates index and persists across close/reopen" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL(
         """
@@ -274,7 +274,7 @@ class PersistentIndexDDLTests extends PersistentTestBase:
 
     "PK auto-index persists across close/reopen" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       db1.hasIndex("t_pkey") shouldBe true
@@ -291,7 +291,7 @@ class PersistentIndexDDLTests extends PersistentTestBase:
 
     "DROP INDEX persists across close/reopen" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL(
         """

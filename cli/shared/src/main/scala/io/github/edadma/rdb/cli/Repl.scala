@@ -3,7 +3,7 @@ package io.github.edadma.rdb.cli
 import io.github.edadma.rdb.*
 import scala.io.Source
 
-class Repl(db: DB, rl: ReadLine):
+class Repl(session: Session, rl: ReadLine):
   private val prompt     = "rdb> "
   private val contPrompt = "  -> "
 
@@ -29,16 +29,16 @@ class Repl(db: DB, rl: ReadLine):
       case MetaCommand.Quit =>
         false
       case MetaCommand.ListTables =>
-        Output.listTables(db)
+        Output.listTables(session.db)
         true
       case MetaCommand.DescribeTable(name) =>
-        Output.describeTable(db, name)
+        Output.describeTable(session.db, name)
         true
       case MetaCommand.Include(path) =>
         executeFile(path)
         true
       case MetaCommand.DumpSchema =>
-        Dump.dump(db)
+        Dump.dump(session.db)
         true
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
@@ -61,7 +61,7 @@ class Repl(db: DB, rl: ReadLine):
     executeSql(buf.toString)
 
   def executeSql(sql: String): Unit =
-    given DB = db
+    given Session = session
     try
       val results = executeSQL(sql)
       results.foreach(Output.printResult)

@@ -5,13 +5,13 @@ import org.scalatest.matchers.should.Matchers
 
 class MemoryTransactionTests extends AnyFreeSpec with Matchers:
 
-  private def withDB(f: DB => Unit): Unit =
+  private def withDB(f: Session => Unit): Unit =
     val db = new MemoryDB
-    f(db)
+    f(db.connect())
 
   "MemoryDB Transactions" - {
     "BEGIN/COMMIT preserves inserts" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("BEGIN;")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -25,7 +25,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK undoes inserts" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'before');")
       executeSQL("BEGIN;")
@@ -38,7 +38,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK undoes deletes" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("BEGIN;")
@@ -51,7 +51,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK undoes updates" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("BEGIN;")
@@ -63,7 +63,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK restores auto-increment state" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
       executeSQL("INSERT INTO t (name) VALUES ('first');")
       executeSQL("BEGIN;")
@@ -78,7 +78,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK restores unique index" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id) VALUES (1);")
       executeSQL("BEGIN;")
@@ -92,7 +92,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK restores non-unique index" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -106,7 +106,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "multiple DML in single transaction then rollback" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
@@ -126,7 +126,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "read-your-own-writes within transaction" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("BEGIN;")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'txn_row');")
@@ -138,7 +138,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "error inside transaction marks it aborted" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
@@ -154,7 +154,7 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "ROLLBACK after error allows new transaction" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
@@ -174,21 +174,21 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
     }
 
     "COMMIT without BEGIN fails" in withDB { db =>
-      given DB = db
+      given Session = db
       the[RuntimeException] thrownBy {
         executeSQL("COMMIT;")
       } should have message "no active transaction"
     }
 
     "ROLLBACK without BEGIN fails" in withDB { db =>
-      given DB = db
+      given Session = db
       the[RuntimeException] thrownBy {
         executeSQL("ROLLBACK;")
       } should have message "no active transaction"
     }
 
     "DDL inside transaction fails" in withDB { db =>
-      given DB = db
+      given Session = db
       executeSQL("CREATE TABLE t (id INTEGER);")
       executeSQL("BEGIN;")
 

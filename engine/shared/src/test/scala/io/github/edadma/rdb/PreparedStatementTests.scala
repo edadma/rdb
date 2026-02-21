@@ -11,11 +11,11 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     Console.withErr(devNull)(block)
 
   private def query(sql: String): TableValue =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     executeSQL(sql).collect { case QueryResult(t) => t }.last
 
   private def results(sql: String): Seq[Result] =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     executeSQL(sql)
 
   "SQL PREPARE/EXECUTE" - {
@@ -36,7 +36,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
 
     "executes with different parameter values" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
 
       executeSQL(
         """
@@ -130,7 +130,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     "EXECUTE non-existent statement fails" in {
       assertThrows[RuntimeException] {
         suppressStderr {
-          given DB = new MemoryDB
+          given Session = new MemoryDB().connect()
           executeSQL("EXECUTE nonexistent(1)")
         }
       }
@@ -139,7 +139,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     "DEALLOCATE non-existent statement fails" in {
       assertThrows[RuntimeException] {
         suppressStderr {
-          given DB = new MemoryDB
+          given Session = new MemoryDB().connect()
           executeSQL("DEALLOCATE nonexistent")
         }
       }
@@ -148,7 +148,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     "duplicate PREPARE fails" in {
       assertThrows[RuntimeException] {
         suppressStderr {
-          given DB = new MemoryDB
+          given Session = new MemoryDB().connect()
           executeSQL(
             """
               |PREPARE q AS SELECT 1;
@@ -162,15 +162,15 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
 
   "Programmatic API" - {
     "db.prepare returns PreparedStatement" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT)")
 
-      val ps = db.prepare("SELECT * FROM t WHERE id = $1")
+      val ps = session.prepare("SELECT * FROM t WHERE id = $1")
       ps shouldBe a[PreparedStatement]
     }
 
     "ps.execute returns correct results" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL(
         """
           |CREATE TABLE t (id INTEGER, name TEXT);
@@ -179,7 +179,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      val ps = db.prepare("SELECT * FROM t WHERE id = $1")
+      val ps = session.prepare("SELECT * FROM t WHERE id = $1")
       val r = ps.execute(NumberValue(1))
       val table = r.collect { case QueryResult(t) => t }.last
 
@@ -188,7 +188,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
 
     "multiple executions with different params" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL(
         """
           |CREATE TABLE t (id INTEGER, name TEXT);
@@ -198,7 +198,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      val ps = db.prepare("SELECT * FROM t WHERE id = $1")
+      val ps = session.prepare("SELECT * FROM t WHERE id = $1")
 
       for (id, expected) <- Seq((1, "Alice"), (2, "Bob"), (3, "Carol")) do
         val table = ps.execute(NumberValue(id)).collect { case QueryResult(t) => t }.last
@@ -207,10 +207,10 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
 
     "parameters in INSERT VALUES" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT)")
 
-      val ps = db.prepare("INSERT INTO t (id, name) VALUES ($1, $2)")
+      val ps = session.prepare("INSERT INTO t (id, name) VALUES ($1, $2)")
       ps.execute(NumberValue(1), TextValue("Alice"))
       ps.execute(NumberValue(2), TextValue("Bob"))
 
@@ -221,7 +221,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
 
     "parameters in UPDATE SET and WHERE" in {
-      given db: DB = new MemoryDB
+      given session: Session = new MemoryDB().connect()
       executeSQL(
         """
           |CREATE TABLE t (id INTEGER, name TEXT);
@@ -230,7 +230,7 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      val ps = db.prepare("UPDATE t SET name = $1 WHERE id = $2")
+      val ps = session.prepare("UPDATE t SET name = $1 WHERE id = $2")
       ps.execute(TextValue("Alicia"), NumberValue(1))
 
       val table = executeSQL("SELECT * FROM t WHERE id = 1").collect { case QueryResult(t) => t }.last
@@ -239,14 +239,14 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
 
     "parameterCount returns correct count" in {
-      given db: DB = new MemoryDB
-      val ps1 = db.prepare("SELECT * FROM t WHERE id = $1")
+      given session: Session = new MemoryDB().connect()
+      val ps1 = session.prepare("SELECT * FROM t WHERE id = $1")
       ps1.parameterCount shouldBe 1
 
-      val ps2 = db.prepare("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)")
+      val ps2 = session.prepare("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)")
       ps2.parameterCount shouldBe 3
 
-      val ps3 = db.prepare("SELECT 1")
+      val ps3 = session.prepare("SELECT 1")
       ps3.parameterCount shouldBe 0
     }
   }
@@ -255,14 +255,14 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     "unbound parameter $3 when only 2 params provided" in {
       assertThrows[RuntimeException] {
         suppressStderr {
-          given db: DB = new MemoryDB
+          given session: Session = new MemoryDB().connect()
           executeSQL(
             """
               |CREATE TABLE t (id INTEGER, name TEXT);
               |INSERT INTO t (id, name) VALUES (1, 'Alice');
               |""".trim.stripMargin
           )
-          val ps = db.prepare("SELECT * FROM t WHERE id = $3")
+          val ps = session.prepare("SELECT * FROM t WHERE id = $3")
           ps.execute(NumberValue(1), NumberValue(2))
         }
       }

@@ -8,7 +8,7 @@ class PersistentDMLTests extends PersistentTestBase:
     "UPDATE survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE users (id INTEGER, name TEXT);")
         executeSQL("INSERT INTO users (id, name) VALUES (1, 'Alice');")
         executeSQL("INSERT INTO users (id, name) VALUES (2, 'Bob');")
@@ -18,7 +18,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, name FROM users ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
         table.data(0).data(1) shouldBe TextValue("Alicia")
@@ -30,7 +30,7 @@ class PersistentDMLTests extends PersistentTestBase:
     "DELETE survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE users (id INTEGER, name TEXT);")
         executeSQL("INSERT INTO users (id, name) VALUES (1, 'Alice');")
         executeSQL("INSERT INTO users (id, name) VALUES (2, 'Bob');")
@@ -41,7 +41,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, name FROM users ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
         table.data(0).data(1) shouldBe TextValue("Alice")
@@ -53,7 +53,7 @@ class PersistentDMLTests extends PersistentTestBase:
     "DELETE all rows then reopen yields empty table" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
         executeSQL("INSERT INTO t (id) VALUES (2);")
@@ -64,7 +64,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 0
         // Insert still works after deleting all
@@ -78,7 +78,7 @@ class PersistentDMLTests extends PersistentTestBase:
     "UPDATE short text to long text (inline to chain)" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 'short');")
         val longVal = "x" * 200
@@ -89,7 +89,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("x" * 200)
         db.close()
@@ -101,7 +101,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, v TEXT);")
         db.getTable("t").get.insert(Map("id" -> NumberValue(1), "v" -> TextValue(longVal)), None)
         executeSQL("UPDATE t SET v = 'short' WHERE id = 1;")
@@ -110,7 +110,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("short")
         db.close()
@@ -120,7 +120,7 @@ class PersistentDMLTests extends PersistentTestBase:
     "multiple updates to same row" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, v INTEGER);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 10);")
         executeSQL("UPDATE t SET v = 20 WHERE id = 1;")
@@ -131,7 +131,7 @@ class PersistentDMLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe NumberValue(40)
         db.close()

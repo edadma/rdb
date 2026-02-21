@@ -8,7 +8,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER TABLE ADD COLUMN survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
         executeSQL("ALTER TABLE t ADD COLUMN name TEXT DEFAULT 'unknown';")
@@ -17,7 +17,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
         table.data(0).data(0).string shouldBe "1"
@@ -29,7 +29,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER TABLE DROP COLUMN survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT, email TEXT);")
         executeSQL("INSERT INTO t (id, name, email) VALUES (1, 'Alice', 'alice@test.com');")
         executeSQL("ALTER TABLE t DROP COLUMN email;")
@@ -38,7 +38,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, name FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
         table.data(0).data(0).string shouldBe "1"
@@ -50,7 +50,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER COLUMN TYPE survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, v INTEGER);")
         executeSQL("INSERT INTO t (id, v) VALUES (1, 42);")
         executeSQL("ALTER TABLE t ALTER COLUMN v TYPE TEXT;")
@@ -59,7 +59,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT v FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("42")
         db.close()
@@ -69,7 +69,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER COLUMN SET DEFAULT survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, status TEXT);")
         executeSQL("ALTER TABLE t ALTER COLUMN status SET DEFAULT 'active';")
         db.close()
@@ -77,7 +77,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT status FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("active")
@@ -88,7 +88,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER COLUMN DROP DEFAULT survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, status TEXT DEFAULT 'active');")
         executeSQL("ALTER TABLE t ALTER COLUMN status DROP DEFAULT;")
         db.close()
@@ -96,7 +96,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT status FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).isNull shouldBe true
@@ -107,7 +107,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER COLUMN SET NOT NULL survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         executeSQL("ALTER TABLE t ALTER COLUMN name SET NOT NULL;")
         db.close()
@@ -115,7 +115,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         assertThrows[RuntimeException] {
           executeSQL("INSERT INTO t (id) VALUES (1);")
         }
@@ -126,7 +126,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ALTER COLUMN DROP NOT NULL survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT NOT NULL);")
         executeSQL("ALTER TABLE t ALTER COLUMN name DROP NOT NULL;")
         db.close()
@@ -134,7 +134,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         executeSQL("INSERT INTO t (id) VALUES (1);")
         val table = executeSQL("SELECT name FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0).isNull shouldBe true
@@ -145,7 +145,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ADD/DROP CONSTRAINT survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
         executeSQL("ALTER TABLE t ADD CONSTRAINT uq_name UNIQUE (name);")
         db.close()
@@ -153,7 +153,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         // Verify table still works
         executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
@@ -165,7 +165,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
         db.close()
@@ -175,7 +175,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "RENAME TABLE survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE old_name (id INTEGER);")
         executeSQL("INSERT INTO old_name (id) VALUES (1);")
         executeSQL("ALTER TABLE old_name RENAME TO new_name;")
@@ -184,7 +184,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         (db hasTable "old_name") shouldBe false
         (db hasTable "new_name") shouldBe true
         val table = executeSQL("SELECT id FROM new_name;").collect { case QueryResult(t) => t }.head
@@ -196,7 +196,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "RENAME COLUMN survives reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, old_col TEXT);")
         executeSQL("INSERT INTO t (id, old_col) VALUES (1, 'val');")
         executeSQL("ALTER TABLE t RENAME COLUMN old_col TO new_col;")
@@ -205,7 +205,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT new_col FROM t;").collect { case QueryResult(t) => t }.head
         table.data(0).data(0) shouldBe TextValue("val")
         db.close()
@@ -215,7 +215,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "ADD COLUMN then insert new rows with that column" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER);")
         executeSQL("INSERT INTO t (id) VALUES (1);")
         executeSQL("ALTER TABLE t ADD COLUMN name TEXT;")
@@ -225,7 +225,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 2
         table.data(0).data(1).isNull shouldBe true
@@ -241,7 +241,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "table gone after reopen" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t1 (id INTEGER);")
         executeSQL("CREATE TABLE t2 (id INTEGER);")
         executeSQL("INSERT INTO t1 (id) VALUES (1);")
@@ -252,7 +252,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         (db hasTable "t1") shouldBe false
         (db hasTable "t2") shouldBe true
         val table = executeSQL("SELECT id FROM t2;").collect { case QueryResult(t) => t }.head
@@ -264,7 +264,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "drop and recreate table with same name" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TABLE t (id INTEGER, old_col TEXT);")
         executeSQL("INSERT INTO t (id, old_col) VALUES (1, 'old');")
         executeSQL("DROP TABLE t;")
@@ -275,7 +275,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         val table = executeSQL("SELECT id, new_col FROM t;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 1
         table.data(0).data(0) shouldBe NumberValue(2)
@@ -287,7 +287,7 @@ class PersistentDDLTests extends PersistentTestBase:
     "DROP TYPE persists" in {
       locally {
         val db = PersistentDB.create(tmpFile, pageSize)
-        given DB = db
+        given Session = db.connect()
         executeSQL("CREATE TYPE mood AS ENUM ('happy', 'sad');")
         executeSQL("DROP TYPE mood;")
         db.close()
@@ -295,7 +295,7 @@ class PersistentDDLTests extends PersistentTestBase:
 
       locally {
         val db = PersistentDB.open(tmpFile)
-        given DB = db
+        given Session = db.connect()
         (db hasType "mood") shouldBe false
         db.close()
       }

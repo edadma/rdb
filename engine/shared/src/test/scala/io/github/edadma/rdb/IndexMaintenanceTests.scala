@@ -6,11 +6,11 @@ import org.scalatest.matchers.should.Matchers
 class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
 
   private def execDB(sql: String): (Seq[Result], DB) =
-    given db: DB = new MemoryDB
-    (executeSQL(sql), db)
+    given session: Session = new MemoryDB().connect()
+    (executeSQL(sql), session.db)
 
   private def queryTable(sql: String): TableValue =
-    given DB = new MemoryDB
+    given Session = new MemoryDB().connect()
     executeSQL(sql).collect { case QueryResult(t) => t }.last
 
   "INSERT maintains indexes" - {
@@ -90,7 +90,7 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      given DB = db
+      given Session = db.connect()
       assertThrows[RuntimeException] {
         executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
       }
@@ -110,7 +110,7 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      given DB = db
+      given Session = db.connect()
       // id=2 is unique but name='Alice' is duplicate — should fail and roll back
       assertThrows[RuntimeException] {
         executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
@@ -136,7 +136,7 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      given DB = db
+      given Session = db.connect()
       assertThrows[RuntimeException] {
         executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
       }
@@ -163,7 +163,7 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      given DB = db
+      given Session = db.connect()
       assertThrows[RuntimeException] {
         executeSQL("UPDATE t SET id = NULL WHERE id = 1;")
       }
@@ -180,7 +180,7 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
           |""".trim.stripMargin
       )
 
-      given DB = db
+      given Session = db.connect()
       assertThrows[RuntimeException] {
         executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'Alice');")
       }
@@ -319,7 +319,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
   "PersistentDB index maintenance" - {
     "unique index enforced on insert" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -331,7 +331,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "delete removes from index, re-insert works" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id) VALUES (1);")
@@ -346,7 +346,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "index survives close/reopen with DML" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -357,12 +357,12 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       val db2 = PersistentDB.open(tmpFile)
 
       assertThrows[RuntimeException] {
-        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")(using db2)
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")(using db2.connect())
       }
 
       // But a new unique value should work
-      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Charlie');")(using db2)
-      val result = executeSQL("SELECT * FROM t;")(using db2)
+      executeSQL("INSERT INTO t (id, name) VALUES (3, 'Charlie');")(using db2.connect())
+      val result = executeSQL("SELECT * FROM t;")(using db2.connect())
       val table = result.collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 3
       db2.close()
@@ -370,7 +370,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "update enforces unique constraint" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
@@ -383,7 +383,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "non-unique index insert allows duplicates" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -398,7 +398,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "non-unique index delete removes correct entry" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -417,7 +417,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "non-unique index update changes entry" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -435,7 +435,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "non-unique index survives close/reopen with delete" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -445,10 +445,10 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       db1.close()
 
       val db2 = PersistentDB.open(tmpFile)
-      executeSQL("DELETE FROM t WHERE id = 2;")(using db2)
-      executeSQL("INSERT INTO t (id, name) VALUES (4, 'Alice');")(using db2)
+      executeSQL("DELETE FROM t WHERE id = 2;")(using db2.connect())
+      executeSQL("INSERT INTO t (id, name) VALUES (4, 'Alice');")(using db2.connect())
 
-      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2.connect())
       val table = result.collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 3
       table.data(0).data(0) shouldBe NumberValue(1)
@@ -459,7 +459,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "bulk insert with unique index" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');")
@@ -475,7 +475,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "bulk insert rejects duplicate in unique index" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       assertThrows[RuntimeException] {
@@ -486,7 +486,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "bulk insert with non-unique index" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -508,7 +508,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "bulk insert survives close/reopen" in {
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');")
@@ -517,9 +517,9 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       val db2 = PersistentDB.open(tmpFile)
       // PK constraint still enforced after reopen
       assertThrows[RuntimeException] {
-        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Duplicate');")(using db2)
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Duplicate');")(using db2.connect())
       }
-      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2.connect())
       val table = result.collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 3
       db2.close()
@@ -527,7 +527,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "unique index on long TEXT keys (chain-encoded)" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("CREATE UNIQUE INDEX idx ON t (name);")
@@ -550,7 +550,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
     "non-unique index on long TEXT keys with delete" in {
       val db = PersistentDB.create(tmpFile, pageSize)
-      given DB = db
+      given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE INDEX idx ON t (name);")
@@ -571,7 +571,7 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       val longA = "A" * 200
       val longB = "B" * 200
       val db1 = PersistentDB.create(tmpFile, pageSize)
-      given DB = db1
+      given Session = db1.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
       executeSQL("CREATE UNIQUE INDEX idx ON t (name);")
@@ -582,10 +582,10 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       val db2 = PersistentDB.open(tmpFile)
       // Unique constraint still enforced after reopen
       assertThrows[RuntimeException] {
-        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")(using db2)
+        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")(using db2.connect())
       }
-      executeSQL(s"INSERT INTO t (id, name) VALUES (3, 'short');")(using db2)
-      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2)
+      executeSQL(s"INSERT INTO t (id, name) VALUES (3, 'short');")(using db2.connect())
+      val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2.connect())
       val table = result.collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 3
       db2.close()

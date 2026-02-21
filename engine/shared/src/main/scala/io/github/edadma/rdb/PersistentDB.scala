@@ -16,14 +16,8 @@ class PersistentDB private (val store: FilePageStore) extends DB:
 
   private var activeTxn: Option[Transaction] = None
   private var txnSnapshot: Option[TransactionSnapshot] = None
-  private var txnAborted: Boolean = false
 
-  override def inTransaction: Boolean = activeTxn.isDefined
-  override def isTransactionAborted: Boolean = txnAborted
-  override def markTransactionAborted(): Unit = txnAborted = true
-
-  override def beginTransaction(): Unit =
-    require(activeTxn.isEmpty, "a transaction is already active")
+  override def snapshot(): Unit =
     // Snapshot per-table state
     val fdpSnap = tables.map { (n, t) =>
       n -> t.asInstanceOf[PersistentTable].firstDataPage
@@ -37,17 +31,15 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       }.toMap
     }.toMap
     txnSnapshot = Some(TransactionSnapshot(fdpSnap, autoSnap, idxSnap))
-    txnAborted = false
     activeTxn = Some(store.beginTransaction())
 
-  override def commitTransaction(): Unit =
+  override def commitSnapshot(): Unit =
     val txn = activeTxn.getOrElse(sys.error("no active transaction"))
-    if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
     txn.commit()
     activeTxn = None
     txnSnapshot = None
 
-  override def rollbackTransaction(): Unit =
+  override def rollbackSnapshot(): Unit =
     val txn = activeTxn.getOrElse(sys.error("no active transaction"))
     txn.rollback()
     // Restore snapshots
@@ -71,31 +63,21 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       }
     activeTxn = None
     txnSnapshot = None
-    txnAborted = false
 
   private[rdb] def withBatch(fn: WriteBatch => Unit): Unit =
     activeTxn match
-      case Some(txn) =>
-        if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
-        try fn(txn)
-        catch
-          case e: Throwable =>
-            txnAborted = true
-            throw e
-      case None => store.modify(fn)
+      case Some(txn) => fn(txn)
+      case None      => store.modify(fn)
 
   private[rdb] def readPage(id: PageId): Array[Byte] =
     activeTxn match
-      case Some(txn) =>
-        if txnAborted then sys.error("current transaction is aborted, use ROLLBACK")
-        txn.read(id)
-      case None => store.read(id)
+      case Some(txn) => txn.read(id)
+      case None      => store.read(id)
 
   protected def addTable(name: String, specs: Seq[Spec]): Table =
     new PersistentTable(name, specs, store, this)
 
   override def createTable(name: String, specs: Seq[Spec]): Table =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     val table = super.createTable(name, specs)
     store.modify { batch =>
       val pt = table.asInstanceOf[PersistentTable]
@@ -113,12 +95,10 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     e
 
   override def createEnum(name: String, labels: Seq[String]): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.createEnum(name, labels)
     persistCatalog()
 
   override def dropTable(name: String): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     // Free all data pages and header page for this table
     tables.get(name).foreach { table =>
       val pt = table.asInstanceOf[PersistentTable]
@@ -128,24 +108,20 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     persistCatalog()
 
   override def renameTable(oldName: String, newName: String): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.renameTable(oldName, newName)
     persistCatalog()
 
   override def dropType(name: String): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.dropType(name)
     persistCatalog()
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     store.modify { batch =>
       createPersistentIndex(indexName, tableName, columnNames, unique, batch)
       writeCatalogInBatch(batch)
     }
 
   override def dropIndex(indexName: String): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     super.dropIndex(indexName)
     persistCatalog()
 
@@ -188,7 +164,6 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     table.tableIndexes(indexName) = idx
 
   private[rdb] def persistCatalog(): Unit =
-    if inTransaction then sys.error("DDL not allowed inside a transaction")
     store.modify { batch =>
       writeCatalogInBatch(batch)
     }
