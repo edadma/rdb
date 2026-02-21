@@ -183,6 +183,68 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "string escaping" - {
+    "doubled single quotes in standard strings" in {
+      val table = query(
+        """
+          |CREATE TABLE t (name TEXT);
+          |INSERT INTO t (name) VALUES ('O''Brien');
+          |SELECT name FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe TextValue("O'Brien")
+    }
+
+    "multiple doubled quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES ('it''s a ''test''');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe TextValue("it's a 'test'")
+    }
+
+    "E-string backslash escapes still work" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES (E'line1\nline2');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe TextValue("line1\nline2")
+    }
+
+    "empty string" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES ('');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe TextValue("")
+    }
+
+    "string with only a quote" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES ('''');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.head.data(0) shouldBe TextValue("'")
+    }
+  }
+
   "<> operator" - {
     "filters with <> same as !=" in {
       val table = query(

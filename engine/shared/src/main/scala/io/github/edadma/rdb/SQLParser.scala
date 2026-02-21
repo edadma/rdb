@@ -126,8 +126,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
 
     private def stringToken: Parser[Token] =
-      opt('E') ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
+      'E' ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
         StringLit(unescape(l mkString))
+      ) |
+      '\'' ~> rep(('\'' ~ '\'' ^^^ '\'') | guard(not('\'')) ~> elem("", _ => true)) <~ '\'' ^^ (l =>
+        StringLit(l mkString)
       )
 
   override val lexical: SQLLexer = new SQLLexer
