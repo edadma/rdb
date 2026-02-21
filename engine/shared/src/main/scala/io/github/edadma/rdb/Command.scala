@@ -48,6 +48,7 @@ case class ColumnDesc(
     default: Option[Expr],
     references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)], // Single column foreign key: (table, column, onDelete, onUpdate)
     check: Option[Expr] = None,
+    primaryKey: Boolean = false,
 )
 
 trait TableAlteration

@@ -64,7 +64,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "database", "date", "deallocate", "decimal", "default", "delete", "desc",
       "distinct", "double", "drop",
       "else", "end", "enum", "except", "exec", "execute", "exists", "extract",
-      "false", "first", "float", "foreign", "from", "full",
+      "false", "first", "float", "for", "foreign", "from", "full",
       "group",
       "having",
       "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
@@ -73,10 +73,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "key",
       "last", "lateral", "left", "like", "limit",
       "no", "not", "null", "nulls", "numeric",
-      "offset", "on", "or", "order", "outer", "overlaps",
-      "precision", "prepare", "primary", "procedure",
+      "offset", "on", "or", "order", "outer", "overlay", "overlaps",
+      "placing", "precision", "prepare", "primary", "procedure",
       "real", "references", "rename", "restrict", "returning", "right", "rollback",
-      "select", "serial", "set", "smallint", "smallserial", "some",
+      "select", "serial", "set", "smallint", "smallserial", "some", "symmetric",
       "table", "text", "then", "time", "timestamp", "to", "transaction",
       "true", "truncate", "type",
       "union", "unique", "unknown", "update", "uuid",
@@ -304,10 +304,17 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         case e ~ c ~ q ~ _ ~ arr ~ _ =>
           QuantifiedCompareExpr(e, c, if q == "SOME" then "ANY" else q, arr)
       } |
+      expression ~ kw("IS") ~ kw("NOT") ~ kw("DISTINCT") ~ kw("FROM") ~ expression ^^ {
+        case l ~ _ ~ _ ~ _ ~ _ ~ r => BinaryExpr(l, "IS NOT DISTINCT FROM", r)
+      } |
+      expression ~ kw("IS") ~ kw("DISTINCT") ~ kw("FROM") ~ expression ^^ {
+        case l ~ _ ~ _ ~ _ ~ r => BinaryExpr(l, "IS DISTINCT FROM", r)
+      } |
       expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
-      expression ~ (kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN" | kw("BETWEEN")) ~ expression ~ kw(
-        "AND",
-      ) ~ expression ^^ { case e ~ b ~ l ~ _ ~ u =>
+      expression ~ (kw("NOT") ~ kw("BETWEEN") ~ kw("SYMMETRIC") ^^^ "NOT BETWEEN SYMMETRIC"
+        | kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN"
+        | kw("BETWEEN") ~ kw("SYMMETRIC") ^^^ "BETWEEN SYMMETRIC"
+        | kw("BETWEEN")) ~ expression ~ kw("AND") ~ expression ^^ { case e ~ b ~ l ~ _ ~ u =>
         BetweenExpr(e, b, l, u)
       } |
       expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
@@ -440,6 +447,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       kw("CAST") ~> "(" ~> expression ~ kw("AS") ~ castType <~ ")" ^^ { case e ~ _ ~ t => CastExpr(e, t) } |
       kw("EXTRACT") ~> "(" ~> extractField ~ kw("FROM") ~ expression <~ ")" ^^ { case field ~ _ ~ source =>
         ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source))
+      } |
+      kw("OVERLAY") ~> "(" ~> expression ~ kw("PLACING") ~ expression ~ kw("FROM") ~ expression ~ opt(kw("FOR") ~> expression) <~ ")" ^^ {
+        case s ~ _ ~ repl ~ _ ~ start ~ Some(count) => ApplyExpr(Ident("overlay"), Seq(s, repl, start, count))
+        case s ~ _ ~ repl ~ _ ~ start ~ None        => ApplyExpr(Ident("overlay"), Seq(s, repl, start))
       } |
       application |
       column |
@@ -602,8 +613,10 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | kw("SERIAL") ^^^ Left(SerialType)
       | kw("BIGSERIAL") ^^^ Left(BigSerialType)
       | (kw("DOUBLE") ~ opt(kw("PRECISION")) | kw("FLOAT") | kw("REAL")) ^^^ Left(DoubleType)
-      | kw("NUMERIC") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
-      | kw("DECIMAL") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
+      | kw("NUMERIC") ~> ("(" ~> integer ~ opt("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s.getOrElse(0))) }
+      | kw("NUMERIC") ^^^ Left(NumericType(0, 0))
+      | kw("DECIMAL") ~> ("(" ~> integer ~ opt("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s.getOrElse(0))) }
+      | kw("DECIMAL") ^^^ Left(NumericType(0, 0))
       | kw("CHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(CharType(n)) }
       | kw("VARCHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(VarcharType(n)) }
       | kw("VARCHAR") ^^^ Left(TextType)
@@ -625,11 +638,59 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case other ~ _         => other
     }
 
+  private sealed trait ColConstraint
+  private case object ColPrimaryKey extends ColConstraint
+  private case object ColNotNull extends ColConstraint
+  private case object ColNull extends ColConstraint
+  private case object ColUnique extends ColConstraint
+  private case class ColDefault(expr: Expr) extends ColConstraint
+  private case class ColReferences(table: Ident, column: Ident, onDel: ReferentialAction, onUpd: ReferentialAction) extends ColConstraint
+  private case class ColCheck(expr: Expr) extends ColConstraint
+
+  private lazy val colConstraint: P[ColConstraint] =
+    kw("PRIMARY") ~ kw("KEY") ^^^ ColPrimaryKey
+      | kw("NOT") ~ kw("NULL") ^^^ ColNotNull
+      | kw("NULL") ^^^ ColNull
+      | kw("UNIQUE") ^^^ ColUnique
+      | kw("DEFAULT") ~> expression ^^ ColDefault.apply
+      | kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause) ^^ {
+          case table ~ column ~ onDel ~ onUpd =>
+            ColReferences(table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
+        }
+      | kw("CHECK") ~> ("(" ~> booleanExpression <~ ")") ^^ ColCheck.apply
+
   lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ opt(kw("NOT") ~ kw("NULL")) ~ opt(kw("UNIQUE")) ~ opt(kw("DEFAULT") ~> expression) ~ opt(kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause)) ~ opt(kw("CHECK") ~> ("(" ~> booleanExpression <~ ")")) ^^ {
-      case c ~ t ~ n ~ u ~ d ~ r ~ chk =>
-        val refs = r.map { case table ~ column ~ onDel ~ onUpd => (table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction)) }
-        ColumnDesc(c, t, n.isDefined, u.isDefined, d, refs, chk)
+    identifier ~ typ ~ rep(colConstraint) ^^ { case name ~ t ~ constraints =>
+      var primaryKey = false
+      var required = false
+      var unique = false
+      var default: Option[Expr] = None
+      var references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)] = None
+      var check: Option[Expr] = None
+
+      for c <- constraints do
+        c match
+          case ColPrimaryKey =>
+            if primaryKey then problem(name, s"duplicate PRIMARY KEY constraint on column '${name.name}'")
+            primaryKey = true
+          case ColNotNull =>
+            if required then problem(name, s"duplicate NOT NULL constraint on column '${name.name}'")
+            required = true
+          case ColNull => () // explicit NULL (nullable), the default
+          case ColUnique =>
+            if unique then problem(name, s"duplicate UNIQUE constraint on column '${name.name}'")
+            unique = true
+          case ColDefault(expr) =>
+            if default.isDefined then problem(name, s"duplicate DEFAULT clause on column '${name.name}'")
+            default = Some(expr)
+          case ColReferences(table, column, onDel, onUpd) =>
+            if references.isDefined then problem(name, s"duplicate REFERENCES constraint on column '${name.name}'")
+            references = Some((table, column, onDel, onUpd))
+          case ColCheck(expr) =>
+            if check.isDefined then problem(name, s"duplicate CHECK constraint on column '${name.name}'")
+            check = Some(expr)
+
+      ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
     }
 
   lazy val alterTable: P[Command] =

@@ -171,6 +171,151 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "inline PRIMARY KEY on column" - {
+
+    "single column inline PRIMARY KEY" in {
+      test(
+        """
+          |CREATE TABLE t1 (
+          | id SERIAL PRIMARY KEY,
+          | name TEXT NOT NULL
+          |);
+          |INSERT INTO t1 (name) VALUES ('Alice');
+          |SELECT * FROM t1;
+          |""".trim.stripMargin
+      ) should include("CreateTableResult(\"t1\")")
+    }
+
+    "inline PRIMARY KEY implies NOT NULL" in {
+      // inserting NULL into a PK column should fail
+      val ex = intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE t2 (
+            | id INT PRIMARY KEY,
+            | name TEXT
+            |);
+            |INSERT INTO t2 (id, name) VALUES (NULL, 'test');
+            |""".trim.stripMargin
+        )
+      }
+      ex.getMessage should include("is required")
+    }
+
+    "column-level + table-level PRIMARY KEY conflict" in {
+      val ex = intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE t3 (
+            | id INT PRIMARY KEY,
+            | name TEXT,
+            | PRIMARY KEY (id)
+            |);
+            |""".trim.stripMargin
+        )
+      }
+      ex.getMessage should include("column-level and table-level PRIMARY KEY")
+    }
+  }
+
+  "any-order column constraints" - {
+
+    "DEFAULT before NOT NULL" in {
+      test(
+        """
+          |CREATE TABLE t4 (
+          | id SERIAL,
+          | x INT DEFAULT 0 NOT NULL,
+          | PRIMARY KEY (id)
+          |);
+          |INSERT INTO t4 (id) VALUES (1);
+          |SELECT x FROM t4;
+          |""".trim.stripMargin
+      ) should include("0")
+    }
+
+    "UNIQUE DEFAULT CHECK in mixed order" in {
+      test(
+        """
+          |CREATE TABLE t5 (
+          | id SERIAL PRIMARY KEY,
+          | x INT UNIQUE DEFAULT 5 CHECK (x > 0)
+          |);
+          |INSERT INTO t5 (id) VALUES (1);
+          |SELECT x FROM t5;
+          |""".trim.stripMargin
+      ) should include("5")
+    }
+
+    "NOT NULL after DEFAULT and UNIQUE" in {
+      test(
+        """
+          |CREATE TABLE t6 (
+          | id SERIAL PRIMARY KEY,
+          | code TEXT DEFAULT 'X' UNIQUE NOT NULL
+          |);
+          |INSERT INTO t6 (id) VALUES (1);
+          |SELECT code FROM t6;
+          |""".trim.stripMargin
+      ) should include("X")
+    }
+  }
+
+  "NUMERIC/DECIMAL without full precision" - {
+
+    "bare NUMERIC" in {
+      test(
+        """
+          |CREATE TABLE t7 (
+          | id SERIAL PRIMARY KEY,
+          | val NUMERIC
+          |);
+          |INSERT INTO t7 (val) VALUES (42);
+          |SELECT val FROM t7;
+          |""".trim.stripMargin
+      ) should include("42")
+    }
+
+    "NUMERIC with precision only" in {
+      test(
+        """
+          |CREATE TABLE t8 (
+          | id SERIAL PRIMARY KEY,
+          | val NUMERIC(10)
+          |);
+          |INSERT INTO t8 (val) VALUES (12345);
+          |SELECT val FROM t8;
+          |""".trim.stripMargin
+      ) should include("12345")
+    }
+
+    "bare DECIMAL" in {
+      test(
+        """
+          |CREATE TABLE t9 (
+          | id SERIAL PRIMARY KEY,
+          | val DECIMAL
+          |);
+          |INSERT INTO t9 (val) VALUES (99);
+          |SELECT val FROM t9;
+          |""".trim.stripMargin
+      ) should include("99")
+    }
+
+    "DECIMAL with precision only" in {
+      test(
+        """
+          |CREATE TABLE t10 (
+          | id SERIAL PRIMARY KEY,
+          | val DECIMAL(8)
+          |);
+          |INSERT INTO t10 (val) VALUES (67890);
+          |SELECT val FROM t10;
+          |""".trim.stripMargin
+      ) should include("67890")
+    }
+  }
+
   "PostgreSQL compatibility features" - {
 
     "multiple table creation in single statement" in {
