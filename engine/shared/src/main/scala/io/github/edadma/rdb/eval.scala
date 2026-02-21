@@ -69,6 +69,12 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case UnaryExpr("NOT", expr)                            => BooleanValue(!beval(expr, ctx))
     case UnaryExpr(op @ ("IS NULL" | "IS NOT NULL"), expr) =>
       BooleanValue(op.contains("NOT") ^ eval(expr, ctx).isNull)
+    case UnaryExpr("IS TRUE", expr)        => BooleanValue(eval(expr, ctx) == BooleanValue(true))
+    case UnaryExpr("IS NOT TRUE", expr)    => BooleanValue(eval(expr, ctx) != BooleanValue(true))
+    case UnaryExpr("IS FALSE", expr)       => BooleanValue(eval(expr, ctx) == BooleanValue(false))
+    case UnaryExpr("IS NOT FALSE", expr)   => BooleanValue(eval(expr, ctx) != BooleanValue(false))
+    case UnaryExpr("IS UNKNOWN", expr)     => BooleanValue(eval(expr, ctx).isNull)
+    case UnaryExpr("IS NOT UNKNOWN", expr) => BooleanValue(!eval(expr, ctx).isNull)
     case BinaryExpr(left, "||", right) =>
       val l = seval(left, ctx)
       val r = seval(right, ctx)

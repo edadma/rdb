@@ -952,4 +952,306 @@ class EasyWinFeatureTests extends AnyFreeSpec with Matchers with Testing {
       }
     }
   }
+
+  // ── Scalar functions: quote_literal, quote_ident, clock_timestamp, regexp_split_to_array ──
+
+  "quote_literal" - {
+    "wraps string in single quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_literal('hello') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("'hello'")
+    }
+
+    "escapes embedded single quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_literal(E'it\'s') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("'it''s'")
+    }
+
+    "returns NULL for NULL input" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TEXT);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT quote_literal(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
+
+  "quote_ident" - {
+    "wraps string in double quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_ident('column') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("\"column\"")
+    }
+
+    "escapes embedded double quotes" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT quote_ident('a"b') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("\"a\"\"b\"")
+    }
+  }
+
+  "clock_timestamp" - {
+    "returns a timestamp value" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT clock_timestamp() FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).vtyp shouldBe TimestampType
+    }
+  }
+
+  "regexp_split_to_array" - {
+    "splits string by regex" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT array_length(regexp_split_to_array('one-two-three', '-')) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(3)
+    }
+
+    "splits by regex pattern" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT);
+          |INSERT INTO t (id) VALUES (1);
+          |SELECT array_to_string(regexp_split_to_array('a1b2c3', '[0-9]'), ',') FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe TextValue("a,b,c,")
+    }
+  }
+
+  // ── Boolean test operators ────────────────────────────────────────────
+
+  "IS TRUE" - {
+    "true value IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "false value IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "NULL IS TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS FALSE" - {
+    "false value IS FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "true value IS FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS UNKNOWN" - {
+    "NULL IS UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "true IS UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+  }
+
+  "IS NOT TRUE" - {
+    "false IS NOT TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (FALSE);
+          |SELECT val IS NOT TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "NULL IS NOT TRUE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (NULL);
+          |SELECT val IS NOT TRUE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  "IS NOT FALSE" - {
+    "true IS NOT FALSE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS NOT FALSE FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  "IS NOT UNKNOWN" - {
+    "true IS NOT UNKNOWN" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val BOOLEAN);
+          |INSERT INTO t (val) VALUES (TRUE);
+          |SELECT val IS NOT UNKNOWN FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
+
+  // ── Bitwise aggregate functions ───────────────────────────────────────
+
+  "bit_and" - {
+    "AND across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (12), (10), (14);
+          |SELECT bit_and(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 12=1100, 10=1010, 14=1110 => AND = 1000 = 8
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 8L
+    }
+  }
+
+  "bit_or" - {
+    "OR across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (1), (2), (4);
+          |SELECT bit_or(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 1|2|4 = 7
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 7L
+    }
+  }
+
+  "bit_xor" - {
+    "XOR across rows" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (7), (3), (5);
+          |SELECT bit_xor(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 7^3=4, 4^5=1
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 1L
+    }
+  }
+
+  "bitwise aggregates null handling" - {
+    "skip nulls" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (7), (NULL), (3);
+          |SELECT bit_and(val) FROM t;
+          |""".trim.stripMargin
+      )
+      // 7 & 3 = 3
+      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 3L
+    }
+
+    "all-null returns NULL" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (NULL), (NULL);
+          |SELECT bit_or(val) FROM t;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
 }

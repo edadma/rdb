@@ -28,7 +28,7 @@
 | String | `||` (concat) | — |
 | Pattern | LIKE, ILIKE, NOT LIKE, NOT ILIKE | SIMILAR TO, `~` `~*` `!~` `!~*` (regex operators) |
 | Null test | IS NULL, IS NOT NULL | IS DISTINCT FROM, IS NOT DISTINCT FROM |
-| Boolean test | — | IS TRUE, IS FALSE, IS UNKNOWN |
+| Boolean test | IS TRUE, IS FALSE, IS UNKNOWN | — |
 | Range | BETWEEN, NOT BETWEEN, OVERLAPS | BETWEEN SYMMETRIC |
 | Set | IN, NOT IN, EXISTS | ANY/SOME, ALL (array/subquery quantifiers) |
 | JSON | — | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?|` `?&` |
@@ -41,17 +41,15 @@
 
 ### String — have
 
-lower, upper, length, trim, ltrim, rtrim, btrim, substring, substr, left, right, replace, translate, concat, concat_ws, repeat, position, lpad, rpad, initcap, char_length, character_length, ascii, chr, starts_with, ends_with, reverse, split_part, regexp_replace, regexp_match
+lower, upper, length, trim, ltrim, rtrim, btrim, substring, substr, left, right, replace, translate, concat, concat_ws, repeat, position, lpad, rpad, initcap, char_length, character_length, ascii, chr, starts_with, ends_with, reverse, split_part, regexp_replace, regexp_match, quote_literal, quote_ident
 
 ### String — missing
 
 - overlay(string PLACING string FROM int FOR int)
 - format(formatstr, ...)
-- quote_literal(string), quote_ident(string)
 - md5(string)
 - regexp_matches(string, pattern) — global version returning set of arrays
 - regexp_split_to_table(string, pattern)
-- regexp_split_to_array(string, pattern)
 
 ### Math — have
 
@@ -65,12 +63,11 @@ abs, ceil, ceiling, floor, round, trunc, sign, mod, power, sqrt, cbrt, exp, ln, 
 
 ### Date/Time — have
 
-now, current_date, current_time, date_part, EXTRACT, date_trunc, age, make_date, make_time, make_timestamp, make_interval, to_char, to_date, to_timestamp, to_number, isfinite
+now, current_date, current_time, clock_timestamp, date_part, EXTRACT, date_trunc, age, make_date, make_time, make_timestamp, make_interval, to_char, to_date, to_timestamp, to_number, isfinite
 
 ### Date/Time — missing
 
 - make_timestamptz(year, month, day, hour, min, sec, tz)
-- clock_timestamp()
 - statement_timestamp()
 - justify_days(interval), justify_hours(interval), justify_interval(interval)
 
@@ -80,7 +77,7 @@ coalesce, nullif, greatest, least, CASE
 
 ### Array — have
 
-array_length, array_slice, array_append, array_prepend, array_concat, array_cat, array_remove, array_replace, array_position, array_distinct, array_lower, array_upper, array_ndims, cardinality, string_to_array, array_to_string
+array_length, array_slice, array_append, array_prepend, array_concat, array_cat, array_remove, array_replace, array_position, array_distinct, array_lower, array_upper, array_ndims, cardinality, string_to_array, array_to_string, regexp_split_to_array
 
 ### Array — missing
 
@@ -111,11 +108,10 @@ gen_random_uuid
 
 ### Have
 
-count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, variance, var_samp, var_pop, stddev, stddev_samp, stddev_pop
+count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, bit_and, bit_or, bit_xor, variance, var_samp, var_pop, stddev, stddev_samp, stddev_pop
 
 ### Missing
 
-- bit_and, bit_or, bit_xor
 - json_agg, jsonb_agg, json_object_agg
 - corr, covar_pop, covar_samp
 - regr_avgx, regr_avgy, regr_count, regr_intercept, regr_r2, regr_slope, regr_sxx, regr_sxy, regr_syy

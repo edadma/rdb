@@ -277,6 +277,78 @@ val aggregateFunction: Map[String, AggregateFunction] =
       def instantiate: (AggregateFunctionInstance, Type) =
         (stddevInstance("stddev_pop", sample = false), NumberType)
     },
+    new AggregateFunction("bit_and") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("bit_and"):
+            var value: Long = -1L
+            var hasValue: Boolean = false
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v: NumberValue) =>
+                hasValue = true
+                value = value & v.value.longValue
+                NumberValue(value.toDouble)
+              case Seq(v) if v.isNull => if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def result: Value =
+              if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def init(): Unit =
+              value = -1L
+              hasValue = false
+          ,
+          NumberType,
+        )
+    },
+    new AggregateFunction("bit_or") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("bit_or"):
+            var value: Long = 0L
+            var hasValue: Boolean = false
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v: NumberValue) =>
+                hasValue = true
+                value = value | v.value.longValue
+                NumberValue(value.toDouble)
+              case Seq(v) if v.isNull => if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def result: Value =
+              if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def init(): Unit =
+              value = 0L
+              hasValue = false
+          ,
+          NumberType,
+        )
+    },
+    new AggregateFunction("bit_xor") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        (
+          new AggregateFunctionInstance("bit_xor"):
+            var value: Long = 0L
+            var hasValue: Boolean = false
+
+            val acc: PartialFunction[Seq[Value], Value] =
+              case Seq(v: NumberValue) =>
+                hasValue = true
+                value = value ^ v.value.longValue
+                NumberValue(value.toDouble)
+              case Seq(v) if v.isNull => if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def result: Value =
+              if hasValue then NumberValue(value.toDouble) else NullValue()
+
+            def init(): Unit =
+              value = 0L
+              hasValue = false
+          ,
+          NumberType,
+        )
+    },
     new AggregateFunction("every") {
       def instantiate: (AggregateFunctionInstance, Type) =
         aggregateFunction("bool_and").instantiate

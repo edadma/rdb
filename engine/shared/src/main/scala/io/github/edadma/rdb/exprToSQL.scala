@@ -37,6 +37,10 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       val (s, p) = exprToSQLInner(e)
       val child = if p < 4 then s"($s)" else s
       (s"$child IS NOT NULL", 4)
+    case UnaryExpr(op @ ("IS TRUE" | "IS NOT TRUE" | "IS FALSE" | "IS NOT FALSE" | "IS UNKNOWN" | "IS NOT UNKNOWN"), e) =>
+      val (s, p) = exprToSQLInner(e)
+      val child = if p < 4 then s"($s)" else s
+      (s"$child $op", 4)
     case BinaryExpr(left, op, right) =>
       val prec = opPrec(op)
       val (ls, lp) = exprToSQLInner(left)

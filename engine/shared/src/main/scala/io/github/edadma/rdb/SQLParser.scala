@@ -69,7 +69,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "select", "serial", "set", "smallint", "smallserial", "some",
       "table", "text", "then", "time", "timestamp", "to", "transaction",
       "true", "truncate", "type",
-      "union", "unique", "update", "uuid",
+      "union", "unique", "unknown", "update", "uuid",
       "values", "varchar",
       "when", "where", "with", "without",
       "zone",
@@ -254,7 +254,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val selectExpression: P[Expr] =
-    (expression | star) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+    (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression | star) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
       case e ~ None    => e
       case e ~ Some(a) => AliasExpr(e, a)
     }
@@ -306,7 +306,14 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val isNull: P[String] =
-    kw("IS") ~ kw("NULL") ^^^ "IS NULL" | kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
+    kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
+    | kw("IS") ~ kw("NOT") ~ kw("TRUE") ^^^ "IS NOT TRUE"
+    | kw("IS") ~ kw("NOT") ~ kw("FALSE") ^^^ "IS NOT FALSE"
+    | kw("IS") ~ kw("NOT") ~ kw("UNKNOWN") ^^^ "IS NOT UNKNOWN"
+    | kw("IS") ~ kw("NULL") ^^^ "IS NULL"
+    | kw("IS") ~ kw("TRUE") ^^^ "IS TRUE"
+    | kw("IS") ~ kw("FALSE") ^^^ "IS FALSE"
+    | kw("IS") ~ kw("UNKNOWN") ^^^ "IS UNKNOWN"
 
   lazy val in: P[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
 

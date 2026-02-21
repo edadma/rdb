@@ -531,6 +531,34 @@ val scalarFunction: Map[String, ScalarFunction] =
       },
       TimestampType,
     ),
+    // quote_literal / quote_ident
+    ScalarFunction(
+      "quote_literal",
+      {
+        case Seq(v) if v.isNull => NullValue()
+        case Seq(v)             => TextValue("'" + v.string.replace("'", "''") + "'")
+      },
+      TextType,
+    ),
+    ScalarFunction(
+      "quote_ident",
+      { case Seq(v) => TextValue("\"" + v.string.replace("\"", "\"\"") + "\"") },
+      TextType,
+    ),
+    // clock_timestamp
+    ScalarFunction(
+      "clock_timestamp",
+      { case Seq() => TimestampValue(LocalDateTime.now(ZoneOffset.UTC)) },
+      TimestampType,
+    ),
+    // regexp_split_to_array
+    ScalarFunction(
+      "regexp_split_to_array",
+      { case Seq(TextValue(s), TextValue(pattern)) =>
+        ArrayValue(s.split(pattern, -1).map(TextValue(_): Value).toIndexedSeq)
+      },
+      ArrayType,
+    ),
     // math constants and functions
     ScalarFunction("pi", { case Seq() => NumberValue(math.Pi) }, NumberType),
     ScalarFunction(
