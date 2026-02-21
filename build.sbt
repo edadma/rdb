@@ -59,7 +59,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "io.github.edadma"  %%% "bptree"          % "0.0.3",
       "io.github.edadma"  %%% "cross_platform"  % "0.1.3",
       "io.github.edadma"  %%% "stow"            % "0.0.2",
-      "io.github.edadma"  %%% "table"           % "0.0.3",
+      "io.github.edadma"  %%% "table"           % "0.0.4",
       "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
     ),
     libraryDependencies ++= Seq(
