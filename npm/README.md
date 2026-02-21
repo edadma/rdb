@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/%40edadma%2Frdb.svg)](https://www.npmjs.com/package/@edadma/rdb)
 
-A lightweight, in-memory SQL database for JavaScript and TypeScript. No native dependencies, no external services — just import and query.
+A lightweight, in-memory SQL database for JavaScript and TypeScript. No native dependencies, no external services — just import and query. Follows PostgreSQL conventions for SQL syntax, identifier handling, and type casting.
 
 ## Installation
 
@@ -21,7 +21,8 @@ db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
-    email TEXT
+    email TEXT,
+    PRIMARY KEY (id)
   )
 `);
 
@@ -46,50 +47,115 @@ const [{ rows }] = db.execute('SELECT id, name FROM users', { rowMode: 'array' }
 // rows: [[1, 'Alice'], [2, 'Bob']]
 ```
 
+## SQL Compatibility
+
+RDB follows PostgreSQL conventions:
+
+- **Case-insensitive keywords** — `SELECT`, `select`, and `Select` are equivalent
+- **Unquoted identifier folding** — identifiers fold to lowercase (`CREATE TABLE Users` → table name `users`)
+- **Double-quoted identifiers** — preserve case (`"MixedCase"` stays as-is)
+- **String escaping** — doubled single quotes (`'it''s'`) and E-strings (`E'it\'s'`)
+- **Operators** — both `!=` and `<>` for not-equal
+- **Type casting** — `::` operator and `CAST(expr AS type)`
+
 ## Supported SQL
 
 ### Data Types
 
 | Type | Description |
 |------|-------------|
+| `SMALLINT` | 16-bit integer |
 | `INT` / `INTEGER` | 32-bit integer |
-| `SERIAL` | Auto-incrementing 32-bit integer |
 | `BIGINT` | 64-bit integer |
-| `BIGSERIAL` | Auto-incrementing 64-bit integer |
-| `DOUBLE` | Double-precision float |
-| `NUMERIC(p, s)` | Fixed-precision decimal |
+| `SMALLSERIAL` / `SERIAL` / `BIGSERIAL` | Auto-incrementing integers |
+| `DOUBLE` / `FLOAT` / `REAL` | Double-precision float |
+| `NUMERIC(p, s)` / `DECIMAL(p, s)` | Fixed-precision decimal |
 | `TEXT` | Variable-length string |
+| `CHAR(n)` | Fixed-length string |
 | `BOOLEAN` | True/false |
-| `TIMESTAMP` | Date and time |
+| `DATE` / `TIME` / `TIMESTAMP` | Date and time types |
+| `TIMESTAMP WITH TIME ZONE` | Timezone-aware timestamp |
+| `INTERVAL` | Duration |
 | `UUID` | UUID (use `DEFAULT gen_random_uuid()`) |
-| `JSON` | JSON objects and arrays |
+| `JSON` / `JSONB` | JSON objects and arrays |
+| `BYTEA` | Binary data |
 | `ENUM` | Custom enumerated types |
+| `INT[]`, `TEXT[]`, etc. | Typed arrays |
 
-### Operations
+### DDL
 
 ```sql
--- DDL
-CREATE TABLE, DROP TABLE, ALTER TABLE (ADD/DROP/ALTER COLUMN)
+CREATE TABLE, CREATE TABLE IF NOT EXISTS
+DROP TABLE, DROP TABLE IF EXISTS
+ALTER TABLE (ADD/DROP/RENAME COLUMN, ADD CONSTRAINT, etc.)
 CREATE TYPE ... AS ENUM, DROP TYPE
+CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
+TRUNCATE TABLE
+```
 
--- DML
-INSERT INTO ... VALUES, UPDATE ... SET ... WHERE, DELETE FROM ... WHERE
+### DML
 
--- Queries
+```sql
+INSERT INTO ... VALUES
+INSERT INTO ... SELECT         -- insert from a query
+UPDATE ... SET ... WHERE
+UPDATE ... SET ... FROM ...    -- bulk update with join semantics
+DELETE FROM ... WHERE
+TRUNCATE TABLE                 -- fast table reset, resets serial sequences
+```
+
+### Queries
+
+```sql
 SELECT, SELECT DISTINCT, WHERE, ORDER BY, LIMIT, OFFSET
-GROUP BY, HAVING, JOIN (INNER/LEFT/RIGHT/FULL)
-Subqueries, EXISTS, CTEs (WITH), CASE expressions
-LIKE, ILIKE, IS NULL, COALESCE
+GROUP BY, HAVING
+JOIN (INNER/LEFT/RIGHT/FULL/CROSS)
+LATERAL joins                  -- correlated subqueries in FROM
+Subqueries, EXISTS, IN, = ANY(...)
+VALUES as standalone query and FROM source
+Column aliases: AS alias (col1, col2, ...)
+CASE expressions, BETWEEN, LIKE, ILIKE
 UNION, INTERSECT, EXCEPT
+OVERLAPS                       -- date/time range overlap test
+CAST(expr AS type), expr::type
+```
+
+### Constraints
+
+```sql
+PRIMARY KEY, UNIQUE, NOT NULL, DEFAULT
+FOREIGN KEY ... REFERENCES ... ON DELETE/UPDATE (CASCADE, SET NULL, RESTRICT)
+```
+
+### Transactions
+
+```sql
+BEGIN, COMMIT, ROLLBACK
+```
+
+### Prepared Statements
+
+```sql
+PREPARE name AS statement      -- with $1, $2, ... parameters
+EXECUTE name(arg1, arg2, ...)
+DEALLOCATE name
 ```
 
 ### Aggregate Functions
 
-`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`
+`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `string_agg`, `array_agg`, `bool_and`, `bool_or`, `variance`, `var_samp`, `var_pop`, `stddev`, `stddev_samp`, `stddev_pop`
 
 ### Built-in Functions
 
-`gen_random_uuid()`, `CURRENT_TIMESTAMP`, `COALESCE`, `UPPER`, `LOWER`, `LENGTH`, `SUBSTRING`, `TRIM`, `ABS`, `ROUND`, `CEIL`, `FLOOR`
+**Text:** `lower`, `upper`, `initcap`, `length`, `trim`, `ltrim`, `rtrim`, `substring`, `left`, `right`, `lpad`, `rpad`, `replace`, `concat`, `concat_ws`, `repeat`, `reverse`, `position`, `split_part`, `ascii`, `chr`, `regexp_replace`, `regexp_match`, `starts_with`, `ends_with`
+
+**Numeric:** `abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `mod`, `power`, `sqrt`, `exp`, `ln`, `log10`, `log`, `pi`, `degrees`, `radians`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `random`, `greatest`, `least`
+
+**Date/Time:** `now`, `current_date`, `current_time`, `date_part`, `EXTRACT`, `date_trunc`, `make_date`, `make_time`, `age`, `to_char`, `to_date`, `to_timestamp`
+
+**Array:** `array_length`, `array_append`, `array_prepend`, `array_concat`, `array_slice`, `array_remove`, `array_position`, `array_distinct`, `string_to_array`, `array_to_string`
+
+**Other:** `coalesce`, `nullif`, `typeof`, `gen_random_uuid`, `octet_length`, `encode`, `decode`
 
 ## API
 
@@ -119,18 +185,25 @@ Every result has a `command` field for easy discrimination:
 { command: 'drop table', table: string }
 { command: 'create type', type: string }
 { command: 'drop type', type: string }
+{ command: 'create index', index: string }
 { command: 'drop index', index: string }
+{ command: 'truncate table', table: string }
 { command: 'alter table' }
 
-// INSERT — result contains generated/default values
+// DML
 { command: 'insert', result: Record<string, any> }
-
-// SELECT
 { command: 'select', rows: T[], fields: { name: string, dataType: string }[] }
-
-// UPDATE / DELETE
 { command: 'update', rows: number }
 { command: 'delete', rows: number }
+
+// Transactions
+{ command: 'begin' }
+{ command: 'commit' }
+{ command: 'rollback' }
+
+// Prepared statements
+{ command: 'prepare', name: string }
+{ command: 'deallocate', name: string }
 ```
 
 ### Value Mapping
@@ -138,7 +211,7 @@ Every result has a `command` field for easy discrimination:
 | SQL Type | JavaScript Type |
 |----------|----------------|
 | INT, BIGINT, DOUBLE, NUMERIC | `number` |
-| TEXT | `string` |
+| TEXT, CHAR | `string` |
 | BOOLEAN | `boolean` |
 | UUID | `string` |
 | TIMESTAMP | `Date` |
@@ -179,7 +252,8 @@ db.execute(`
     price NUMERIC(10,2),
     status status DEFAULT 'active',
     tags JSON,
-    created_at TIMESTAMP
+    created_at TIMESTAMP,
+    PRIMARY KEY (id)
   )
 `);
 
