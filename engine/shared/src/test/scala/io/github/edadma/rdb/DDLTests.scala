@@ -468,6 +468,39 @@ class DDLTests extends AnyFreeSpec with Matchers:
       result should include("DropTableResult")
     }
 
+    "CREATE TABLE IF NOT EXISTS on new table" in {
+      val result = test(
+        """
+          |CREATE TABLE IF NOT EXISTS t (id INT);
+          |""".trim.stripMargin
+      )
+
+      result should include("CreateTableResult")
+    }
+
+    "CREATE TABLE IF NOT EXISTS on existing table is no-op" in {
+      val result = test(
+        """
+          |CREATE TABLE t (id INT);
+          |CREATE TABLE IF NOT EXISTS t (id INT, name TEXT);
+          |""".trim.stripMargin
+      )
+
+      result should include("CreateTableResult")
+      result should not include "duplicate"
+    }
+
+    "CREATE TABLE without IF NOT EXISTS on existing table fails" in {
+      assertThrows[RuntimeException] {
+        testExpectingException(
+          """
+            |CREATE TABLE t (id INT);
+            |CREATE TABLE t (id INT);
+            |""".trim.stripMargin
+        )
+      }
+    }
+
     "parses DROP TABLE IF EXISTS syntax" in {
       val result = test(
         """

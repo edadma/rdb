@@ -135,68 +135,70 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
 
         InsertResult(result, TableValue(Vector(row), metadata))
       case QueryCommand(query)                                         => executeSelect(query)
-      case CreateTableCommand(id @ Ident(table), columns, constraints) =>
-        if db hasTable table then problem(id, s"duplicate table: $table")
+      case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists) =>
+        if (db hasTable table) && ifNotExists then CreateTableResult(table)
+        else
+          if db hasTable table then problem(id, s"duplicate table: $table")
 
-        val names = new mutable.HashSet[String]
+          val names = new mutable.HashSet[String]
 
-        val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references) =>
-          if names contains name then problem(id, s"duplicate column name: $name")
+          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references) =>
+            if names contains name then problem(id, s"duplicate column name: $name")
 
-          names += name
+            names += name
 
-          val typ =
-            typeDesc match
-              case Left(primitive)             => primitive
-              case Right(tid @ Ident(defined)) =>
-                db getType defined match
-                  case None    => problem(tid, s"type '$defined' is undefined")
-                  case Some(t) => t
-          val fkTuple = references.map { case (table, col, onDel, onUpd) => (table.name, col.name, onDel, onUpd) }
+            val typ =
+              typeDesc match
+                case Left(primitive)             => primitive
+                case Right(tid @ Ident(defined)) =>
+                  db getType defined match
+                    case None    => problem(tid, s"type '$defined' is undefined")
+                    case Some(t) => t
+            val fkTuple = references.map { case (table, col, onDel, onUpd) => (table.name, col.name, onDel, onUpd) }
 
-          ColumnSpec(
-            name,
-            typ,
-            required,
-            false, // indexed
-            unique,
-            fkTuple,
-            default.map(expr => eval(rewrite(expr), Nil)),
-          )
-        }
+            ColumnSpec(
+              name,
+              typ,
+              required,
+              false, // indexed
+              unique,
+              fkTuple,
+              default.map(expr => eval(rewrite(expr), Nil)),
+            )
+          }
 
-        val constraintSpecs = constraints map {
-          case PrimaryKeyConstraint(name, cols) =>
-            PrimaryKeySpec(cols.map(_.name), name)
-          case UniqueConstraint(name, cols) =>
-            UniqueSpec(cols.map(_.name), name)
-          case ForeignKeyConstraint(name, cols, refTable, refCols, onDel, onUpd) =>
-            ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name, onDel, onUpd)
-        }
+          val constraintSpecs = constraints map {
+            case PrimaryKeyConstraint(name, cols) =>
+              PrimaryKeySpec(cols.map(_.name), name)
+            case UniqueConstraint(name, cols) =>
+              UniqueSpec(cols.map(_.name), name)
+            case ForeignKeyConstraint(name, cols, refTable, refCols, onDel, onUpd) =>
+              ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), name, onDel, onUpd)
+          }
 
-        // Validate FK references
-        for spec <- columnSpecs do
-          spec match
-            case cs: ColumnSpec if cs.fk.isDefined =>
-              val (refTableName, refColName, _, _) = cs.fk.get
-              val refTable = db.getTable(refTableName).getOrElse(
-                problem(id, s"referenced table '$refTableName' does not exist"))
-              if !refTable.hasColumn(refColName) then
-                problem(id, s"referenced column '$refColName' not found in table '$refTableName'")
-            case _ =>
-        for spec <- constraintSpecs do
-          spec match
-            case fk: ForeignKeySpec =>
-              val refTable = db.getTable(fk.referencedTable).getOrElse(
-                problem(id, s"referenced table '${fk.referencedTable}' does not exist"))
-              for col <- fk.referencedColumns do
-                if !refTable.hasColumn(col) then
-                  problem(id, s"referenced column '$col' not found in table '${fk.referencedTable}'")
-            case _ =>
+          // Validate FK references
+          for spec <- columnSpecs do
+            spec match
+              case cs: ColumnSpec if cs.fk.isDefined =>
+                val (refTableName, refColName, _, _) = cs.fk.get
+                val refTable = db.getTable(refTableName).getOrElse(
+                  problem(id, s"referenced table '$refTableName' does not exist"))
+                if !refTable.hasColumn(refColName) then
+                  problem(id, s"referenced column '$refColName' not found in table '$refTableName'")
+              case _ =>
+          for spec <- constraintSpecs do
+            spec match
+              case fk: ForeignKeySpec =>
+                val refTable = db.getTable(fk.referencedTable).getOrElse(
+                  problem(id, s"referenced table '${fk.referencedTable}' does not exist"))
+                for col <- fk.referencedColumns do
+                  if !refTable.hasColumn(col) then
+                    problem(id, s"referenced column '$col' not found in table '${fk.referencedTable}'")
+              case _ =>
 
-        val allSpecs = columnSpecs ++ constraintSpecs
-        db.createTable(table, allSpecs)
-        CreateTableResult(table)
+          val allSpecs = columnSpecs ++ constraintSpecs
+          db.createTable(table, allSpecs)
+          CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
         if (!db.hasTable(table)) {
           if (!ifExists) problem(id, s"unknown table: $table")

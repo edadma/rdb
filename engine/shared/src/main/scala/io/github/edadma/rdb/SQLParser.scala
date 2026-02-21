@@ -489,11 +489,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
         }
 
   lazy val createTable: P[Command] =
-    kw("CREATE") ~> kw("TABLE") ~> identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
-      case t ~ items =>
+    kw("CREATE") ~> kw("TABLE") ~> opt(kw("IF") ~> kw("NOT") ~> kw("EXISTS")) ~ identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
+      case ine ~ t ~ items =>
         val columns     = items.collect { case c: ColumnDesc => c }
         val constraints = items.collect { case c: TableConstraint => c }
-        CreateTableCommand(t, columns, constraints)
+        CreateTableCommand(t, columns, constraints, ine.isDefined)
     }
 
   lazy val dropTable: P[Command] =
