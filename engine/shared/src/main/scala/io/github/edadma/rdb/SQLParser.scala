@@ -459,6 +459,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       kw("RETURNING") ~> identifier,
     ) ^^ { case t ~ cs ~ _ ~ rs ~ ret =>
       InsertCommand(t, cs, rs, ret)
+    } |
+    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ query ~ opt(
+      kw("RETURNING") ~> identifier,
+    ) ^^ { case t ~ cs ~ q ~ ret =>
+      InsertSelectCommand(t, cs, q, ret)
     }
 
   lazy val tableConstraint: P[TableConstraint] =

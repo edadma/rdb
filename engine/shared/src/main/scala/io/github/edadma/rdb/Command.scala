@@ -19,6 +19,8 @@ trait Command
 case class QueryCommand(query: Expr) extends Command
 case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident])
     extends Command
+case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query: Expr, returning: Option[Ident])
+    extends Command
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint]) extends Command
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
 case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], from: Option[Seq[Expr]], cond: Option[Expr]) extends Command

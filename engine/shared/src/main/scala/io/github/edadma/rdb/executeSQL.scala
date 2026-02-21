@@ -94,6 +94,46 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
                   else problem(ret, s"'$returning' not found in result from insert")
 
             InsertResult(result, TableValue(Vector(row), metadata))
+      case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning) =>
+        val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
+        val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
+        val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
+        val cols = resolvedColumns.length
+
+        for (id @ Ident(c) <- resolvedColumns)
+          if !t.hasColumn(c) then problem(id, s"unknown column: $c")
+
+        val data = queryResult.data.map { row =>
+          if row.data.length != cols then
+            sys.error(s"query result has ${row.data.length} columns, expected $cols")
+          row.data.map(identity)
+        }
+
+        val fks = db.foreignKeys(t)
+        val fkCheck: Option[IndexedSeq[Value] => Unit] =
+          if fks.isEmpty then None
+          else Some { (row: IndexedSeq[Value]) =>
+            for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
+          }
+
+        val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+
+        val (row, metadata) =
+          returning match
+            case None =>
+              val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+              val metadata = Metadata(cols.toIndexedSeq)
+              (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+            case Some(ret @ Ident(returning)) =>
+              if result contains returning then
+                val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
+                  (ColumnMetadata(Some(table), k, v.vtyp), v)
+                } unzip
+                val metadata = Metadata(cols.toIndexedSeq)
+                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+              else problem(ret, s"'$returning' not found in result from insert")
+
+        InsertResult(result, TableValue(Vector(row), metadata))
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints) =>
         if db hasTable table then problem(id, s"duplicate table: $table")
@@ -389,6 +429,8 @@ private[rdb] def deepCopyCommand(cmd: Command): Command =
       QueryCommand(deepCopyExpr(query))
     case InsertCommand(table, columns, rows, returning) =>
       InsertCommand(table, columns, rows.map(_.map(deepCopyExpr)), returning)
+    case InsertSelectCommand(table, columns, query, returning) =>
+      InsertSelectCommand(table, columns, deepCopyExpr(query), returning)
     case UpdateCommand(table, sets, from, cond) =>
       UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value))),
         from.map(_.map(deepCopyExpr)), cond.map(deepCopyExpr))
