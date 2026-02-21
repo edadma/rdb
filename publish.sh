@@ -1,15 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "==> Building fullOptJS..."
-sbt rdbJS/fullOptJS
+echo "==> Building fullLinkJS..."
+sbt engineJS/fullLinkJS
 
 echo "==> Running tests..."
 node --experimental-strip-types --test ts-test/rdb.test.ts
 
 echo "==> Copying artifacts to npm/..."
-cp js/target/scala-3.8.1/rdb-opt/main.js npm/main.js
-cp shared/src/index.d.ts npm/index.d.ts
+cp engine/js/target/scala-3.8.1/rdb-engine-opt/main.js npm/main.js
 
 echo "==> Package contents:"
 cd npm
