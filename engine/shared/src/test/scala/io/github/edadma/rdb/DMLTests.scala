@@ -324,5 +324,28 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
       table.data.length shouldBe 1
       table.data(0).data(0) shouldBe TextValue("yes")
     }
+
+    "quoted uppercase column not accessible via unquoted name" in {
+      an[Exception] should be thrownBy query(
+        """
+          |CREATE TABLE t ("UPPER" TEXT);
+          |INSERT INTO t ("UPPER") VALUES ('val');
+          |SELECT UPPER FROM t;
+          |""".trim.stripMargin
+      )
+    }
+
+    "quoted table name preserves case" in {
+      val table = query(
+        """
+          |CREATE TABLE "MyTable" (x INT);
+          |INSERT INTO "MyTable" (x) VALUES (1);
+          |SELECT x FROM "MyTable";
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 1)
+    }
   }
 }
