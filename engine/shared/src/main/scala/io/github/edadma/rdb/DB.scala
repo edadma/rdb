@@ -421,13 +421,8 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
 case class PreparedStatement(name: String, commands: Seq[Command]):
   def execute(params: Value*)(using session: Session): Seq[Result] =
-    val saved = currentParams
-    try
-      currentParams = params.toIndexedSeq
-      val copied = deepCopyCommands(commands)
-      executeCommands(copied)
-    finally
-      currentParams = saved
+    val copied = deepCopyCommands(commands, params.toIndexedSeq)
+    executeCommands(copied)
 
   def parameterCount: Int =
     def countInExpr(expr: Expr): Seq[Int] =

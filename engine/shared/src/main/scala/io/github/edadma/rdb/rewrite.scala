@@ -383,6 +383,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rewrittenRows = rows.map(_.map(rewrite))
       val width         = rewrittenRows.head.length
       ProcessOperator(ValuesProcess(rewrittenRows, width))
+    case _: ValueExpr => expr
     // todo: ColumnExpr, VariableExpr
     case _ => expr
 

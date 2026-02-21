@@ -47,13 +47,8 @@ private[rdb] def executeCommands(cs: Seq[Command])(using session: Session): Seq[
     case ExecuteCommand(id @ Ident(name), paramExprs) =>
       val ps = session.preparedStatements.getOrElse(name, problem(id, s"prepared statement '$name' not found"))
       val paramValues = paramExprs.map(e => eval(rewrite(e), Nil)).toIndexedSeq
-      val saved = currentParams
-      try
-        currentParams = paramValues
-        val copied = deepCopyCommands(ps.commands)
-        executeCommands(copied).last
-      finally
-        currentParams = saved
+      val copied = deepCopyCommands(ps.commands, paramValues)
+      executeCommands(copied).last
     case DeallocateCommand(id @ Ident(name)) =>
       if !session.preparedStatements.contains(name) then
         problem(id, s"prepared statement '$name' not found")
@@ -429,9 +424,15 @@ private[rdb] def executeCommands(cs: Seq[Command])(using session: Session): Seq[
 // To re-execute cached prepared statements we deep-copy the AST to
 // get fresh instances with typ = null.
 
-private[rdb] def deepCopyExpr(expr: Expr): Expr =
+private[rdb] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = IndexedSeq.empty): Expr =
   val copied: Expr = expr match
-    case ParameterExpr(index)              => ParameterExpr(index)
+    case p @ ParameterExpr(index) =>
+      if params.nonEmpty then
+        if index < 1 || index > params.length then
+          problem(p, s"parameter $$$index is not bound (have ${params.length} parameters)")
+        ValueExpr(params(index - 1))
+      else ParameterExpr(index)
+    case ValueExpr(v)                      => ValueExpr(v)
     case ColumnExpr(table, col)            => ColumnExpr(table, col)
     case VariableExpr(name)                => VariableExpr(name)
     case NumberExpr(n)                     => NumberExpr(n)
@@ -440,64 +441,64 @@ private[rdb] def deepCopyExpr(expr: Expr): Expr =
     case NullExpr()                        => NullExpr()
     case StarExpr()                        => StarExpr()
     case TableStarExpr(table)              => TableStarExpr(table)
-    case AliasExpr(e, alias)               => AliasExpr(deepCopyExpr(e), alias)
-    case UnaryExpr(op, e)                  => UnaryExpr(op, deepCopyExpr(e))
-    case BinaryExpr(l, op, r)              => BinaryExpr(deepCopyExpr(l), op, deepCopyExpr(r))
-    case BetweenExpr(v, op, lo, hi)        => BetweenExpr(deepCopyExpr(v), op, deepCopyExpr(lo), deepCopyExpr(hi))
-    case OverlapsExpr(a, b, c, d)          => OverlapsExpr(deepCopyExpr(a), deepCopyExpr(b), deepCopyExpr(c), deepCopyExpr(d))
+    case AliasExpr(e, alias)               => AliasExpr(deepCopyExpr(e, params), alias)
+    case UnaryExpr(op, e)                  => UnaryExpr(op, deepCopyExpr(e, params))
+    case BinaryExpr(l, op, r)              => BinaryExpr(deepCopyExpr(l, params), op, deepCopyExpr(r, params))
+    case BetweenExpr(v, op, lo, hi)        => BetweenExpr(deepCopyExpr(v, params), op, deepCopyExpr(lo, params), deepCopyExpr(hi, params))
+    case OverlapsExpr(a, b, c, d)          => OverlapsExpr(deepCopyExpr(a, params), deepCopyExpr(b, params), deepCopyExpr(c, params), deepCopyExpr(d, params))
     case CaseExpr(whens, els) =>
-      CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w), deepCopyExpr(e)) }, els.map(deepCopyExpr))
-    case ApplyExpr(func, args)             => ApplyExpr(func, args.map(deepCopyExpr))
-    case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v), op, es.map(deepCopyExpr))
-    case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v), op, deepCopyExpr(q))
-    case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q))
-    case ExistsExpr(q)                     => ExistsExpr(deepCopyExpr(q))
-    case ObjectExpr(props)                 => ObjectExpr(props.map { case (k, v) => (k, deepCopyExpr(v)) })
-    case ArrayExpr(elems)                  => ArrayExpr(elems.map(deepCopyExpr))
-    case TableConstructorExpr(q)           => TableConstructorExpr(deepCopyExpr(q))
-    case CastExpr(e, t)                    => CastExpr(deepCopyExpr(e), t)
-    case SetOperationExpr(op, l, r)        => SetOperationExpr(op, deepCopyExpr(l), deepCopyExpr(r))
-    case ValuesExpr(rows)                  => ValuesExpr(rows.map(_.map(deepCopyExpr)))
-    case LateralExpr(q)                    => LateralExpr(deepCopyExpr(q))
+      CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w, params), deepCopyExpr(e, params)) }, els.map(deepCopyExpr(_, params)))
+    case ApplyExpr(func, args)             => ApplyExpr(func, args.map(deepCopyExpr(_, params)))
+    case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v, params), op, es.map(deepCopyExpr(_, params)))
+    case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v, params), op, deepCopyExpr(q, params))
+    case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q, params))
+    case ExistsExpr(q)                     => ExistsExpr(deepCopyExpr(q, params))
+    case ObjectExpr(props)                 => ObjectExpr(props.map { case (k, v) => (k, deepCopyExpr(v, params)) })
+    case ArrayExpr(elems)                  => ArrayExpr(elems.map(deepCopyExpr(_, params)))
+    case TableConstructorExpr(q)           => TableConstructorExpr(deepCopyExpr(q, params))
+    case CastExpr(e, t)                    => CastExpr(deepCopyExpr(e, params), t)
+    case SetOperationExpr(op, l, r)        => SetOperationExpr(op, deepCopyExpr(l, params), deepCopyExpr(r, params))
+    case ValuesExpr(rows)                  => ValuesExpr(rows.map(_.map(deepCopyExpr(_, params))))
+    case LateralExpr(q)                    => LateralExpr(deepCopyExpr(q, params))
     case CompoundQueryExpr(q, ob, off, lim) =>
-      CompoundQueryExpr(deepCopyExpr(q), ob.map(_.map(deepCopyOrderBy)), off, lim)
+      CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))), off, lim)
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       SQLSelectExpr(
-        exprs.map(deepCopyExpr).to(ArraySeq),
-        from.map(_.map(deepCopyExpr)),
-        where.map(deepCopyExpr),
-        groupBy.map(_.map(deepCopyExpr)),
-        having.map(deepCopyExpr),
-        orderBy.map(_.map(deepCopyOrderBy)),
+        exprs.map(deepCopyExpr(_, params)).to(ArraySeq),
+        from.map(_.map(deepCopyExpr(_, params))),
+        where.map(deepCopyExpr(_, params)),
+        groupBy.map(_.map(deepCopyExpr(_, params))),
+        having.map(deepCopyExpr(_, params)),
+        orderBy.map(_.map(deepCopyOrderBy(_, params))),
         offset,
         limit,
         distinct,
       )
-    case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r), a, cs)
+    case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r, params), a, cs)
     case other => other // ProcessOperator, etc. — should not appear in parsed AST
   if expr.pos != null then copied.setPos(expr.pos)
   copied
 
-private def deepCopyOrderBy(ob: OrderBy): OrderBy =
-  OrderBy(deepCopyExpr(ob.f), ob.asc, ob.nullsFirst)
+private def deepCopyOrderBy(ob: OrderBy, params: IndexedSeq[Value] = IndexedSeq.empty): OrderBy =
+  OrderBy(deepCopyExpr(ob.f, params), ob.asc, ob.nullsFirst)
 
-private[rdb] def deepCopyCommand(cmd: Command): Command =
+private[rdb] def deepCopyCommand(cmd: Command, params: IndexedSeq[Value] = IndexedSeq.empty): Command =
   cmd match
     case QueryCommand(query) =>
-      QueryCommand(deepCopyExpr(query))
+      QueryCommand(deepCopyExpr(query, params))
     case InsertCommand(table, columns, rows, returning) =>
-      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr)), returning)
+      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning)
     case InsertSelectCommand(table, columns, query, returning) =>
-      InsertSelectCommand(table, columns, deepCopyExpr(query), returning)
+      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning)
     case UpdateCommand(table, sets, from, cond) =>
-      UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value))),
-        from.map(_.map(deepCopyExpr)), cond.map(deepCopyExpr))
+      UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))),
+        from.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)))
     case DeleteCommand(table, cond) =>
-      DeleteCommand(table, cond.map(deepCopyExpr))
+      DeleteCommand(table, cond.map(deepCopyExpr(_, params)))
     case PrepareCommand(name, cmds) =>
-      PrepareCommand(name, cmds.map(deepCopyCommand))
-    case ExecuteCommand(name, params) =>
-      ExecuteCommand(name, params.map(deepCopyExpr))
+      PrepareCommand(name, cmds.map(deepCopyCommand(_, params)))
+    case ExecuteCommand(name, execParams) =>
+      ExecuteCommand(name, execParams.map(deepCopyExpr(_, params)))
     case other => other // DDL commands, BEGIN/COMMIT/ROLLBACK — no mutable Expr state
 
-private[rdb] def deepCopyCommands(cmds: Seq[Command]): Seq[Command] = cmds.map(deepCopyCommand)
+private[rdb] def deepCopyCommands(cmds: Seq[Command], params: IndexedSeq[Value] = IndexedSeq.empty): Seq[Command] = cmds.map(deepCopyCommand(_, params))
