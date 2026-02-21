@@ -34,8 +34,6 @@ ThisBuild / developers := List(
 ThisBuild / homepage    := Some(url("https://github.com/edadma/rdb"))
 ThisBuild / description := "Project description here"
 
-ThisBuild / publishTo := sonatypePublishToBundle.value
-
 lazy val commonScalacOptions = Seq(
   "-deprecation",
   "-feature",
@@ -57,7 +55,8 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
       "io.github.edadma"  %%% "dllist"          % "0.0.6",
-      "io.github.edadma"  %%% "bptree"          % "0.0.2",
+      "io.github.edadma"  %%% "bptree"          % "0.0.3",
+      "io.github.edadma"  %%% "cross_platform"  % "0.1.3",
       "io.github.edadma"  %%% "stow"            % "0.0.2",
       "io.github.edadma"  %%% "table"           % "0.0.3",
       "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
@@ -68,6 +67,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
     ),
     publishMavenStyle      := true,
+    publishTo              := sonatypePublishToBundle.value,
     Test / publishArtifact := false,
   )
   .jvmSettings(
