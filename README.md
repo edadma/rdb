@@ -30,7 +30,7 @@ npm install @edadma/rdb
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.5"
+libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.6"
 ```
 
 ## Basic Usage
@@ -145,6 +145,7 @@ Persistent databases use crash-safe atomic writes via [stow](https://github.com/
 | `NUMERIC(p,s)` / `DECIMAL(p,s)` | Fixed-precision decimal |
 | `TEXT` | Variable-length string |
 | `CHAR(n)` | Fixed-length string (right-padded with spaces) |
+| `VARCHAR(n)` | Variable-length string (max n characters, no padding) |
 | `BOOLEAN` | True/false |
 | `DATE` | Calendar date (`yyyy-MM-dd`) |
 | `TIME` | Time of day (`HH:mm:ss`) |
@@ -351,6 +352,8 @@ SELECT date_trunc('month', now());                      -- truncate
 | `regexp_match(text, pattern)` | First regex match as array |
 | `starts_with(text, prefix)` | True if text starts with prefix |
 | `ends_with(text, suffix)` | True if text ends with suffix |
+| `translate(text, from, to)` | Character-by-character substitution |
+| `btrim(text [, chars])` | Trim characters from both ends |
 
 #### Numeric
 | Function | Description |
@@ -364,8 +367,14 @@ SELECT date_trunc('month', now());                      -- truncate
 | `exp(x)` / `ln(x)` / `log10(x)` / `log(base, x)` | Exponential/logarithm |
 | `pi()` | Pi constant |
 | `degrees(rad)` / `radians(deg)` | Angle conversion |
+| `cbrt(x)` | Cube root |
+| `div(x, y)` | Integer division |
+| `factorial(n)` | Factorial |
+| `gcd(a, b)` / `lcm(a, b)` | Greatest common divisor / least common multiple |
 | `sin` / `cos` / `tan` / `asin` / `acos` / `atan` / `atan2` | Trigonometry |
+| `sinh` / `cosh` / `tanh` / `asinh` / `acosh` / `atanh` | Hyperbolic trigonometry |
 | `random()` | Random number [0, 1) |
+| `x % y` | Modulo operator |
 | `greatest(a, b, ...)` / `least(a, b, ...)` | Max/min of values |
 
 #### Date/Time
@@ -378,6 +387,10 @@ SELECT date_trunc('month', now());                      -- truncate
 | `EXTRACT(field FROM source)` | SQL standard extract |
 | `date_trunc(field, source)` | Truncate to precision (year/quarter/month/week/day/hour/minute/second) |
 | `make_date(y, m, d)` / `make_time(h, m, s)` | Construct date/time |
+| `make_timestamp(y, mo, d, h, mi, s)` | Construct timestamp |
+| `make_interval(days [, hours [, mins [, secs]]])` | Construct interval |
+| `to_number(text, format)` | Parse numeric string |
+| `isfinite(date\|timestamp)` | True (no infinities in Java time) |
 | `age(ts1, ts2)` / `age(ts)` | Interval between timestamps |
 | `to_char(value, format)` | Format as text |
 | `to_date(text, format)` / `to_timestamp(text, format)` | Parse with format |
@@ -392,6 +405,11 @@ SELECT date_trunc('month', now());                      -- truncate
 | `array_remove(arr, val)` | Remove all occurrences |
 | `array_position(arr, val)` | Find element position (1-based) |
 | `array_distinct(arr)` | Remove duplicates |
+| `array_cat(arr1, arr2)` | Concatenate arrays (alias for `array_concat`) |
+| `array_replace(arr, old, new)` | Replace matching elements |
+| `array_lower(arr, dim)` / `array_upper(arr, dim)` | Array bounds (1-based) |
+| `array_ndims(arr)` | Number of dimensions (always 1) |
+| `cardinality(arr)` | Number of elements |
 | `string_to_array(text, delim)` | Split string to array |
 | `array_to_string(arr, sep)` | Join array to string |
 
@@ -415,7 +433,7 @@ SELECT date_trunc('month', now());                      -- truncate
 | `MIN(expr)` / `MAX(expr)` | Minimum/maximum |
 | `string_agg(text, separator)` | Concatenate with separator |
 | `array_agg(expr)` | Collect values into array |
-| `bool_and(expr)` / `bool_or(expr)` | Logical AND/OR across rows |
+| `bool_and(expr)` / `bool_or(expr)` / `every(expr)` | Logical AND/OR across rows |
 | `variance(expr)` / `var_samp(expr)` | Sample variance |
 | `var_pop(expr)` | Population variance |
 | `stddev(expr)` / `stddev_samp(expr)` | Sample standard deviation |

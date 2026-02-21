@@ -72,6 +72,7 @@ RDB follows PostgreSQL conventions:
 | `NUMERIC(p, s)` / `DECIMAL(p, s)` | Fixed-precision decimal |
 | `TEXT` | Variable-length string |
 | `CHAR(n)` | Fixed-length string |
+| `VARCHAR(n)` | Variable-length string (max n chars) |
 | `BOOLEAN` | True/false |
 | `DATE` / `TIME` / `TIMESTAMP` | Date and time types |
 | `TIMESTAMP WITH TIME ZONE` | Timezone-aware timestamp |
@@ -143,17 +144,17 @@ DEALLOCATE name
 
 ### Aggregate Functions
 
-`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `string_agg`, `array_agg`, `bool_and`, `bool_or`, `variance`, `var_samp`, `var_pop`, `stddev`, `stddev_samp`, `stddev_pop`
+`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `string_agg`, `array_agg`, `bool_and`, `bool_or`, `every`, `variance`, `var_samp`, `var_pop`, `stddev`, `stddev_samp`, `stddev_pop`
 
 ### Built-in Functions
 
-**Text:** `lower`, `upper`, `initcap`, `length`, `trim`, `ltrim`, `rtrim`, `substring`, `left`, `right`, `lpad`, `rpad`, `replace`, `concat`, `concat_ws`, `repeat`, `reverse`, `position`, `split_part`, `ascii`, `chr`, `regexp_replace`, `regexp_match`, `starts_with`, `ends_with`
+**Text:** `lower`, `upper`, `initcap`, `length`, `trim`, `ltrim`, `rtrim`, `btrim`, `substring`, `left`, `right`, `lpad`, `rpad`, `replace`, `translate`, `concat`, `concat_ws`, `repeat`, `reverse`, `position`, `split_part`, `ascii`, `chr`, `regexp_replace`, `regexp_match`, `starts_with`, `ends_with`
 
-**Numeric:** `abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `mod`, `power`, `sqrt`, `exp`, `ln`, `log10`, `log`, `pi`, `degrees`, `radians`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `random`, `greatest`, `least`
+**Numeric:** `abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `mod`, `%`, `power`, `sqrt`, `cbrt`, `exp`, `ln`, `log10`, `log`, `pi`, `degrees`, `radians`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `div`, `factorial`, `gcd`, `lcm`, `random`, `greatest`, `least`
 
-**Date/Time:** `now`, `current_date`, `current_time`, `date_part`, `EXTRACT`, `date_trunc`, `make_date`, `make_time`, `age`, `to_char`, `to_date`, `to_timestamp`
+**Date/Time:** `now`, `current_date`, `current_time`, `date_part`, `EXTRACT`, `date_trunc`, `make_date`, `make_time`, `make_timestamp`, `make_interval`, `age`, `to_char`, `to_date`, `to_timestamp`, `to_number`, `isfinite`
 
-**Array:** `array_length`, `array_append`, `array_prepend`, `array_concat`, `array_slice`, `array_remove`, `array_position`, `array_distinct`, `string_to_array`, `array_to_string`
+**Array:** `array_length`, `array_append`, `array_prepend`, `array_concat`, `array_cat`, `array_slice`, `array_remove`, `array_replace`, `array_position`, `array_distinct`, `array_lower`, `array_upper`, `array_ndims`, `cardinality`, `string_to_array`, `array_to_string`
 
 **Other:** `coalesce`, `nullif`, `typeof`, `gen_random_uuid`, `octet_length`, `encode`, `decode`
 
@@ -211,7 +212,7 @@ Every result has a `command` field for easy discrimination:
 | SQL Type | JavaScript Type |
 |----------|----------------|
 | INT, BIGINT, DOUBLE, NUMERIC | `number` |
-| TEXT, CHAR | `string` |
+| TEXT, CHAR, VARCHAR | `string` |
 | BOOLEAN | `boolean` |
 | UUID | `string` |
 | TIMESTAMP | `Date` |

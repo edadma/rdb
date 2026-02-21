@@ -277,6 +277,10 @@ val aggregateFunction: Map[String, AggregateFunction] =
       def instantiate: (AggregateFunctionInstance, Type) =
         (stddevInstance("stddev_pop", sample = false), NumberType)
     },
+    new AggregateFunction("every") {
+      def instantiate: (AggregateFunctionInstance, Type) =
+        aggregateFunction("bool_and").instantiate
+    },
   ) map (f => f.name -> f) toMap
 
 private def varianceInstance(n: String, sample: Boolean): AggregateFunctionInstance =

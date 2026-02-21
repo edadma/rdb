@@ -66,7 +66,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "table", "text", "then", "time", "timestamp", "to", "transaction",
       "true", "truncate", "type",
       "union", "unique", "update", "uuid",
-      "values",
+      "values", "varchar",
       "when", "where", "with", "without",
       "zone",
     )
@@ -333,7 +333,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val multiplicative: P[Expr] = positioned(
     positioned(
-      multiplicative ~ ("*" | "/") ~ castExpression ^^ { case l ~ o ~ r =>
+      multiplicative ~ ("*" | "/" | "%") ~ castExpression ^^ { case l ~ o ~ r =>
         BinaryExpr(l, o, r)
       } |
         castExpression,
@@ -561,6 +561,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | kw("NUMERIC") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
       | kw("DECIMAL") ~> ("(" ~> integer ~ ("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s)) }
       | kw("CHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(CharType(n)) }
+      | kw("VARCHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(VarcharType(n)) }
+      | kw("VARCHAR") ^^^ Left(TextType)
       | kw("JSONB") ^^^ Left(JSONType)
       | kw("JSON") ^^^ Left(JSONType)
       | kw("TIMESTAMP") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimestampTZType)

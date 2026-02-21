@@ -136,7 +136,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val res = like(s, p, !op.contains("ILIKE"))
 
       BooleanValue(op.contains("NOT") ^ res)
-    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/"), right) =>
+    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "%"), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)
 
@@ -146,6 +146,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case (ln: NumberValue, "-", rn: NumberValue) => BasicDAL.compute(MINUS, ln, rn, NumberValue.from)
         case (ln: NumberValue, "*", rn: NumberValue) => BasicDAL.compute(TIMES, ln, rn, NumberValue.from)
         case (ln: NumberValue, "/", rn: NumberValue) => BasicDAL.compute(DIVIDE, ln, rn, NumberValue.from)
+        case (NumberValue(_, a), "%", NumberValue(_, b)) => NumberValue(a.doubleValue % b.doubleValue)
         // date +/- int (days)
         case (DateValue(d), "+", NumberValue(_, n))  => DateValue(d.plusDays(n.longValue))
         case (DateValue(d), "-", NumberValue(_, n))  => DateValue(d.minusDays(n.longValue))

@@ -132,6 +132,17 @@ case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
         NumberValue(BigDecimal(n.doubleValue, mc).setScale(scale, BigDecimal.RoundingMode.DOWN))
       case _ => super.convert(v)
 
+case class VarcharType(length: Int) extends Type("varchar"):
+  override def convert(v: Value): Value =
+    v match
+      case TextValue(s) =>
+        if s.length > length then TextValue(s.substring(0, length))
+        else TextValue(s)
+      case _ =>
+        val s = v.toText.s
+        if s.length > length then TextValue(s.substring(0, length))
+        else TextValue(s)
+
 case class CharType(length: Int) extends Type("char"):
   override def convert(v: Value): Value =
     v match

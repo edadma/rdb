@@ -592,6 +592,184 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(ArrayValue(elems)) => ArrayValue(elems.distinct) },
       ArrayType,
     ),
+    // array_cat (alias for array_concat)
+    ScalarFunction(
+      "array_cat",
+      { case Seq(ArrayValue(a), ArrayValue(b)) => ArrayValue(a ++ b) },
+      ArrayType,
+    ),
+    // array_lower(a, dim) — always returns 1 (1-based indexing)
+    ScalarFunction(
+      "array_lower",
+      { case Seq(ArrayValue(_), NumberValue(_, _)) => NumberValue(1) },
+      NumberType,
+    ),
+    // array_upper(a, dim) — returns length
+    ScalarFunction(
+      "array_upper",
+      { case Seq(ArrayValue(a), NumberValue(_, _)) => NumberValue(a.length) },
+      NumberType,
+    ),
+    // array_ndims(a) — always 1 (flat arrays)
+    ScalarFunction(
+      "array_ndims",
+      { case Seq(ArrayValue(_)) => NumberValue(1) },
+      NumberType,
+    ),
+    // array_replace(a, old, new)
+    ScalarFunction(
+      "array_replace",
+      { case Seq(ArrayValue(elems), oldVal, newVal) =>
+        ArrayValue(elems.map(e => if e == oldVal then newVal else e))
+      },
+      ArrayType,
+    ),
+    // cardinality(a) — alias for array_length
+    ScalarFunction(
+      "cardinality",
+      { case Seq(ArrayValue(elems)) => NumberValue(elems.length) },
+      NumberType,
+    ),
+    // cbrt(x)
+    ScalarFunction("cbrt", { case Seq(NumberValue(_, n)) => NumberValue(math.cbrt(n.doubleValue)) }, NumberType),
+    // div(x, y) — integer division
+    ScalarFunction(
+      "div",
+      { case Seq(NumberValue(_, x), NumberValue(_, y)) => NumberValue((x.longValue / y.longValue).toDouble) },
+      NumberType,
+    ),
+    // factorial(n)
+    ScalarFunction(
+      "factorial",
+      { case Seq(NumberValue(_, n)) =>
+        val k = n.longValue
+        var result = 1L
+        for i <- 2L to k do result *= i
+        NumberValue(result.toDouble)
+      },
+      NumberType,
+    ),
+    // gcd(a, b)
+    ScalarFunction(
+      "gcd",
+      { case Seq(NumberValue(_, a), NumberValue(_, b)) =>
+        @scala.annotation.tailrec
+        def gcd(x: Long, y: Long): Long = if y == 0 then x else gcd(y, x % y)
+        NumberValue(math.abs(gcd(a.longValue, b.longValue)).toDouble)
+      },
+      NumberType,
+    ),
+    // lcm(a, b)
+    ScalarFunction(
+      "lcm",
+      { case Seq(NumberValue(_, a), NumberValue(_, b)) =>
+        @scala.annotation.tailrec
+        def gcd(x: Long, y: Long): Long = if y == 0 then x else gcd(y, x % y)
+        val av = a.longValue
+        val bv = b.longValue
+        NumberValue((if av == 0 || bv == 0 then 0L else math.abs(av / gcd(av, bv) * bv)).toDouble)
+      },
+      NumberType,
+    ),
+    // hyperbolic trig functions
+    ScalarFunction("sinh", { case Seq(NumberValue(_, n)) => NumberValue(math.sinh(n.doubleValue)) }, NumberType),
+    ScalarFunction("cosh", { case Seq(NumberValue(_, n)) => NumberValue(math.cosh(n.doubleValue)) }, NumberType),
+    ScalarFunction("tanh", { case Seq(NumberValue(_, n)) => NumberValue(math.tanh(n.doubleValue)) }, NumberType),
+    // inverse hyperbolic trig functions
+    ScalarFunction(
+      "asinh",
+      { case Seq(NumberValue(_, n)) =>
+        val x = n.doubleValue
+        NumberValue(math.log(x + math.sqrt(x * x + 1)))
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "acosh",
+      { case Seq(NumberValue(_, n)) =>
+        val x = n.doubleValue
+        NumberValue(math.log(x + math.sqrt(x * x - 1)))
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "atanh",
+      { case Seq(NumberValue(_, n)) =>
+        val x = n.doubleValue
+        NumberValue(0.5 * math.log((1 + x) / (1 - x)))
+      },
+      NumberType,
+    ),
+    // translate(s, from, to)
+    ScalarFunction(
+      "translate",
+      { case Seq(TextValue(s), TextValue(from), TextValue(to)) =>
+        val sb = new StringBuilder(s.length)
+        for c <- s do
+          val idx = from.indexOf(c)
+          if idx < 0 then sb += c
+          else if idx < to.length then sb += to.charAt(idx)
+          // else: character is in `from` but beyond `to` — deleted
+        TextValue(sb.toString)
+      },
+      TextType,
+    ),
+    // btrim(s, chars) — trim specific chars from both ends
+    ScalarFunction(
+      "btrim",
+      {
+        case Seq(TextValue(s)) => TextValue(s.trim)
+        case Seq(TextValue(s), TextValue(chars)) =>
+          val charSet = chars.toSet
+          val start = s.indexWhere(c => !charSet.contains(c))
+          if start < 0 then TextValue("")
+          else
+            val end = s.lastIndexWhere(c => !charSet.contains(c))
+            TextValue(s.substring(start, end + 1))
+      },
+      TextType,
+    ),
+    // make_timestamp(y, mo, d, h, mi, s)
+    ScalarFunction(
+      "make_timestamp",
+      { case Seq(NumberValue(_, y), NumberValue(_, mo), NumberValue(_, d), NumberValue(_, h), NumberValue(_, mi), NumberValue(_, s)) =>
+        TimestampValue(LocalDateTime.of(y.intValue, mo.intValue, d.intValue, h.intValue, mi.intValue, s.intValue))
+      },
+      TimestampType,
+    ),
+    // make_interval(days, hours, mins, secs)
+    ScalarFunction(
+      "make_interval",
+      {
+        case Seq(NumberValue(_, days), NumberValue(_, hours), NumberValue(_, mins), NumberValue(_, secs)) =>
+          IntervalValue(Duration.ofDays(days.longValue).plusHours(hours.longValue).plusMinutes(mins.longValue).plusSeconds(secs.longValue))
+        case Seq(NumberValue(_, days), NumberValue(_, hours), NumberValue(_, mins)) =>
+          IntervalValue(Duration.ofDays(days.longValue).plusHours(hours.longValue).plusMinutes(mins.longValue))
+        case Seq(NumberValue(_, days), NumberValue(_, hours)) =>
+          IntervalValue(Duration.ofDays(days.longValue).plusHours(hours.longValue))
+        case Seq(NumberValue(_, days)) =>
+          IntervalValue(Duration.ofDays(days.longValue))
+      },
+      IntervalType,
+    ),
+    // to_number(text, format) — parse numeric string
+    ScalarFunction(
+      "to_number",
+      { case Seq(TextValue(s), TextValue(_)) =>
+        val cleaned = s.replaceAll("[^0-9.eE+-]", "")
+        NumberValue(cleaned.toDouble)
+      },
+      NumberType,
+    ),
+    // isfinite(date/timestamp) — always true (Java time has no infinities)
+    ScalarFunction(
+      "isfinite",
+      {
+        case Seq(_: DateValue)      => BooleanValue(true)
+        case Seq(_: TimestampValue) => BooleanValue(true)
+      },
+      BooleanType,
+    ),
   ).map(f => f.name -> f).toMap
 
 // Convert SQL date format patterns to Java DateTimeFormatter patterns
