@@ -798,6 +798,59 @@ val scalarFunction: Map[String, ScalarFunction] =
       },
       BooleanType,
     ),
+    ScalarFunction(
+      "overlay",
+      {
+        // overlay(string, replacement, start, count)
+        case Seq(TextValue(s), TextValue(repl), NumberValue(_, startNum), NumberValue(_, countNum)) =>
+          val start = math.max(1, startNum.intValue)
+          val count = math.max(0, countNum.intValue)
+          val i0 = math.min(start - 1, s.length)
+          val i1 = math.min(i0 + count, s.length)
+          TextValue(s.substring(0, i0) + repl + s.substring(i1))
+        // overlay(string, replacement, start) — count defaults to length of replacement
+        case Seq(TextValue(s), TextValue(repl), NumberValue(_, startNum)) =>
+          val start = math.max(1, startNum.intValue)
+          val i0 = math.min(start - 1, s.length)
+          val i1 = math.min(i0 + repl.length, s.length)
+          TextValue(s.substring(0, i0) + repl + s.substring(i1))
+      },
+      TextType,
+    ),
+    ScalarFunction(
+      "width_bucket",
+      { case Seq(NumberValue(_, v), NumberValue(_, lo), NumberValue(_, hi), NumberValue(_, cnt)) =>
+        val value = v.doubleValue
+        val low = lo.doubleValue
+        val high = hi.doubleValue
+        val count = cnt.intValue
+        if count <= 0 then NumberValue(0)
+        else if value < low then NumberValue(0)
+        else if value >= high then NumberValue(count + 1)
+        else NumberValue(((value - low) / (high - low) * count).toInt + 1)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "get_byte",
+      { case Seq(ByteaValue(data), NumberValue(_, offsetNum)) =>
+        val offset = offsetNum.intValue
+        if offset < 0 || offset >= data.length then sys.error(s"get_byte: index $offset out of range 0..${data.length - 1}")
+        NumberValue(data(offset) & 0xff)
+      },
+      NumberType,
+    ),
+    ScalarFunction(
+      "set_byte",
+      { case Seq(ByteaValue(data), NumberValue(_, offsetNum), NumberValue(_, valNum)) =>
+        val offset = offsetNum.intValue
+        if offset < 0 || offset >= data.length then sys.error(s"set_byte: index $offset out of range 0..${data.length - 1}")
+        val copy = data.clone()
+        copy(offset) = valNum.intValue.toByte
+        ByteaValue(copy)
+      },
+      ByteaType,
+    ),
   ).map(f => f.name -> f).toMap ++ jsonScalarFunctions
 
 // Convert SQL date format patterns to Java DateTimeFormatter patterns

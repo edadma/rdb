@@ -27,9 +27,9 @@
 | Logical | AND, OR, NOT | — |
 | String | `||` (concat) | — |
 | Pattern | LIKE, ILIKE, NOT LIKE, NOT ILIKE | SIMILAR TO, `~` `~*` `!~` `!~*` (regex operators) |
-| Null test | IS NULL, IS NOT NULL | IS DISTINCT FROM, IS NOT DISTINCT FROM |
+| Null test | IS NULL, IS NOT NULL, IS DISTINCT FROM, IS NOT DISTINCT FROM | — |
 | Boolean test | IS TRUE, IS FALSE, IS UNKNOWN | — |
-| Range | BETWEEN, NOT BETWEEN, OVERLAPS | BETWEEN SYMMETRIC |
+| Range | BETWEEN, NOT BETWEEN, BETWEEN SYMMETRIC, OVERLAPS | — |
 | Set | IN, NOT IN, EXISTS, ANY/SOME, ALL | — |
 | JSON | `->` `->>` `#>` `#>>` `@>` `<@` `?` `?\|` `?&` `\|\|` (merge) | — |
 | Array | `@>` `<@` `&&` (overlap) `\|\|` (concat) | — |
@@ -41,23 +41,20 @@
 
 ### String — have
 
-lower, upper, length, trim, ltrim, rtrim, btrim, substring, substr, left, right, replace, translate, concat, concat_ws, repeat, position, lpad, rpad, initcap, char_length, character_length, ascii, chr, starts_with, ends_with, reverse, split_part, regexp_replace, regexp_match, quote_literal, quote_ident
+lower, upper, length, trim, ltrim, rtrim, btrim, substring, substr, left, right, replace, translate, concat, concat_ws, repeat, position, lpad, rpad, initcap, char_length, character_length, ascii, chr, starts_with, ends_with, reverse, split_part, overlay, regexp_replace, regexp_match, quote_literal, quote_ident
 
 ### String — missing
 
-- overlay(string PLACING string FROM int FOR int)
 - format(formatstr, ...)
-- md5(string)
 - regexp_matches(string, pattern) — global version returning set of arrays
 - regexp_split_to_table(string, pattern)
 
 ### Math — have
 
-abs, ceil, ceiling, floor, round, trunc, sign, mod, power, sqrt, cbrt, exp, ln, log, log10, pi, degrees, radians, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, asinh, acosh, atanh, div, factorial, gcd, lcm, random
+abs, ceil, ceiling, floor, round, trunc, sign, mod, power, sqrt, cbrt, exp, ln, log, log10, pi, degrees, radians, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, asinh, acosh, atanh, div, factorial, gcd, lcm, random, width_bucket
 
 ### Math — missing
 
-- width_bucket(value, low, high, count)
 - scale(numeric)
 - setseed(seed)
 
@@ -87,13 +84,7 @@ array_length, array_slice, array_append, array_prepend, array_concat, array_cat,
 
 ### Bytea — have
 
-octet_length, encode, decode
-
-### Bytea — missing
-
-- get_byte(bytea, offset)
-- set_byte(bytea, offset, value)
-- sha256(bytea), sha512(bytea)
+octet_length, encode, decode, get_byte, set_byte
 
 ### UUID — have
 

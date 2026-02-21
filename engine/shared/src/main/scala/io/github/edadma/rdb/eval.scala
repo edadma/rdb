@@ -303,6 +303,11 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
           case "="  => l.compare(r) == 0
           case "!=" => l.compare(r) != 0,
       )
+    case BinaryExpr(left, op @ ("IS DISTINCT FROM" | "IS NOT DISTINCT FROM"), right) =>
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      val same = (l.isNull && r.isNull) || (!l.isNull && !r.isNull && l.compare(r) == 0)
+      BooleanValue(if op == "IS DISTINCT FROM" then !same else same)
     case ObjectExpr(properties) =>
       val keys = new mutable.HashSet[String]
 

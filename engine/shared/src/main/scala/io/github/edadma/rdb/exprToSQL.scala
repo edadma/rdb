@@ -90,5 +90,6 @@ private def opPrec(op: String): Int =
     case "+" | "-"                                => 7
     case "*" | "/" | "%"                           => 8
     case "->" | "->>" | "#>" | "#>>"              => 11
-    case "@>" | "<@" | "&&" | "?" | "?|" | "?&"  => 4
+    case "@>" | "<@" | "&&" | "?" | "?|" | "?&"
+       | "IS DISTINCT FROM" | "IS NOT DISTINCT FROM" => 4
     case _                                        => 4

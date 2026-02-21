@@ -105,7 +105,7 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       BinaryExpr(l, op, r) setType l.typ
     case BinaryExpr(left, op @ ("->>" | "#>>"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType TextType
-    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE" | "@>" | "<@" | "&&" | "?" | "?|" | "?&"), right) =>
+    case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE" | "@>" | "<@" | "&&" | "?" | "?|" | "?&" | "IS DISTINCT FROM" | "IS NOT DISTINCT FROM"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
     case OverlapsExpr(s1, e1, s2, e2) =>
       BinaryExpr(
@@ -118,13 +118,51 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       val l = rewrite(lower)
       val r = rewrite(upper)
 
-      (if op == "BETWEEN" then BinaryExpr(lower, "<=", value) setType BooleanType
-       else BinaryExpr(value, "<", lower) setType BooleanType) match
-        case leftCond =>
-          (if op == "BETWEEN" then BinaryExpr(value, "<=", upper) setType BooleanType
-           else BinaryExpr(value, ">", upper) setType BooleanType) match
-            case rightCond =>
-              BinaryExpr(leftCond, if op == "BETWEEN" then "AND" else "OR", rightCond) setType BooleanType
+      op match
+        case "BETWEEN" =>
+          BinaryExpr(
+            BinaryExpr(lower, "<=", value) setType BooleanType,
+            "AND",
+            BinaryExpr(value, "<=", upper) setType BooleanType,
+          ) setType BooleanType
+        case "NOT BETWEEN" =>
+          BinaryExpr(
+            BinaryExpr(value, "<", lower) setType BooleanType,
+            "OR",
+            BinaryExpr(value, ">", upper) setType BooleanType,
+          ) setType BooleanType
+        case "BETWEEN SYMMETRIC" =>
+          // (value BETWEEN lower AND upper) OR (value BETWEEN upper AND lower)
+          BinaryExpr(
+            BinaryExpr(
+              BinaryExpr(lower, "<=", value) setType BooleanType,
+              "AND",
+              BinaryExpr(value, "<=", upper) setType BooleanType,
+            ) setType BooleanType,
+            "OR",
+            BinaryExpr(
+              BinaryExpr(upper, "<=", value) setType BooleanType,
+              "AND",
+              BinaryExpr(value, "<=", lower) setType BooleanType,
+            ) setType BooleanType,
+          ) setType BooleanType
+        case "NOT BETWEEN SYMMETRIC" =>
+          // NOT ((value BETWEEN lower AND upper) OR (value BETWEEN upper AND lower))
+          UnaryExpr("NOT",
+            BinaryExpr(
+              BinaryExpr(
+                BinaryExpr(lower, "<=", value) setType BooleanType,
+                "AND",
+                BinaryExpr(value, "<=", upper) setType BooleanType,
+              ) setType BooleanType,
+              "OR",
+              BinaryExpr(
+                BinaryExpr(upper, "<=", value) setType BooleanType,
+                "AND",
+                BinaryExpr(value, "<=", lower) setType BooleanType,
+              ) setType BooleanType,
+            ) setType BooleanType,
+          ) setType BooleanType
     case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit, _) =>
       if where.isDefined then problem(where.get, "WHERE clause not allowed here")
       if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
