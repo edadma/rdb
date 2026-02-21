@@ -51,6 +51,19 @@ object Main:
   ): Unit =
     Dump.run(path)
 
+  private val subcommands = Set("run", "dump")
+
   def main(args: Array[String]): Unit =
     val normalizedArgs = args.map(a => if a == "-h" then "--help" else a)
-    ParserForMethods(this).runOrExit(normalizedArgs.toIndexedSeq, allowPositional = true)
+    val effective =
+      if normalizedArgs.isEmpty then
+        Array("run")
+      else if subcommands.contains(normalizedArgs.head) then
+        normalizedArgs
+      else if !normalizedArgs.head.startsWith("-") then
+        // First arg is a path, not a flag — insert "run --path"
+        Array("run", "--path") ++ normalizedArgs
+      else
+        // First arg is a flag like -m or -e — just prepend "run"
+        Array("run") ++ normalizedArgs
+    ParserForMethods(this).runOrExit(effective.toIndexedSeq, allowPositional = true)
