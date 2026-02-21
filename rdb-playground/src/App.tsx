@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { ConnectSQL } from '@edadma/rdb'
+import { TextTable } from '@edadma/table'
 import { Navbar, Button, Space, Table, Alert, Kbd, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
 import { Terminal, type TerminalRef } from '@aster-ui/prefixed/terminal'
@@ -43,15 +44,12 @@ function formatValue(v: any): string {
 
 function formatTableText(fields: any[], rows: any[]): string {
   const colNames = fields.map((f: any) => f.name)
-  const data = rows.map((row: any) => colNames.map(n => formatValue(row[n])))
-  const widths = colNames.map((name, ci) =>
-    Math.max(name.length, ...data.map(r => r[ci].length))
-  )
-  const pad = (s: string, w: number) => s + ' '.repeat(w - s.length)
-  const header = colNames.map((n, i) => pad(n, widths[i])).join(' | ')
-  const sep = widths.map(w => '-'.repeat(w)).join('-+-')
-  const body = data.map(r => r.map((c, i) => pad(c, widths[i])).join(' | ')).join('\r\n')
-  return `${header}\r\n${sep}\r\n${body}`
+  const t = new TextTable()
+  t.header(colNames)
+  for (const row of rows) {
+    t.row(colNames.map(n => formatValue(row[n])))
+  }
+  return t.render().trimEnd()
 }
 
 function App() {
@@ -73,91 +71,74 @@ function App() {
     terminalRef.current?.writeln('\x1b[33mDatabase reset.\x1b[0m')
   }, [])
 
-  const executeAndDisplay = useCallback((query: string) => {
-    const db = getDb()
-    const entries: ResultEntry[] = []
-    const term = terminalRef.current
-    const start = performance.now()
-
-    try {
-      const rawResults = db.execute(query)
-      for (const r of rawResults) {
-        switch (r.command) {
-          case 'select':
-            entries.push({ type: 'table', content: r })
-            if (term) {
-              term.writeln(`\x1b[36m${formatTableText(r.fields, r.rows)}\x1b[0m`)
-              term.writeln(`\x1b[90m(${r.rows.length} row(s))\x1b[0m`)
-            }
-            break
-          case 'insert':
-            entries.push({ type: 'info', content: `INSERT — ${JSON.stringify(r.result)}` })
-            term?.writeln(`\x1b[32mINSERT — ${JSON.stringify(r.result)}\x1b[0m`)
-            break
-          case 'update':
-            entries.push({ type: 'info', content: `UPDATE — ${r.rows} row(s)` })
-            term?.writeln(`\x1b[32mUPDATE — ${r.rows} row(s)\x1b[0m`)
-            break
-          case 'delete':
-            entries.push({ type: 'info', content: `DELETE — ${r.rows} row(s)` })
-            term?.writeln(`\x1b[32mDELETE — ${r.rows} row(s)\x1b[0m`)
-            break
-          case 'create table':
-            entries.push({ type: 'info', content: `CREATE TABLE ${r.table}` })
-            term?.writeln(`\x1b[32mCREATE TABLE ${r.table}\x1b[0m`)
-            break
-          case 'drop table':
-            entries.push({ type: 'info', content: `DROP TABLE ${r.table}` })
-            term?.writeln(`\x1b[32mDROP TABLE ${r.table}\x1b[0m`)
-            break
-          case 'truncate table':
-            entries.push({ type: 'info', content: `TRUNCATE TABLE ${r.table}` })
-            term?.writeln(`\x1b[32mTRUNCATE TABLE ${r.table}\x1b[0m`)
-            break
-          case 'create index':
-            entries.push({ type: 'info', content: `CREATE INDEX ${r.index}` })
-            term?.writeln(`\x1b[32mCREATE INDEX ${r.index}\x1b[0m`)
-            break
-          case 'alter table':
-            entries.push({ type: 'info', content: 'ALTER TABLE' })
-            term?.writeln('\x1b[32mALTER TABLE\x1b[0m')
-            break
-          default:
-            entries.push({ type: 'info', content: r.command.toUpperCase() })
-            term?.writeln(`\x1b[32m${r.command.toUpperCase()}\x1b[0m`)
-        }
-      }
-    } catch (e: any) {
-      const msg = e.message || String(e)
-      entries.push({ type: 'error', content: msg })
-      term?.writeln(`\x1b[31mERROR: ${msg}\x1b[0m`)
+  const resultLabel = useCallback((r: any): string => {
+    switch (r.command) {
+      case 'insert': return `INSERT — ${JSON.stringify(r.result)}`
+      case 'update': return `UPDATE — ${r.rows} row(s)`
+      case 'delete': return `DELETE — ${r.rows} row(s)`
+      case 'create table': return `CREATE TABLE ${r.table}`
+      case 'drop table': return `DROP TABLE ${r.table}`
+      case 'truncate table': return `TRUNCATE TABLE ${r.table}`
+      case 'create index': return `CREATE INDEX ${r.index}`
+      case 'alter table': return 'ALTER TABLE'
+      default: return r.command.toUpperCase()
     }
-
-    const elapsed = performance.now() - start
-    setExecTime(elapsed)
-    setResults(entries)
-    term?.writeln(`\x1b[90m(${elapsed.toFixed(1)}ms)\x1b[0m`)
-  }, [getDb])
+  }, [])
 
   const runSql = useCallback(() => {
     const view = editorViewRef.current
     if (!view) return
-    executeAndDisplay(view.state.doc.toString())
-  }, [executeAndDisplay])
+    const db = getDb()
+    const entries: ResultEntry[] = []
+    const start = performance.now()
+
+    try {
+      const rawResults = db.execute(view.state.doc.toString())
+      for (const r of rawResults) {
+        if (r.command === 'select') {
+          entries.push({ type: 'table', content: r })
+        } else {
+          entries.push({ type: 'info', content: resultLabel(r) })
+        }
+      }
+    } catch (e: any) {
+      entries.push({ type: 'error', content: e.message || String(e) })
+    }
+
+    setExecTime(performance.now() - start)
+    setResults(entries)
+  }, [getDb, resultLabel])
 
   const handleTerminalLine = useCallback((line: string) => {
     const trimmed = line.trim()
     if (!trimmed) return
-    if (trimmed.toLowerCase() === 'clear') {
-      terminalRef.current?.clear()
-      return
+    const term = terminalRef.current
+    if (!term) return
+
+    if (trimmed.toLowerCase() === 'clear') { term.clear(); return }
+    if (trimmed.toLowerCase() === 'reset') { resetDb(); return }
+
+    const db = getDb()
+    const start = performance.now()
+
+    try {
+      const rawResults = db.execute(trimmed)
+      for (const r of rawResults) {
+        if (r.command === 'select') {
+          for (const line of formatTableText(r.fields, r.rows).split('\n')) {
+            term.writeln(line)
+          }
+          term.writeln(`\x1b[90m(${r.rows.length} row(s))\x1b[0m`)
+        } else {
+          term.writeln(`\x1b[32m${resultLabel(r)}\x1b[0m`)
+        }
+      }
+    } catch (e: any) {
+      term.writeln(`\x1b[31mERROR: ${e.message || String(e)}\x1b[0m`)
     }
-    if (trimmed.toLowerCase() === 'reset') {
-      resetDb()
-      return
-    }
-    executeAndDisplay(trimmed)
-  }, [executeAndDisplay, resetDb])
+
+    term.writeln(`\x1b[90m(${(performance.now() - start).toFixed(1)}ms)\x1b[0m`)
+  }, [getDb, resetDb, resultLabel])
 
   return (
     <Flex direction="column" className="h-screen" data-theme="dark">
@@ -219,6 +200,10 @@ function App() {
                       prompt="sql> "
                       onLine={handleTerminalLine}
                       onReady={(term) => {
+                        term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key === 'v') return false
+                          return true
+                        })
                         term.writeln('RDB interactive terminal. Type SQL to execute.')
                         term.writeln('Commands: \x1b[36mclear\x1b[0m, \x1b[36mreset\x1b[0m')
                         term.writeln('')
