@@ -175,7 +175,7 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
 
         db.createEnum(name, labels)
         CreateTypeResult(name)
-      case UpdateCommand(id @ Ident(table), sets, cond) =>
+      case UpdateCommand(id @ Ident(table), sets, from, cond) =>
         val t             = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
@@ -183,36 +183,51 @@ private[rdb] def executeCommands(cs: Seq[Command])(using db: DB): Seq[Result] =
 
             col -> rewrite(value)
           } unzip
-        val rows =
-          cond match
-            case Some(value) => SeqScanProcess(t, rewrite(value))
-            case None        => t
         var count = 0
 
         val pkCols = t.primaryKey.map(_.columns.toSet).getOrElse(Set.empty)
         val updatedColSet = cols.toSet
         val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
-        for (r <- rows.iterator(Nil))
-          r.updater match
+        def applyUpdate(targetRow: Row, evalRow: Row): Unit =
+          targetRow.updater match
             case None    => problem(id, "not updatable")
             case Some(u) =>
-              val updates = cols zip (exprs map (e => eval(e, Seq(r))))
-              // Enforce NOT NULL for PRIMARY KEY columns
+              val updates = cols zip (exprs map (e => eval(e, Seq(evalRow))))
               for (col, value) <- updates do
                 if pkCols.contains(col) && value.isNull then
                   sys.error(s"null value in column \"$col\" violates not-null constraint")
-              // Parent-side FK: enforce child constraints on old values
-              db.enforceChildConstraints(table, r, "update", Some(updatedColSet), Some(updates))
-              // Child-side FK: check new values reference existing parents
+              db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(updates))
               if childFKs.nonEmpty then
-                val newRowData = r.data.toArray
+                val newRowData = targetRow.data.toArray
                 for (col, value) <- updates do
                   newRowData(t.columnMap(col)) = value
                 for fk <- childFKs do
                   db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
               u(updates)
           count += 1
+
+        from match
+          case None =>
+            val rows =
+              cond match
+                case Some(value) => SeqScanProcess(t, rewrite(value))
+                case None        => t
+            for (r <- rows.iterator(Nil)) applyUpdate(r, r)
+
+          case Some(fromSources) =>
+            val fromProcesses = fromSources.map(s => procRewrite(rewrite(s)))
+            val fromProc = fromProcesses.reduceLeft((l, r) => CrossProcess(l, r))
+            val mergedMeta = Metadata(t.meta.columns ++ fromProc.meta.columns)
+            val rwCond = cond.map(rewrite(_))
+
+            for (targetRow <- t.iterator(Nil))
+              for (fromRow <- fromProc.iterator(Nil))
+                val merged = Row(targetRow.data ++ fromRow.data, mergedMeta, targetRow.updater, targetRow.deleter)
+                val matches = rwCond match
+                  case Some(c) => beval(c, Seq(merged))
+                  case None    => true
+                if matches then applyUpdate(targetRow, merged)
 
         UpdateResult(count)
       case DeleteCommand(id @ Ident(table), cond) =>
@@ -331,6 +346,7 @@ private[rdb] def deepCopyExpr(expr: Expr): Expr =
     case UnaryExpr(op, e)                  => UnaryExpr(op, deepCopyExpr(e))
     case BinaryExpr(l, op, r)              => BinaryExpr(deepCopyExpr(l), op, deepCopyExpr(r))
     case BetweenExpr(v, op, lo, hi)        => BetweenExpr(deepCopyExpr(v), op, deepCopyExpr(lo), deepCopyExpr(hi))
+    case OverlapsExpr(a, b, c, d)          => OverlapsExpr(deepCopyExpr(a), deepCopyExpr(b), deepCopyExpr(c), deepCopyExpr(d))
     case CaseExpr(whens, els) =>
       CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w), deepCopyExpr(e)) }, els.map(deepCopyExpr))
     case ApplyExpr(func, args)             => ApplyExpr(func, args.map(deepCopyExpr))
@@ -359,6 +375,7 @@ private[rdb] def deepCopyExpr(expr: Expr): Expr =
         limit,
         distinct,
       )
+    case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r), a, cs)
     case other => other // ProcessOperator, etc. — should not appear in parsed AST
   if expr.pos != null then copied.setPos(expr.pos)
   copied
@@ -372,8 +389,9 @@ private[rdb] def deepCopyCommand(cmd: Command): Command =
       QueryCommand(deepCopyExpr(query))
     case InsertCommand(table, columns, rows, returning) =>
       InsertCommand(table, columns, rows.map(_.map(deepCopyExpr)), returning)
-    case UpdateCommand(table, sets, cond) =>
-      UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value))), cond.map(deepCopyExpr))
+    case UpdateCommand(table, sets, from, cond) =>
+      UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value))),
+        from.map(_.map(deepCopyExpr)), cond.map(deepCopyExpr))
     case DeleteCommand(table, cond) =>
       DeleteCommand(table, cond.map(deepCopyExpr))
     case PrepareCommand(name, cmds) =>

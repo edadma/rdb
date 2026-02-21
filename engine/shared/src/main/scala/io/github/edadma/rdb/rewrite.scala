@@ -103,6 +103,12 @@ def rewrite(expr: Expr)(using db: DB): Expr =
       BinaryExpr(l, op, r) setType l.typ
     case BinaryExpr(left, op @ ("<=" | ">=" | "!=" | "=" | "<" | ">" | "LIKE" | "ILIKE"), right) =>
       BinaryExpr(rewrite(left), op, rewrite(right)) setType BooleanType
+    case OverlapsExpr(s1, e1, s2, e2) =>
+      BinaryExpr(
+        BinaryExpr(rewrite(s1), "<", rewrite(e2)) setType BooleanType,
+        "AND",
+        BinaryExpr(rewrite(s2), "<", rewrite(e1)) setType BooleanType,
+      ) setType BooleanType
     case BetweenExpr(value, op, lower, upper) =>
       val v = rewrite(value)
       val l = rewrite(lower)
@@ -129,21 +135,24 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case LateralExpr(rel) => rewrite(rel)
     case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit, distinct) =>
       def isLateral(e: Expr): Boolean = e match
-        case LateralExpr(_)                   => true
-        case AliasOperator(LateralExpr(_), _) => true
-        case _                                => false
+        case LateralExpr(_)                            => true
+        case AliasOperator(LateralExpr(_), _)          => true
+        case ColumnAliasOperator(LateralExpr(_), _, _) => true
+        case _                                         => false
 
       def stripLateral(e: Expr): Expr = e match
-        case LateralExpr(rel)                   => rel
-        case AliasOperator(LateralExpr(rel), a) => AliasOperator(rel, a)
-        case other                              => other
+        case LateralExpr(rel)                            => rel
+        case AliasOperator(LateralExpr(rel), a)          => AliasOperator(rel, a)
+        case ColumnAliasOperator(LateralExpr(rel), a, c) => ColumnAliasOperator(rel, a, c)
+        case other                                       => other
 
       val rewrittenFrom = from.map {
         case e if isLateral(e) =>
           e match
-            case LateralExpr(rel)                   => LateralExpr(rewrite(rel))
-            case AliasOperator(LateralExpr(rel), a) => AliasOperator(LateralExpr(rewrite(rel)), a)
-            case _                                  => rewrite(e)
+            case LateralExpr(rel)                            => LateralExpr(rewrite(rel))
+            case AliasOperator(LateralExpr(rel), a)          => AliasOperator(LateralExpr(rewrite(rel)), a)
+            case ColumnAliasOperator(LateralExpr(rel), a, c) => ColumnAliasOperator(LateralExpr(rewrite(rel)), a, c)
+            case _                                           => rewrite(e)
         case e => rewrite(e)
       }
 
@@ -304,6 +313,8 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case FullJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FullCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
+    case ColumnAliasOperator(rel, Ident(alias), columns) =>
+      ProcessOperator(ColumnAliasProcess(procRewrite(rel), alias, columns.map(_.name)))
     case TableOperator(id @ Ident(name))  =>
       db.getTable(name) match
         case Some(t) => ProcessOperator(t)
@@ -334,14 +345,16 @@ def rewrite(expr: Expr)(using db: DB): Expr =
     case _ => expr
 
 private def isLateralExpr(e: Expr): Boolean = e match
-  case LateralExpr(_)                   => true
-  case AliasOperator(LateralExpr(_), _) => true
-  case _                                => false
+  case LateralExpr(_)                            => true
+  case AliasOperator(LateralExpr(_), _)          => true
+  case ColumnAliasOperator(LateralExpr(_), _, _) => true
+  case _                                         => false
 
 private def stripLateralExpr(e: Expr): Expr = e match
-  case LateralExpr(rel)                   => rel
-  case AliasOperator(LateralExpr(rel), a) => AliasOperator(rel, a)
-  case other                              => other
+  case LateralExpr(rel)                            => rel
+  case AliasOperator(LateralExpr(rel), a)          => AliasOperator(rel, a)
+  case ColumnAliasOperator(LateralExpr(rel), a, c) => ColumnAliasOperator(rel, a, c)
+  case other                                       => other
 
 private def flattenAnd(expr: Expr): Seq[Expr] =
   expr match

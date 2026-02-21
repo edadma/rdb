@@ -5,6 +5,7 @@ import scala.collection.immutable.ArraySeq
 trait Operator extends Expr
 
 case class AliasOperator(rel: Expr, alias: Ident) extends Operator
+case class ColumnAliasOperator(rel: Expr, alias: Ident, columns: Seq[Ident]) extends Operator
 case class ProjectOperator(rel: Expr, exprs: ArraySeq[Expr]) extends Operator
 case class TableOperator(table: Ident) extends Operator
 case class SelectOperator(rel: Expr, cond: Expr) extends Operator

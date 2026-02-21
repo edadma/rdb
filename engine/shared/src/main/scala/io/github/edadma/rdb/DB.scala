@@ -440,6 +440,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
         case UnaryExpr(_, e)                   => countInExpr(e)
         case BinaryExpr(l, _, r)               => countInExpr(l) ++ countInExpr(r)
         case BetweenExpr(v, _, lo, hi)         => countInExpr(v) ++ countInExpr(lo) ++ countInExpr(hi)
+        case OverlapsExpr(a, b, c, d)          => countInExpr(a) ++ countInExpr(b) ++ countInExpr(c) ++ countInExpr(d)
         case CaseExpr(whens, els) =>
           whens.flatMap { case When(w, e) => countInExpr(w) ++ countInExpr(e) } ++ els.toSeq.flatMap(countInExpr)
         case ApplyExpr(_, args)                => args.flatMap(countInExpr)
@@ -459,7 +460,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
       cmd match
         case QueryCommand(q)                    => countInExpr(q)
         case InsertCommand(_, _, rows, _)       => rows.flatMap(_.flatMap(countInExpr))
-        case UpdateCommand(_, sets, cond)       => sets.flatMap(s => countInExpr(s.value)) ++ cond.toSeq.flatMap(countInExpr)
+        case UpdateCommand(_, sets, from, cond)  => sets.flatMap(s => countInExpr(s.value)) ++ from.toSeq.flatMap(_.flatMap(countInExpr)) ++ cond.toSeq.flatMap(countInExpr)
         case DeleteCommand(_, cond)             => cond.toSeq.flatMap(countInExpr)
         case _                                  => Nil
     commands.flatMap(countInCommand).maxOption.getOrElse(0)

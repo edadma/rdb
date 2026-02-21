@@ -200,6 +200,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "or",
       "ORDER",
       "order",
+      "OVERLAPS",
+      "overlaps",
       "PRECISION",
       "precision",
       "PREPARE",
@@ -430,13 +432,15 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       } | source
 
   lazy val source: P[Expr] =
-    kw("LATERAL") ~> ("(" ~> query <~ ")") ~ opt(opt(kw("AS")) ~> identifier) ^^ {
-      case q ~ None    => LateralExpr(q)
-      case q ~ Some(a) => AliasOperator(LateralExpr(q), a)
+    kw("LATERAL") ~> ("(" ~> query <~ ")") ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
+      case q ~ None                  => LateralExpr(q)
+      case q ~ Some(a ~ None)        => AliasOperator(LateralExpr(q), a)
+      case q ~ Some(a ~ Some(cols))  => ColumnAliasOperator(LateralExpr(q), a, cols)
     } |
-    (table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
-      case s ~ None    => s
-      case s ~ Some(a) => AliasOperator(s, a)
+    (table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
+      case s ~ None                  => s
+      case s ~ Some(a ~ None)        => AliasOperator(s, a)
+      case s ~ Some(a ~ Some(cols))  => ColumnAliasOperator(s, a, cols)
     }
 
   lazy val table: P[Expr] = positioned(
@@ -497,6 +501,9 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
       booleanLiteral |
       kw("NULL") ^^^ NullExpr() |
+      ("(" ~> expression ~ ("," ~> expression) <~ ")") ~ kw("OVERLAPS") ~ ("(" ~> expression ~ ("," ~> expression) <~ ")") ^^ {
+        case (s1 ~ e1) ~ _ ~ (s2 ~ e2) => OverlapsExpr(s1, e1, s2, e2)
+      } |
       "(" ~> booleanExpression <~ ")",
   )
 
@@ -727,9 +734,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     }
 
   lazy val update: P[Command] =
-    kw("UPDATE") ~> identifier ~ kw("SET") ~ rep1sep(set, ",") ~ opt(kw("WHERE") ~> booleanExpression) ^^ {
-      case t ~ _ ~ ss ~ c =>
-        UpdateCommand(t, ss, c)
+    kw("UPDATE") ~> identifier ~ kw("SET") ~ rep1sep(set, ",") ~
+      opt(kw("FROM") ~> rep1sep(sources, ",")) ~
+      opt(kw("WHERE") ~> booleanExpression) ^^ {
+      case t ~ _ ~ ss ~ f ~ c =>
+        UpdateCommand(t, ss, f, c)
     }
 
   lazy val delete: P[Command] =

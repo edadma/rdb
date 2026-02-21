@@ -141,6 +141,16 @@ case class AliasProcess(input: Process, alias: String) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
 
+case class ColumnAliasProcess(input: Process, alias: String, columns: Seq[String]) extends Process:
+  val meta: Metadata =
+    require(columns.length == input.meta.columns.length,
+      s"column alias count (${columns.length}) doesn't match column count (${input.meta.columns.length})")
+    Metadata(columns.zip(input.meta.columns).map { (name, col) =>
+      ColumnMetadata(Some(alias), name, col.typ)
+    }.toIndexedSeq)
+
+  def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).map(_.copy(meta = meta))
+
 case class DistinctProcess(input: Process) extends Process:
   val meta: Metadata = input.meta
 
