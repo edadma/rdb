@@ -73,7 +73,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
     override protected def processIdent(name: String): Token =
       val lower = name.toLowerCase
-      if reserved.contains(lower) then Keyword(lower) else Identifier(name)
+      if reserved.contains(lower) then Keyword(lower) else Identifier(lower)
 
     case class DecimalLit(chars: String) extends Token {
       override def toString: String = chars

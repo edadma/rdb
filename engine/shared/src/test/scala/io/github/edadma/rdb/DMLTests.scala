@@ -271,4 +271,58 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
       table.data.map(_.data(0)) should not contain TextValue("Alice")
     }
   }
+
+  "Identifier case folding" - {
+    "unquoted table name is case-insensitive" in {
+      val table = query(
+        """
+          |CREATE TABLE Users (Name TEXT);
+          |INSERT INTO users (name) VALUES ('Alice');
+          |SELECT name FROM USERS;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("Alice")
+    }
+
+    "unquoted column name is case-insensitive" in {
+      val table = query(
+        """
+          |CREATE TABLE t (MyCol INT);
+          |INSERT INTO t (mycol) VALUES (42);
+          |SELECT MYCOL FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 42)
+    }
+
+    "mixed-case keywords and identifiers" in {
+      val table = query(
+        """
+          |Create Table Stuff (Id SERIAL, Label TEXT, Primary Key (Id));
+          |Insert Into stuff (label) Values ('hello');
+          |Select label From STUFF Where id = 1;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("hello")
+    }
+
+    "double-quoted identifier preserves case" in {
+      val table = query(
+        """
+          |CREATE TABLE t ("MixedCase" TEXT);
+          |INSERT INTO t ("MixedCase") VALUES ('yes');
+          |SELECT "MixedCase" FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("yes")
+    }
+  }
 }
