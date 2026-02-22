@@ -211,3 +211,233 @@ class ServerTests extends AnyFreeSpec with Matchers:
     rowsCommit.length shouldBe 1
     jsonObj(rowsCommit.head)("id") shouldBe Json.Num(new java.math.BigDecimal(2))
   }
+
+  // ── 1. Session Isolation — Transaction Rollback Visibility ──────
+
+  "session isolation — transaction rollback visibility" in withServer { port =>
+    val (_, sb1) = post(port, "/session", "")
+    val idA = jsonObj(parseJson(sb1))("sessionId").asInstanceOf[Json.Str].value
+    val hdrsA = Map("X-Session-Id" -> idA)
+
+    val (_, sb2) = post(port, "/session", "")
+    val idB = jsonObj(parseJson(sb2))("sessionId").asInstanceOf[Json.Str].value
+    val hdrsB = Map("X-Session-Id" -> idB)
+
+    // Session A: create table
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, name TEXT)"}""", hdrsA)
+
+    // Session A: begin, insert, rollback
+    post(port, "/sql", """{"sql":"BEGIN"}""", hdrsA)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, 'tentative')"}""", hdrsA)
+    post(port, "/sql", """{"sql":"ROLLBACK"}""", hdrsA)
+
+    // Session B: should see 0 rows (rollback undid the insert)
+    val (_, bAfterRollback) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrsB)
+    val rowsAfterRollback = jsonArr(jsonObj(jsonArr(parseJson(bAfterRollback)).head)("rows"))
+    rowsAfterRollback.length shouldBe 0
+
+    // Session A: begin, insert, commit
+    post(port, "/sql", """{"sql":"BEGIN"}""", hdrsA)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, 'committed')"}""", hdrsA)
+    post(port, "/sql", """{"sql":"COMMIT"}""", hdrsA)
+
+    // Session B: should now see 1 row
+    val (_, bAfterCommit) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrsB)
+    val rowsAfterCommit = jsonArr(jsonObj(jsonArr(parseJson(bAfterCommit)).head)("rows"))
+    rowsAfterCommit.length shouldBe 1
+    jsonObj(rowsAfterCommit.head)("name") shouldBe Json.Str("committed")
+  }
+
+  // ── 2. Session Isolation — Independent Transactions ─────────────
+
+  "session isolation — independent transactions" in withServer { port =>
+    val (_, sb1) = post(port, "/session", "")
+    val idA = jsonObj(parseJson(sb1))("sessionId").asInstanceOf[Json.Str].value
+    val hdrsA = Map("X-Session-Id" -> idA)
+
+    val (_, sb2) = post(port, "/session", "")
+    val idB = jsonObj(parseJson(sb2))("sessionId").asInstanceOf[Json.Str].value
+    val hdrsB = Map("X-Session-Id" -> idB)
+
+    // Session A: create table (outside transaction)
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT)"}""", hdrsA)
+
+    // Session A: begin + insert
+    post(port, "/sql", """{"sql":"BEGIN"}""", hdrsA)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1)"}""", hdrsA)
+
+    // Session B: begin + insert
+    post(port, "/sql", """{"sql":"BEGIN"}""", hdrsB)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (2)"}""", hdrsB)
+
+    // Session B: commit (id=2 persists)
+    post(port, "/sql", """{"sql":"COMMIT"}""", hdrsB)
+
+    // Session A: rollback (id=1 undone)
+    post(port, "/sql", """{"sql":"ROLLBACK"}""", hdrsA)
+
+    // Only B's committed row should remain
+    val (_, body) = post(port, "/sql", """{"sql":"SELECT * FROM t ORDER BY id"}""", hdrsA)
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(body)).head)("rows"))
+    rows.length shouldBe 1
+    jsonObj(rows.head)("id") shouldBe Json.Num(new java.math.BigDecimal(2))
+  }
+
+  // ── 3. Auto-Created Sessions via X-Session-Id ──────────────────
+
+  "auto-created sessions via X-Session-Id" in withServer { port =>
+    val hdrs = Map("X-Session-Id" -> "my-custom-id")
+
+    // First request auto-creates session
+    val (s1, _) = post(port, "/sql", """{"sql":"CREATE TABLE t (id INT)"}""", hdrs)
+    s1 shouldBe 200
+
+    // Second request shares state with same session
+    val (s2, _) = post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1)"}""", hdrs)
+    s2 shouldBe 200
+
+    // Third request reads back data
+    val (s3, b3) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrs)
+    s3 shouldBe 200
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(b3)).head)("rows"))
+    rows.length shouldBe 1
+  }
+
+  // ── 4. Stateless Requests — Prepared Statement Isolation ────────
+
+  "stateless requests — prepared statement isolation" in withServer { port =>
+    // First transient request: prepare a statement
+    val (s1, _) = post(port, "/sql", """{"sql":"PREPARE p AS SELECT 1"}""")
+    s1 shouldBe 200
+
+    // Second transient request: execute should fail (different session)
+    val (s2, b2) = post(port, "/sql", """{"sql":"EXECUTE p"}""")
+    s2 shouldBe 400
+    val obj = jsonObj(parseJson(b2))
+    obj("error") shouldBe Json.Str("SQL error")
+  }
+
+  // ── 5. EnumValue Serialization ─────────────────────────────────
+
+  "enum value serialization" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TYPE color AS ENUM ('red', 'green', 'blue')"}""", hdrs)
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, c color)"}""", hdrs)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, 'green')"}""", hdrs)
+
+    val (status, body) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrs)
+    status shouldBe 200
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(body)).head)("rows"))
+    rows.length shouldBe 1
+    val row = jsonObj(rows.head)
+    row("c") shouldBe Json.Str("green")
+  }
+
+  // ── 6. DELETE /session/ with Empty ID ───────────────────────────
+
+  "DELETE /session/ with empty ID" in withServer { port =>
+    val (status, _) = delete(port, "/session/")
+    status shouldBe 404
+  }
+
+  // ── 7. Timestamp and Date Serialization ─────────────────────────
+
+  "timestamp and date serialization" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, d DATE, ts TIMESTAMP)"}""", hdrs)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, '2024-06-15', '2024-06-15 14:30:00')"}""", hdrs)
+
+    val (status, body) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrs)
+    status shouldBe 200
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(body)).head)("rows"))
+    rows.length shouldBe 1
+    val row = jsonObj(rows.head)
+
+    // Date serializes as ISO string
+    row("d") shouldBe a[Json.Str]
+    row("d").asInstanceOf[Json.Str].value should include("2024-06-15")
+
+    // Timestamp serializes as ISO string
+    row("ts") shouldBe a[Json.Str]
+    row("ts").asInstanceOf[Json.Str].value should include("2024-06-15")
+    row("ts").asInstanceOf[Json.Str].value should include("14:30")
+  }
+
+  // ── 8. UUID Serialization ───────────────────────────────────────
+
+  "UUID serialization" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id UUID DEFAULT gen_random_uuid(), name TEXT)"}""", hdrs)
+    post(port, "/sql", """{"sql":"INSERT INTO t (name) VALUES ('test')"}""", hdrs)
+
+    val (status, body) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrs)
+    status shouldBe 200
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(body)).head)("rows"))
+    rows.length shouldBe 1
+    val row = jsonObj(rows.head)
+
+    row("id") shouldBe a[Json.Str]
+    val uuidStr = row("id").asInstanceOf[Json.Str].value
+    uuidStr should fullyMatch regex "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+  }
+
+  // ── 9. JSON/JSONB Round-Trip ────────────────────────────────────
+
+  "JSON/JSONB round-trip" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, data JSONB)"}""", hdrs)
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, '{\"name\": \"Alice\", \"scores\": [10, 20]}')"}""", hdrs)
+
+    val (status, body) = post(port, "/sql", """{"sql":"SELECT * FROM t"}""", hdrs)
+    status shouldBe 200
+    val rows = jsonArr(jsonObj(jsonArr(parseJson(body)).head)("rows"))
+    rows.length shouldBe 1
+    val row = jsonObj(rows.head)
+
+    // data should be a JSON object, not a string
+    row("data") shouldBe a[Json.Obj]
+    val data = jsonObj(row("data"))
+    data("name") shouldBe Json.Str("Alice")
+
+    val scores = jsonArr(data("scores"))
+    scores.length shouldBe 2
+    scores(0) shouldBe Json.Num(new java.math.BigDecimal(10))
+    scores(1) shouldBe Json.Num(new java.math.BigDecimal(20))
+  }
+
+  // ── 10. Multiple Results Array Encoding ─────────────────────────
+
+  "response is always a JSON array" in withServer { port =>
+    // Single SELECT — response is array of length 1
+    val (s1, b1) = post(port, "/sql", """{"sql":"SELECT 1"}""")
+    s1 shouldBe 200
+    val r1 = jsonArr(parseJson(b1))
+    r1.length shouldBe 1
+    jsonObj(r1.head)("command") shouldBe Json.Str("select")
+
+    // BEGIN — response is array of length 1 with command "begin"
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    val (s2, b2) = post(port, "/sql", """{"sql":"BEGIN"}""", hdrs)
+    s2 shouldBe 200
+    val r2 = jsonArr(parseJson(b2))
+    r2.length shouldBe 1
+    jsonObj(r2.head)("command") shouldBe Json.Str("begin")
+
+    // Clean up the transaction
+    post(port, "/sql", """{"sql":"ROLLBACK"}""", hdrs)
+  }
