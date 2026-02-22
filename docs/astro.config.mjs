@@ -8,7 +8,10 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'PetraDB',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/edadma/petradb' }],
+			social: [
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/edadma/petradb' },
+				{ icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/@petradb/engine' },
+			],
 			sidebar: [
 				{
 					label: 'Getting Started',
