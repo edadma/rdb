@@ -7,7 +7,7 @@ import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
 @JSExportTopLevel("Session")
-class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
+class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   private val db = new MemoryDB()
   given session: Session = db.connect()

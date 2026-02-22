@@ -28,7 +28,7 @@ object ResultSerializer:
     case CreateTableResult(t)  => ResultJson(command = "create table", table = Some(t))
     case DropTableResult(t)    => ResultJson(command = "drop table", table = Some(t))
     case TruncateResult(t)     => ResultJson(command = "truncate table", table = Some(t))
-    case CreateIndexResult(n)  => ResultJson(command = "create index", name = Some(n))
+    case CreateIndexResult(n)  => ResultJson(command = "create index", index = Some(n))
     case DropIndexResult(n)    => ResultJson(command = "drop index", index = Some(n))
     case CreateTypeResult(t)   => ResultJson(command = "create type", typ = Some(t))
     case DropTypeResult(n)     => ResultJson(command = "drop type", typ = Some(n))

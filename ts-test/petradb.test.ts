@@ -586,6 +586,69 @@ describe("Session", () => {
     });
   });
 
+  describe("response format alignment", () => {
+    it("UPDATE result uses rowCount", async () => {
+      const d = new Session();
+      await d.execute("CREATE TABLE rfmt_u (id INT, name TEXT)");
+      await d.execute("INSERT INTO rfmt_u VALUES (1, 'a'), (2, 'b'), (3, 'c')");
+      const [res] = await d.execute("UPDATE rfmt_u SET name = 'x' WHERE id < 3");
+      assert.equal(res.command, "update");
+      assert.equal(res.rowCount, 2);
+      assert.equal(res.rows, undefined);
+    });
+
+    it("DELETE result uses rowCount", async () => {
+      const d = new Session();
+      await d.execute("CREATE TABLE rfmt_d (id INT)");
+      await d.execute("INSERT INTO rfmt_d VALUES (1), (2), (3)");
+      const [res] = await d.execute("DELETE FROM rfmt_d WHERE id = 1");
+      assert.equal(res.command, "delete");
+      assert.equal(res.rowCount, 1);
+      assert.equal(res.rows, undefined);
+    });
+
+    it("INSERT result includes rows and fields", async () => {
+      const d = new Session();
+      await d.execute("CREATE TABLE rfmt_i (id SERIAL, name TEXT)");
+      const [res] = await d.execute("INSERT INTO rfmt_i (name) VALUES ('Alice')");
+      assert.equal(res.command, "insert");
+      assert.ok(res.result);
+      assert.ok(typeof res.result.id === "number");
+      assert.ok(Array.isArray(res.rows));
+      assert.equal(res.rows.length, 1);
+      assert.ok(Array.isArray(res.fields));
+      assert.ok(res.fields.length >= 1);
+      assert.equal(res.fields[0].name, "id");
+    });
+
+    it("INSERT result respects rowMode array", async () => {
+      const d = new Session({ rowMode: "array" });
+      await d.execute("CREATE TABLE rfmt_ia (id SERIAL, name TEXT)");
+      const [res] = await d.execute("INSERT INTO rfmt_ia (name) VALUES ('Bob')");
+      assert.equal(res.command, "insert");
+      assert.ok(Array.isArray(res.rows));
+      assert.equal(res.rows.length, 1);
+      assert.ok(Array.isArray(res.rows[0]));
+      assert.equal(typeof res.rows[0][0], "number");
+    });
+
+    it("UPDATE zero rows returns rowCount 0", async () => {
+      const d = new Session();
+      await d.execute("CREATE TABLE rfmt_uz (id INT)");
+      const [res] = await d.execute("UPDATE rfmt_uz SET id = 1 WHERE id = 999");
+      assert.equal(res.command, "update");
+      assert.equal(res.rowCount, 0);
+    });
+
+    it("DELETE zero rows returns rowCount 0", async () => {
+      const d = new Session();
+      await d.execute("CREATE TABLE rfmt_dz (id INT)");
+      const [res] = await d.execute("DELETE FROM rfmt_dz WHERE id = 999");
+      assert.equal(res.command, "delete");
+      assert.equal(res.rowCount, 0);
+    });
+  });
+
   describe("transactions", () => {
     it("COMMIT persists changes", async () => {
       const d = new Session();

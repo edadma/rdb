@@ -443,3 +443,130 @@ class ServerTests extends AnyFreeSpec with Matchers:
     // Clean up the transaction
     post(port, "/sql", """{"sql":"ROLLBACK"}""", hdrs)
   }
+
+  // ── Response Format Alignment Tests ──────────────────────────────
+
+  "UPDATE returns rowCount" in withServer { port =>
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, name TEXT)"}""")
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1, 'a'), (2, 'b'), (3, 'c')"}""")
+
+    val (status, body) = post(port, "/sql", """{"sql":"UPDATE t SET name = 'x' WHERE id < 3"}""")
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("update")
+    result("rowCount") shouldBe Json.Num(new java.math.BigDecimal(2))
+    result should not contain key("rows")
+  }
+
+  "DELETE returns rowCount" in withServer { port =>
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT)"}""")
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1), (2), (3)"}""")
+
+    val (status, body) = post(port, "/sql", """{"sql":"DELETE FROM t WHERE id = 1"}""")
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("delete")
+    result("rowCount") shouldBe Json.Num(new java.math.BigDecimal(1))
+    result should not contain key("rows")
+  }
+
+  "INSERT includes rows and fields" in withServer { port =>
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id SERIAL, name TEXT)"}""")
+
+    val (status, body) = post(port, "/sql", """{"sql":"INSERT INTO t (name) VALUES ('Alice')"}""")
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("insert")
+
+    // result contains generated serial
+    val insertResult = jsonObj(result("result"))
+    insertResult("id") shouldBe a[Json.Num]
+
+    // rows array with the inserted auto-generated values
+    val rows = jsonArr(result("rows"))
+    rows.length shouldBe 1
+
+    // fields array with column metadata for generated columns
+    val fields = jsonArr(result("fields"))
+    fields.length should be >= 1
+    jsonObj(fields(0))("name") shouldBe Json.Str("id")
+  }
+
+  "TRUNCATE command string and table field" in withServer { port =>
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT)"}""")
+    post(port, "/sql", """{"sql":"INSERT INTO t VALUES (1)"}""")
+
+    val (status, body) = post(port, "/sql", """{"sql":"TRUNCATE TABLE t"}""")
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("truncate table")
+    result("table") shouldBe Json.Str("t")
+  }
+
+  "CREATE TYPE response shape" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    val (status, body) = post(port, "/sql", """{"sql":"CREATE TYPE mood AS ENUM ('happy', 'sad')"}""", hdrs)
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("create type")
+    result("type") shouldBe Json.Str("mood")
+    result should not contain key("name")
+  }
+
+  "DROP TYPE response shape" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TYPE mood AS ENUM ('happy', 'sad')"}""", hdrs)
+    val (status, body) = post(port, "/sql", """{"sql":"DROP TYPE mood"}""", hdrs)
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("drop type")
+    result("type") shouldBe Json.Str("mood")
+    result should not contain key("name")
+  }
+
+  "CREATE INDEX response shape" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, name TEXT)"}""", hdrs)
+    val (status, body) = post(port, "/sql", """{"sql":"CREATE INDEX idx_name ON t (name)"}""", hdrs)
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("create index")
+    result("index") shouldBe Json.Str("idx_name")
+    result should not contain key("name")
+  }
+
+  "DROP INDEX response shape" in withServer { port =>
+    val (_, sb) = post(port, "/session", "")
+    val sessionId = jsonObj(parseJson(sb))("sessionId").asInstanceOf[Json.Str].value
+    val hdrs = Map("X-Session-Id" -> sessionId)
+
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id INT, name TEXT)"}""", hdrs)
+    post(port, "/sql", """{"sql":"CREATE INDEX idx_name ON t (name)"}""", hdrs)
+    val (status, body) = post(port, "/sql", """{"sql":"DROP INDEX idx_name"}""", hdrs)
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    result("command") shouldBe Json.Str("drop index")
+    result("index") shouldBe Json.Str("idx_name")
+    result should not contain key("name")
+  }
+
+  "INSERT with array row mode includes rows as arrays" in withServer { port =>
+    post(port, "/sql", """{"sql":"CREATE TABLE t (id SERIAL, name TEXT)"}""")
+
+    val (status, body) = post(port, "/sql", """{"sql":"INSERT INTO t (name) VALUES ('Bob')","rowMode":"array"}""")
+    status shouldBe 200
+    val result = jsonObj(jsonArr(parseJson(body)).head)
+    val rows = jsonArr(result("rows"))
+    rows.length shouldBe 1
+    val row = jsonArr(rows.head)
+    row(0) shouldBe a[Json.Num]
+  }
