@@ -7,7 +7,7 @@
 ### JavaScript/TypeScript/Node.js
 
 ```javascript
-import { ConnectSQL } from '@edadma/petradb';
+import { ConnectSQL } from '@petradb/engine';
 
 const db = new ConnectSQL();
 

@@ -3,13 +3,13 @@ A lightweight, in-memory SQL database for JavaScript and TypeScript. No native d
 ## Installation
 
 ```bash
-npm install @edadma/petradb
+npm install @petradb/engine
 ```
 
 ## Quick Start
 
 ```javascript
-import { ConnectSQL } from '@edadma/petradb';
+import { ConnectSQL } from '@petradb/engine';
 
 const db = new ConnectSQL();
 
@@ -234,7 +234,7 @@ Every result has a `command` field for easy discrimination:
 Full type definitions are included. Use discriminated unions to narrow result types:
 
 ```typescript
-import { ConnectSQL, ExecuteResult } from '@edadma/petradb';
+import { ConnectSQL, ExecuteResult } from '@petradb/engine';
 
 const db = new ConnectSQL();
 const results: ExecuteResult[] = db.execute('SELECT * FROM users');
@@ -249,7 +249,7 @@ for (const result of results) {
 ## Example
 
 ```javascript
-import { ConnectSQL } from '@edadma/petradb';
+import { ConnectSQL } from '@petradb/engine';
 
 const db = new ConnectSQL();
 

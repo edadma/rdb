@@ -2,7 +2,7 @@ import xerial.sbt.Sonatype.sonatypeCentralHost
 
 ThisBuild / licenses               := Seq("ISC" -> url("https://opensource.org/licenses/ISC"))
 ThisBuild / versionScheme          := Some("semver-spec")
-ThisBuild / version                := "0.1.7"
+ThisBuild / version                := "1.0.0"
 ThisBuild / evictionErrorLevel     := Level.Warn
 ThisBuild / scalaVersion           := "3.8.1"
 ThisBuild / organization           := "io.github.edadma"
@@ -51,7 +51,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
   .settings(
     name    := "petradb-engine",
-    version := "0.1.7",
+    version := "1.0.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dal"             % "0.0.10",
@@ -95,7 +95,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
   .dependsOn(engine)
   .settings(
     name    := "petradb-cli",
-    version := "0.0.1",
+    version := "1.0.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,

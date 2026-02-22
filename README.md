@@ -24,13 +24,13 @@ PetraDB is designed to provide a lightweight, embeddable SQL database for applic
 ### JavaScript/Node.js
 
 ```bash
-npm install @edadma/petradb
+npm install @petradb/engine
 ```
 
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "0.1.7"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.0"
 ```
 
 ## Basic Usage
@@ -38,7 +38,7 @@ libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "0.1.7"
 ### JavaScript/TypeScript
 
 ```javascript
-import { ConnectSQL } from '@edadma/petradb';
+import { ConnectSQL } from '@petradb/engine';
 
 const db = new ConnectSQL();
 
