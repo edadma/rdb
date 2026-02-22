@@ -33,6 +33,7 @@ object ResultSerializer:
     case CreateTypeResult(t)   => ResultJson(command = "create type", typ = Some(t))
     case DropTypeResult(n)     => ResultJson(command = "drop type", name = Some(n))
     case AlterTableResult()    => ResultJson(command = "alter table")
+    case ExplainResult(plan)   => ResultJson(command = "explain", name = Some(plan))
     case PrepareResult(n)      => ResultJson(command = "prepare", name = Some(n))
     case DeallocateResult(n)   => ResultJson(command = "deallocate", name = Some(n))
     case BeginResult           => ResultJson(command = "begin")

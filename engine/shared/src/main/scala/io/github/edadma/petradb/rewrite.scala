@@ -80,15 +80,19 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
-      scalarFunction get func.toLowerCase match
-        case None =>
-          aggregateFunction get func.toLowerCase match
-            case None    => problem(id, s"unknown function '$func'")
-            case Some(f) =>
-              val (instance, typ) = f.instantiate
+      if func.toLowerCase == "generate_series" then
+        val rwArgs = args map rewrite
+        ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
+      else
+        scalarFunction get func.toLowerCase match
+          case None =>
+            aggregateFunction get func.toLowerCase match
+              case None    => problem(id, s"unknown function '$func'")
+              case Some(f) =>
+                val (instance, typ) = f.instantiate
 
-              AggregateFunctionExpr(instance, args map rewrite) setType typ
-        case Some(f) => ScalarFunctionExpr(f, args map rewrite)
+                AggregateFunctionExpr(instance, args map rewrite) setType typ
+          case Some(f) => ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
         case None    => problem(id, s"unknown variable '$name'")
@@ -98,7 +102,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val e = rewrite(expr)
 
       UnaryExpr(op, e) setType e.typ
-    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "AND" | "OR" | "->" | "#>" | "||"), right) =>
+    case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "^" | "AND" | "OR" | "->" | "#>" | "||"), right) =>
       val l = rewrite(left)
       val r = rewrite(right)
 

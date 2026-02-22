@@ -2,7 +2,7 @@ package io.github.edadma.petradb
 
 import io.github.edadma.dal.{BasicDAL, BigDecType, TypedNumber}
 import io.github.edadma.dal
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, OffsetTime, ZoneOffset}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -87,6 +87,18 @@ case class TimeValue(t: LocalTime) extends Value(TimeType):
     that match
       case TimeValue(u) => t.compareTo(u)
       case _            => super.compare(that)
+
+  override def render: String = s"'$t'"
+
+  def string: String = t.toString
+
+case class TimeTZValue(t: OffsetTime) extends Value(TimeTZType):
+  override def toText: TextValue = TextValue(t.toString)
+
+  override def compare(that: Value): Int =
+    that match
+      case TimeTZValue(u) => t.compareTo(u)
+      case _              => super.compare(that)
 
   override def render: String = s"'$t'"
 

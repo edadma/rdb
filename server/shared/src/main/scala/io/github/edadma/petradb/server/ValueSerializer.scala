@@ -13,6 +13,7 @@ object ValueSerializer:
     case TimeValue(t)         => Json.Str(t.toString)
     case TimestampValue(ts)   => Json.Str(ts.toString)
     case TimestampTZValue(ts) => Json.Str(ts.toString)
+    case TimeTZValue(t)       => Json.Str(t.toString)
     case IntervalValue(d)     => Json.Str(v.string)
     case ByteaValue(bytes)    => Json.Str(base64Encode(bytes))
     case UUIDValue(id)        => Json.Str(id)

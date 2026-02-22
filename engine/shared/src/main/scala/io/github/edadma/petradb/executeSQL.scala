@@ -54,8 +54,15 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         problem(id, s"prepared statement '$name' not found")
       session.preparedStatements.remove(name)
       DeallocateResult(name)
+    case ExplainCommand(innerCmd) =>
+      innerCmd match
+        case QueryCommand(query) =>
+          val rewritten = rewrite(query)
+          val plan = formatPlan(rewritten, 0)
+          ExplainResult(plan)
+        case _ => ExplainResult("(non-query command)")
     case cmd             => guardTransaction { cmd match
-      case InsertCommand(id @ Ident(table), columns, rows, returning) =>
+      case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
         val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
@@ -77,27 +84,52 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                 for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
               }
 
-            val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+            if onConflict then
+              // ON CONFLICT DO NOTHING: insert rows one at a time, skip on unique violations
+              var lastResult: Map[String, Value] = Map.empty
+              for d <- data do
+                try
+                  lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+                catch
+                  case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
 
-            val (row, metadata) =
-              returning match
-                case None =>
-                  val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                  val metadata    = Metadata(cols.toIndexedSeq)
+              val (row, metadata) =
+                returning match
+                  case None =>
+                    val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+                    val metadata    = Metadata(cols.toIndexedSeq)
+                    (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                  case Some(ret @ Ident(returning)) =>
+                    if lastResult contains returning then
+                      val (cols, seq) = lastResult filter { case (k, _) => k == returning } map { case (k, v) =>
+                        (ColumnMetadata(Some(table), k, v.vtyp), v)
+                      } unzip
+                      val metadata = Metadata(cols.toIndexedSeq)
+                      (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                    else problem(ret, s"'$returning' not found in result from insert")
+              InsertResult(lastResult, TableValue(Vector(row), metadata))
+            else
+              val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
 
-                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                case Some(ret @ Ident(returning)) =>
-                  if result contains returning then
-                    val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
-                      (ColumnMetadata(Some(table), k, v.vtyp), v)
-                    } unzip
-                    val metadata = Metadata(cols.toIndexedSeq)
+              val (row, metadata) =
+                returning match
+                  case None =>
+                    val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+                    val metadata    = Metadata(cols.toIndexedSeq)
 
                     (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                  else problem(ret, s"'$returning' not found in result from insert")
+                  case Some(ret @ Ident(returning)) =>
+                    if result contains returning then
+                      val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
+                        (ColumnMetadata(Some(table), k, v.vtyp), v)
+                      } unzip
+                      val metadata = Metadata(cols.toIndexedSeq)
 
-            InsertResult(result, TableValue(Vector(row), metadata))
-      case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning) =>
+                      (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                    else problem(ret, s"'$returning' not found in result from insert")
+
+              InsertResult(result, TableValue(Vector(row), metadata))
+      case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
         val t = db.getTable(table).getOrElse(problem(id, s"unknown table: $table"))
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
@@ -119,24 +151,47 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
             for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
           }
 
-        val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
-
-        val (row, metadata) =
-          returning match
-            case None =>
-              val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-              val metadata = Metadata(cols.toIndexedSeq)
-              (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-            case Some(ret @ Ident(returning)) =>
-              if result contains returning then
-                val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
-                  (ColumnMetadata(Some(table), k, v.vtyp), v)
-                } unzip
+        if onConflict then
+          var lastResult: Map[String, Value] = Map.empty
+          for d <- data do
+            try
+              lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+            catch
+              case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
+          val (row, metadata) =
+            returning match
+              case None =>
+                val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
                 val metadata = Metadata(cols.toIndexedSeq)
                 (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              else problem(ret, s"'$returning' not found in result from insert")
+              case Some(ret @ Ident(returning)) =>
+                if lastResult contains returning then
+                  val (cols, seq) = lastResult filter { case (k, _) => k == returning } map { case (k, v) =>
+                    (ColumnMetadata(Some(table), k, v.vtyp), v)
+                  } unzip
+                  val metadata = Metadata(cols.toIndexedSeq)
+                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                else problem(ret, s"'$returning' not found in result from insert")
+          InsertResult(lastResult, TableValue(Vector(row), metadata))
+        else
+          val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
 
-        InsertResult(result, TableValue(Vector(row), metadata))
+          val (row, metadata) =
+            returning match
+              case None =>
+                val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+                val metadata = Metadata(cols.toIndexedSeq)
+                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+              case Some(ret @ Ident(returning)) =>
+                if result contains returning then
+                  val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
+                    (ColumnMetadata(Some(table), k, v.vtyp), v)
+                  } unzip
+                  val metadata = Metadata(cols.toIndexedSeq)
+                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
+                else problem(ret, s"'$returning' not found in result from insert")
+
+          InsertResult(result, TableValue(Vector(row), metadata))
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists) =>
         guardDDL()
@@ -240,7 +295,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
 
         db.createEnum(name, labels)
         CreateTypeResult(name)
-      case UpdateCommand(id @ Ident(table), sets, from, cond) =>
+      case UpdateCommand(id @ Ident(table), sets, from, cond, returning) =>
         val t             = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
@@ -249,12 +304,15 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
             col -> rewrite(value)
           } unzip
         var count = 0
+        val returnedRows = mutable.ArrayBuffer[Row]()
 
         val pkCols = t.primaryKey.map(_.columns.toSet).getOrElse(Set.empty)
         val updatedColSet = cols.toSet
         val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
         val checkConstraints = t.constraints.collect { case c: CheckSpec => c }
+
+        val rwReturning = returning.map(_.map(rewrite))
 
         def applyUpdate(targetRow: Row, evalRow: Row): Unit =
           targetRow.updater match
@@ -281,6 +339,18 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                 for fk <- childFKs do
                   db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
               u(updates)
+              // Evaluate RETURNING against the new row state
+              rwReturning.foreach { retExprs =>
+                val newRowData = targetRow.data.toArray
+                for (col, value) <- updates do
+                  newRowData(t.columnMap(col)) = value
+                val newRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
+                val projected = retExprs.map {
+                  case StarExpr() => newRow.data
+                  case e          => IndexedSeq(eval(e, Seq(newRow)))
+                }.flatten.toIndexedSeq
+                returnedRows += Row(projected, Metadata(Vector.empty), None, None)
+              }
           count += 1
 
         from match
@@ -305,24 +375,60 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                   case None    => true
                 if matches then applyUpdate(targetRow, merged)
 
-        UpdateResult(count)
-      case DeleteCommand(id @ Ident(table), cond) =>
+        returning match
+          case Some(retExprs) =>
+            val retMeta = Metadata(
+              if retExprs.exists(_.isInstanceOf[StarExpr]) then t.meta.columns
+              else retExprs.zipWithIndex.map { case (e, i) =>
+                e match
+                  case ColumnExpr(_, Ident(name)) => ColumnMetadata(Some(table), name, t.meta.columns.find(_.name == name).map(_.typ).getOrElse(AnyType))
+                  case _ => ColumnMetadata(None, s"column${i + 1}", AnyType)
+              }.toIndexedSeq
+            )
+            val fixedRows = returnedRows.map(r => r.copy(meta = retMeta)).toVector
+            QueryResult(TableValue(fixedRows, retMeta))
+          case None =>
+            UpdateResult(count)
+      case DeleteCommand(id @ Ident(table), cond, returning) =>
         val t    = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         val rows =
           cond match
             case Some(value) => SeqScanProcess(t, rewrite(value))
             case None        => t
         var count = 0
+        val returnedRows = mutable.ArrayBuffer[Row]()
+        val rwReturning = returning.map(_.map(rewrite))
 
         for (r <- rows.iterator(Nil))
           db.enforceChildConstraints(table, r, "delete")
+          // Evaluate RETURNING before deleting
+          rwReturning.foreach { retExprs =>
+            val projected = retExprs.map {
+              case StarExpr() => r.data
+              case e          => IndexedSeq(eval(e, Seq(r)))
+            }.flatten.toIndexedSeq
+            returnedRows += Row(projected, Metadata(Vector.empty), None, None)
+          }
           r.deleter match
             case Some(d) => d()
             case None    => problem(id, "not updatable")
 
           count += 1
 
-        DeleteResult(count)
+        returning match
+          case Some(retExprs) =>
+            val retMeta = Metadata(
+              if retExprs.exists(_.isInstanceOf[StarExpr]) then t.meta.columns
+              else retExprs.zipWithIndex.map { case (e, i) =>
+                e match
+                  case ColumnExpr(_, Ident(name)) => ColumnMetadata(Some(table), name, t.meta.columns.find(_.name == name).map(_.typ).getOrElse(AnyType))
+                  case _ => ColumnMetadata(None, s"column${i + 1}", AnyType)
+              }.toIndexedSeq
+            )
+            val fixedRows = returnedRows.map(r => r.copy(meta = retMeta)).toVector
+            QueryResult(TableValue(fixedRows, retMeta))
+          case None =>
+            DeleteResult(count)
       case TruncateCommand(id @ Ident(table)) =>
         val t = db.getTable(table) getOrElse problem(id, s"unknown table: $table")
         // Enforce FK constraints: fail if any child table has rows referencing this table
@@ -419,6 +525,34 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
     }
   }
 
+// ── EXPLAIN Plan Formatting ──────────────────────────────────────
+
+private def formatPlan(expr: Expr, indent: Int): String =
+  val prefix = "  " * indent
+  expr match
+    case ProcessOperator(proc) => formatProcess(proc, indent)
+    case other                 => s"${prefix}Expr(${other.getClass.getSimpleName})"
+
+private def formatProcess(proc: Process, indent: Int): String =
+  val prefix = "  " * indent
+  proc match
+    case p: ProjectProcess     => s"${prefix}Project\n${formatProcess(p.input, indent + 1)}"
+    case p: SeqScanProcess     => s"${prefix}Seq Scan (filter)\n${formatProcess(p.input, indent + 1)}"
+    case p: SortProcess        => s"${prefix}Sort\n${formatProcess(p.input, indent + 1)}"
+    case p: AggregateProcess   => s"${prefix}Aggregate\n${formatProcess(p.input, indent + 1)}"
+    case p: TakeProcess        => s"${prefix}Limit\n${formatProcess(p.input, indent + 1)}"
+    case _: DropProcess        => s"${prefix}Offset"
+    case p: DistinctProcess    => s"${prefix}Distinct\n${formatProcess(p.input, indent + 1)}"
+    case p: HavingProcess      => s"${prefix}Having\n${formatProcess(p.input, indent + 1)}"
+    case p: CrossProcess       => s"${prefix}Cross Join\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
+    case p: AliasProcess       => s"${prefix}Alias (${p.alias})\n${formatProcess(p.input, indent + 1)}"
+    case p: IndexScanProcess   => s"${prefix}Index Scan on ${p.table.name} using ${p.index.meta.name}"
+    case p: UnionProcess       => s"${prefix}Union${if p.all then " All" else ""}\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
+    case p: GenerateSeriesProcess => s"${prefix}Generate Series"
+    case t: Table              => s"${prefix}Seq Scan on ${t.name}"
+    case SingleProcess         => s"${prefix}Result"
+    case _                     => s"${prefix}${proc.getClass.getSimpleName}"
+
 // ── Deep Copy Utilities ──────────────────────────────────────────
 // AST nodes have a mutable `var typ` that gets set during rewrite().
 // To re-execute cached prepared statements we deep-copy the AST to
@@ -486,15 +620,18 @@ private[petradb] def deepCopyCommand(cmd: Command, params: IndexedSeq[Value] = I
   cmd match
     case QueryCommand(query) =>
       QueryCommand(deepCopyExpr(query, params))
-    case InsertCommand(table, columns, rows, returning) =>
-      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning)
-    case InsertSelectCommand(table, columns, query, returning) =>
-      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning)
-    case UpdateCommand(table, sets, from, cond) =>
+    case InsertCommand(table, columns, rows, returning, onConflict) =>
+      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning, onConflict)
+    case InsertSelectCommand(table, columns, query, returning, onConflict) =>
+      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning, onConflict)
+    case UpdateCommand(table, sets, from, cond, returning) =>
       UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))),
-        from.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)))
-    case DeleteCommand(table, cond) =>
-      DeleteCommand(table, cond.map(deepCopyExpr(_, params)))
+        from.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)),
+        returning.map(_.map(deepCopyExpr(_, params))))
+    case DeleteCommand(table, cond, returning) =>
+      DeleteCommand(table, cond.map(deepCopyExpr(_, params)), returning.map(_.map(deepCopyExpr(_, params))))
+    case ExplainCommand(inner) =>
+      ExplainCommand(deepCopyCommand(inner, params))
     case PrepareCommand(name, cmds) =>
       PrepareCommand(name, cmds.map(deepCopyCommand(_, params)))
     case ExecuteCommand(name, execParams) =>

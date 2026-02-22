@@ -333,3 +333,20 @@ case class FullCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
     }
 
     leftResults ++ rightUnmatched
+
+case class GenerateSeriesProcess(startExpr: Expr, stopExpr: Expr, stepExpr: Option[Expr]) extends Process:
+  val meta: Metadata = Metadata(Vector(ColumnMetadata(None, "generate_series", NumberType)))
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val start = neval(startExpr, ctx).value.longValue
+    val stop = neval(stopExpr, ctx).value.longValue
+    val step = stepExpr.map(e => neval(e, ctx).value.longValue).getOrElse(1L)
+    if step == 0 then Iterator.empty
+    else if step > 0 then
+      Iterator.iterate(start)(_ + step).takeWhile(_ <= stop).map { i =>
+        Row(Vector(NumberValue(i.toInt)), meta, None, None)
+      }
+    else
+      Iterator.iterate(start)(_ + step).takeWhile(_ >= stop).map { i =>
+        Row(Vector(NumberValue(i.toInt)), meta, None, None)
+      }

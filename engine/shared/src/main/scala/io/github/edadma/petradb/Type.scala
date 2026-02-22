@@ -1,6 +1,6 @@
 package io.github.edadma.petradb
 
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, OffsetTime, ZoneOffset}
 import java.time.format.{DateTimeFormatter, DateTimeParseException}
 import io.github.edadma.dal.{BigDecType, DoubleType as DDoubleType, IntType as DIntType, LongType as DLongType}
 
@@ -212,6 +212,20 @@ case object TimeType extends Type("time"):
           case _: DateTimeParseException =>
             try TimeValue(LocalTime.parse(s, DateTimeFormatter.ofPattern("HH:mm")))
             catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as time")
+
+case object TimeTZType extends Type("timetz"):
+  override def convert(v: Value): Value =
+    v match
+      case t: TimeTZValue        => t
+      case TimeValue(t)          => TimeTZValue(t.atOffset(ZoneOffset.UTC))
+      case TimestampTZValue(t)   => TimeTZValue(t.toOffsetTime)
+      case _ =>
+        val s = v.toText.s
+        try TimeTZValue(OffsetTime.parse(s))
+        catch
+          case _: DateTimeParseException =>
+            try TimeTZValue(OffsetTime.parse(s, DateTimeFormatter.ofPattern("HH:mm:ssXXX")))
+            catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as timetz")
 
 case object IntervalType extends Type("interval"):
   private val simplePattern = """(?i)(?:(\d+)\s*days?)?[,\s]*(?:(\d+)\s*hours?)?[,\s]*(?:(\d+)\s*minutes?)?[,\s]*(?:(\d+)\s*seconds?)?""".r

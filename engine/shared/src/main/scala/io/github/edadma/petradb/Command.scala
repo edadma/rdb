@@ -18,14 +18,15 @@ case class CheckConstraint(name: Option[String], expression: Expr) extends Table
 trait Command
 
 case class QueryCommand(query: Expr) extends Command
-case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident])
+case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident], onConflict: Boolean = false)
     extends Command
-case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query: Expr, returning: Option[Ident])
+case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query: Expr, returning: Option[Ident], onConflict: Boolean = false)
     extends Command
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint], ifNotExists: Boolean = false) extends Command
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
-case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], from: Option[Seq[Expr]], cond: Option[Expr]) extends Command
-case class DeleteCommand(table: Ident, cond: Option[Expr])                                               extends Command
+case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], from: Option[Seq[Expr]], cond: Option[Expr], returning: Option[Seq[Expr]] = None) extends Command
+case class DeleteCommand(table: Ident, cond: Option[Expr], returning: Option[Seq[Expr]] = None) extends Command
+case class ExplainCommand(command: Command) extends Command
 case class TruncateCommand(table: Ident)                                                                 extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration)                                       extends Command
 case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Boolean = false)         extends Command
