@@ -7,12 +7,12 @@
 ### JavaScript/TypeScript/Node.js
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
 // Create and populate a table
-db.execute(`
+await db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
@@ -21,14 +21,14 @@ db.execute(`
   )
 `);
 
-db.execute(`
-  INSERT INTO users (name, email) VALUES 
+await db.execute(`
+  INSERT INTO users (name, email) VALUES
     ('Alice', 'alice@example.com'),
     ('Bob', 'bob@example.com')
 `);
 
 // Query data
-const results = db.execute('SELECT * FROM users');
+const results = await db.execute('SELECT * FROM users');
 console.log(results);
 ```
 
@@ -59,13 +59,13 @@ results.foreach(println)
 ## Core Concepts
 
 ### Database Instance
-- **JavaScript/TypeScript**: `new ConnectSQL()` creates an in-memory database
+- **JavaScript/TypeScript**: `new Session()` creates an in-memory database
 - **Scala**: `new MemoryDB` creates an in-memory database
 - Each instance is isolated and independent
 - All data is stored in memory (no persistence)
 
 ### Execution Model
-- **JavaScript/TypeScript**: `db.execute(sql)` returns array of result objects
+- **JavaScript/TypeScript**: `await db.execute(sql)` returns array of result objects
 - **Scala**: `executeSQL(sql)` returns sequence of Result objects
 - Multiple statements can be executed in one call (semicolon-separated)
 - Transactions are not explicitly supported (each statement is atomic)
@@ -460,12 +460,13 @@ SELECT name || ' - ' || category FROM products;  -- Concatenation
 
 ### JavaScript/TypeScript API
 
-#### ConnectSQL Class
+#### Session Class
 
 ```typescript
-class ConnectSQL {
-  constructor()
-  execute(sql: string): any[]
+class Session {
+  constructor(options?: SessionOptions)
+  execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
+  prepare(sql: string): PreparedStatement
 }
 ```
 
@@ -752,14 +753,14 @@ ORDER BY user_count DESC;
 
 ```javascript
 // Monitor memory usage in Node.js
-const db = new ConnectSQL();
+const db = new Session();
 
 // Large dataset handling
 const batchSize = 1000;
 for (let i = 0; i < totalRecords; i += batchSize) {
   const batch = records.slice(i, i + batchSize);
   const values = batch.map(r => `('${r.name}', ${r.value})`).join(',');
-  db.execute(`INSERT INTO table (name, value) VALUES ${values}`);
+  await db.execute(`INSERT INTO table (name, value) VALUES ${values}`);
 }
 ```
 
@@ -908,9 +909,9 @@ tableContents.foreach(println)
 1. **Parameterize queries when possible**
    ```javascript
    // Simulate parameterization by building safe queries
-   function findUserByEmail(email) {
+   async function findUserByEmail(email) {
      const safeEmail = email.replace(/'/g, "''"); // Basic SQL escaping
-     return db.execute(`SELECT * FROM users WHERE email = '${safeEmail}'`);
+     return await db.execute(`SELECT * FROM users WHERE email = '${safeEmail}'`);
    }
    ```
 
@@ -942,9 +943,9 @@ tableContents.foreach(println)
 
 1. **Error handling**
    ```javascript
-   function safeExecute(sql) {
+   async function safeExecute(sql) {
      try {
-       return db.execute(sql);
+       return await db.execute(sql);
      } catch (error) {
        console.error('SQL Error:', error.message);
        return null;
@@ -957,11 +958,11 @@ tableContents.foreach(println)
    // Reuse database instances
    class DatabaseService {
      constructor() {
-       this.db = new ConnectSQL();
+       this.db = new Session();
      }
      
-     query(sql) {
-       return this.db.execute(sql);
+     async query(sql) {
+       return await this.db.execute(sql);
      }
    }
    

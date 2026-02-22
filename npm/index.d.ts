@@ -1,4 +1,4 @@
-export interface ConnectSQLOptions {
+export interface SessionOptions {
     rowMode?: 'object' | 'array';
 }
 
@@ -112,7 +112,12 @@ export type ExecuteResult =
     | CommitResult
     | RollbackResult;
 
-export class ConnectSQL {
-    constructor(options?: ConnectSQLOptions);
-    execute(sql: string, options?: ExecuteOptions): ExecuteResult[];
+export interface PreparedStatement {
+    execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>;
+}
+
+export class Session {
+    constructor(options?: SessionOptions);
+    execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>;
+    prepare(sql: string): PreparedStatement;
 }

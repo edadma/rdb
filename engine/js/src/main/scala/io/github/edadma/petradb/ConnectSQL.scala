@@ -6,7 +6,7 @@ import scala.scalajs.js
 import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
-@JSExportTopLevel("ConnectSQL")
+@JSExportTopLevel("Session")
 class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   private val db = new MemoryDB()
@@ -114,22 +114,22 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "rollback")
 
   @JSExport
-  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
     val rowMode = options.toOption
       .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
       .getOrElse(defaultRowMode)
 
-    (executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray
+    js.Promise.resolve((executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray)
 
   @JSExport
   def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))
 
   class PreparedStatementJS(ps: PreparedStatement):
     @JSExport
-    def execute(params: js.Array[js.Any] = js.Array(), options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+    def execute(params: js.Array[js.Any] = js.Array(), options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
       val rowMode = options.toOption
         .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
         .getOrElse(defaultRowMode)
       val paramValues = params.map(fromJS).toIndexedSeq
       val results = ps.execute(paramValues*)(using session)
-      (results map (r => resultToJS(r, rowMode))).toJSArray
+      js.Promise.resolve((results map (r => resultToJS(r, rowMode))).toJSArray)

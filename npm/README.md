@@ -9,11 +9,11 @@ npm install @petradb/engine
 ## Quick Start
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
-db.execute(`
+await db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
@@ -22,10 +22,10 @@ db.execute(`
   )
 `);
 
-db.execute("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')");
-db.execute("INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')");
+await db.execute("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')");
+await db.execute("INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')");
 
-const [{ rows, fields }] = db.execute('SELECT * FROM users');
+const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 // rows:   [{ id: 1, name: 'Alice', email: 'alice@example.com' }, ...]
 // fields: [{ name: 'id', dataType: 'serial' }, { name: 'name', dataType: 'text' }, ...]
 ```
@@ -36,10 +36,10 @@ By default, SELECT rows are returned as objects keyed by column name. Use `rowMo
 
 ```javascript
 // Set default for all queries
-const db = new ConnectSQL({ rowMode: 'array' });
+const db = new Session({ rowMode: 'array' });
 
 // Or override per call
-const [{ rows }] = db.execute('SELECT id, name FROM users', { rowMode: 'array' });
+const [{ rows }] = await db.execute('SELECT id, name FROM users', { rowMode: 'array' });
 // rows: [[1, 'Alice'], [2, 'Bob']]
 ```
 
@@ -156,7 +156,7 @@ DEALLOCATE name
 
 ## API
 
-### `new ConnectSQL(options?)`
+### `new Session(options?)`
 
 Creates a new database instance. Each instance is fully isolated.
 
@@ -166,7 +166,7 @@ Creates a new database instance. Each instance is fully isolated.
 
 ### `db.execute(sql, options?)`
 
-Executes one or more SQL statements separated by `;`. Returns an array of results.
+Executes one or more SQL statements separated by `;`. Returns a promise that resolves to an array of results.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -178,10 +178,10 @@ Creates a prepared statement with `$1`, `$2`, ... parameter placeholders. Return
 
 ```javascript
 const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
-const [{ rows }] = stmt.execute([42]);
+const [{ rows }] = await stmt.execute([42]);
 
 // With options
-const [{ rows }] = stmt.execute([42], { rowMode: 'array' });
+const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
 ### Result Types
@@ -234,10 +234,10 @@ Every result has a `command` field for easy discrimination:
 Full type definitions are included. Use discriminated unions to narrow result types:
 
 ```typescript
-import { ConnectSQL, ExecuteResult } from '@petradb/engine';
+import { Session, ExecuteResult } from '@petradb/engine';
 
-const db = new ConnectSQL();
-const results: ExecuteResult[] = db.execute('SELECT * FROM users');
+const db = new Session();
+const results: ExecuteResult[] = await db.execute('SELECT * FROM users');
 
 for (const result of results) {
   if (result.command === 'select') {
@@ -249,11 +249,11 @@ for (const result of results) {
 ## Example
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
-db.execute(`
+await db.execute(`
   CREATE TYPE status AS ENUM ('active', 'inactive');
   CREATE TABLE products (
     id SERIAL,
@@ -266,14 +266,14 @@ db.execute(`
   )
 `);
 
-db.execute(`
+await db.execute(`
   INSERT INTO products (name, price, tags, created_at) VALUES
     ('Laptop', 999.99, '["electronics", "computers"]', '2025-01-15 10:30:00');
   INSERT INTO products (name, price, tags, created_at) VALUES
     ('Coffee', 4.50, '["food", "organic"]', '2025-01-16 08:00:00')
 `);
 
-const [{ rows }] = db.execute(`
+const [{ rows }] = await db.execute(`
   SELECT name, price FROM products
   WHERE price > 10
   ORDER BY price DESC

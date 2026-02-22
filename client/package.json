@@ -1,31 +1,32 @@
 {
-  "name": "@petradb/engine",
-  "version": "2.0.0",
-  "description": "Lightweight embeddable SQL database engine for JavaScript and TypeScript",
+  "name": "@petradb/client",
+  "version": "1.0.0",
+  "description": "Network client for petradb-server with the same Session API as @petradb/engine",
   "type": "module",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "default": "./main.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
-  "main": "main.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "main.js",
-    "index.d.ts",
+    "dist",
     "README.md"
   ],
+  "scripts": {
+    "build": "tsc"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/edadma/petradb.git"
   },
   "keywords": [
     "SQL",
-    "in-memory",
     "database",
-    "javascript",
-    "typescript"
+    "client",
+    "petradb"
   ],
   "author": "Edward A. Maxedon, Sr.",
   "license": "ISC",

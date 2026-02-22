@@ -22,12 +22,12 @@ libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.0"
 ### JavaScript / TypeScript
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
 // Create a table
-db.execute(`
+await db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
@@ -37,13 +37,13 @@ db.execute(`
 `);
 
 // Insert data
-db.execute(`
+await db.execute(`
   INSERT INTO users (name, email, created_at)
   VALUES ('John Doe', 'john@example.com', CURRENT_TIMESTAMP)
 `);
 
 // Query data — rows are objects by default
-const [{ rows, fields }] = db.execute('SELECT * FROM users');
+const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 console.log(fields); // [{ name: 'id', dataType: 'serial' }, ...]
 console.log(rows);   // [{ id: 1, name: 'John Doe', ... }]
 ```
