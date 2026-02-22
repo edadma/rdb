@@ -109,6 +109,28 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
     nativeConfig ~= { _.withBaseName("petradb") },
   )
 
+// ── server: HTTP/JSON API ────────────────────────────────────────────
+
+lazy val server = crossProject(JVMPlatform)
+  .in(file("server"))
+  .dependsOn(engine)
+  .settings(
+    name    := "petradb-server",
+    version := "1.0.0",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies ++= Seq(
+      "dev.zio"       %%% "zio-json"    % "0.9.0",
+      "org.scalatest" %%% "scalatest"   % "3.2.19" % Test,
+    ),
+    publish / skip      := true,
+    publishLocal / skip := true,
+  )
+  .jvmSettings(
+    libraryDependencies ++= Seq(
+      "io.github.edadma" %% "microserve" % "0.2.0",
+    ),
+  )
+
 // ── root aggregate ──────────────────────────────────────────────────
 
 lazy val root = project
@@ -116,6 +138,7 @@ lazy val root = project
   .aggregate(
     engine.js, engine.jvm, engine.native,
     cli.jvm, cli.native,
+    server.jvm,
   )
   .settings(
     name                := "petradb",
