@@ -81,6 +81,8 @@ abstract class DB:
 
   def connect(): Session = new Session(this)
 
+  def close(): Unit = ()
+
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
   // ── Foreign Key Helpers ──────────────────────────────────────────

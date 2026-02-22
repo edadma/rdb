@@ -120,6 +120,7 @@ lazy val server = crossProject(JVMPlatform)
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "dev.zio"       %%% "zio-json"    % "0.9.0",
+      "com.lihaoyi"   %%% "mainargs"    % "0.7.8",
       "org.scalatest" %%% "scalatest"   % "3.2.19" % Test,
     ),
     publish / skip      := true,

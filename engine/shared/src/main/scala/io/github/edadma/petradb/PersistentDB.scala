@@ -171,7 +171,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
-  def close(): Unit = store.close()
+  override def close(): Unit = store.close()
 
   // Restore from existing catalog on open
   private def restoreFromCatalog(): Unit =

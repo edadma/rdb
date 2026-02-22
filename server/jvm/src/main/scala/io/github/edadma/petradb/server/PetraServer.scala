@@ -1,13 +1,15 @@
 package io.github.edadma.petradb.server
 
+import io.github.edadma.petradb.DB
 import io.github.edadma.microserve.*
 
 class PetraServer(
   val loop: EventLoop,
+  db: DB,
   host: String = "127.0.0.1",
   port: Int = 5432,
 ):
-  private val sessionMgr = new SessionManager
+  private val sessionMgr = new SessionManager(db)
   private var server: Server = null
 
   def start(onListening: () => Unit = () => ()): Unit =
@@ -39,4 +41,5 @@ class PetraServer(
 
   def stop(onDrain: () => Unit = () => ()): Unit =
     sessionMgr.closeAll()
+    db.close()
     if server != null then server.close(onDrain)

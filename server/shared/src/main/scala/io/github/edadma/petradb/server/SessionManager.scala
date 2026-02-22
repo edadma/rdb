@@ -1,12 +1,11 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{MemoryDB, Session, Platform}
+import io.github.edadma.petradb.{DB, Session, Platform}
 
 import scala.collection.mutable
 
-class SessionManager:
+class SessionManager(val db: DB):
   private val sessions = mutable.Map[String, Session]()
-  private val db = new MemoryDB
 
   def getSession(id: String): Session =
     sessions.getOrElseUpdate(id, db.connect())

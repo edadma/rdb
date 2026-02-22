@@ -2,6 +2,7 @@ package io.github.edadma.petradb.server
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import io.github.edadma.petradb.MemoryDB
 import io.github.edadma.microserve.EventLoop
 import zio.json.*
 import zio.json.ast.Json
@@ -14,7 +15,8 @@ class ServerTests extends AnyFreeSpec with Matchers:
 
   private def withServer(test: Int => Unit): Unit =
     val loop = new EventLoop
-    val server = new PetraServer(loop, port = 0)
+    val db = new MemoryDB
+    val server = new PetraServer(loop, db, port = 0)
     server.start()
     val port = server.actualPort
     val thread = new Thread(() => loop.run())
