@@ -1,8 +1,8 @@
-# rdb vs PostgreSQL — Missing Features
+# PetraDB vs PostgreSQL — Missing Features
 
 ## Data Types
 
-| Category | rdb has | Missing |
+| Category | PetraDB has | Missing |
 |---|---|---|
 | Integer | smallint, integer, bigint | — |
 | Serial | smallserial, serial, bigserial | — |
@@ -16,11 +16,11 @@
 | JSON | json, jsonb (stored as parsed/binary internally) | — |
 | Array | type[] | — |
 | Enum | CREATE TYPE ... AS ENUM | — |
-| Not in rdb | — | bit/varbit, inet/cidr/macaddr, point/line/box/circle/polygon/path, tsquery/tsvector, xml, range types (int4range, daterange, ...), composite types, domains |
+| Not in PetraDB | — | bit/varbit, inet/cidr/macaddr, point/line/box/circle/polygon/path, tsquery/tsvector, xml, range types (int4range, daterange, ...), composite types, domains |
 
 ## Operators
 
-| Category | rdb has | Missing |
+| Category | PetraDB has | Missing |
 |---|---|---|
 | Arithmetic | `+ - * / %` | `^` (power), `|/` (sqrt), `||/` (cbrt) |
 | Comparison | `= != <> < > <= >=` | — |
@@ -131,7 +131,7 @@ PostgreSQL provides:
 
 ## DDL & SQL Features
 
-| Feature | rdb | Missing |
+| Feature | PetraDB | Missing |
 |---|---|---|
 | CREATE/DROP TABLE | yes (IF NOT EXISTS/IF EXISTS, CASCADE) | — |
 | ALTER TABLE | add/drop/alter column, add/drop constraint, rename | — |

@@ -1,8 +1,8 @@
-# RDB Security Roadmap
+# PetraDB Security Roadmap
 
-This document outlines the plan for adding PostgreSQL-compatible database security to rdb. The goal is to build a solid authorization foundation so that, combined with indexes and full ACID compliance, rdb can be used in production-grade applications.
+This document outlines the plan for adding PostgreSQL-compatible database security to PetraDB. The goal is to build a solid authorization foundation so that, combined with indexes and full ACID compliance, PetraDB can be used in production-grade applications.
 
-The design follows PostgreSQL's security model closely, adapted to rdb's architecture. Features are organized into phases, each building on the previous.
+The design follows PostgreSQL's security model closely, adapted to PetraDB's architecture. Features are organized into phases, each building on the previous.
 
 ---
 
@@ -332,7 +332,7 @@ CREATE POLICY tenant_isolation ON orders
 
 **Objective:** Verify the identity of connecting clients.
 
-This phase only becomes relevant when rdb has a network server (TCP listener). Until then, the application embedding rdb sets `currentUser` directly.
+This phase only becomes relevant when PetraDB has a network server (TCP listener). Until then, the application embedding PetraDB sets `currentUser` directly.
 
 ### Password Storage
 

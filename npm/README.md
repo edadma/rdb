@@ -3,13 +3,13 @@ A lightweight, in-memory SQL database for JavaScript and TypeScript. No native d
 ## Installation
 
 ```bash
-npm install @edadma/rdb
+npm install @edadma/petradb
 ```
 
 ## Quick Start
 
 ```javascript
-import { ConnectSQL } from '@edadma/rdb';
+import { ConnectSQL } from '@edadma/petradb';
 
 const db = new ConnectSQL();
 
@@ -45,7 +45,7 @@ const [{ rows }] = db.execute('SELECT id, name FROM users', { rowMode: 'array' }
 
 ## SQL Compatibility
 
-RDB follows PostgreSQL conventions:
+PetraDB follows PostgreSQL conventions:
 
 - **Case-insensitive keywords** — `SELECT`, `select`, and `Select` are equivalent
 - **Unquoted identifier folding** — identifiers fold to lowercase (`CREATE TABLE Users` → table name `users`)
@@ -234,7 +234,7 @@ Every result has a `command` field for easy discrimination:
 Full type definitions are included. Use discriminated unions to narrow result types:
 
 ```typescript
-import { ConnectSQL, ExecuteResult } from '@edadma/rdb';
+import { ConnectSQL, ExecuteResult } from '@edadma/petradb';
 
 const db = new ConnectSQL();
 const results: ExecuteResult[] = db.execute('SELECT * FROM users');
@@ -249,7 +249,7 @@ for (const result of results) {
 ## Example
 
 ```javascript
-import { ConnectSQL } from '@edadma/rdb';
+import { ConnectSQL } from '@edadma/petradb';
 
 const db = new ConnectSQL();
 

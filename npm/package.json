@@ -1,5 +1,5 @@
 {
-  "name": "@edadma/rdb",
+  "name": "@edadma/petradb",
   "version": "0.1.7",
   "description": "Lightweight embeddable SQL database engine for JavaScript and TypeScript",
   "type": "module",
@@ -18,7 +18,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/edadma/rdb.git"
+    "url": "git+https://github.com/edadma/petradb.git"
   },
   "keywords": [
     "SQL",
@@ -30,7 +30,7 @@
   "author": "Edward A. Maxedon, Sr.",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/edadma/rdb/issues"
+    "url": "https://github.com/edadma/petradb/issues"
   },
-  "homepage": "https://github.com/edadma/rdb#readme"
+  "homepage": "https://github.com/edadma/petradb#readme"
 }

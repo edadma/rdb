@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { ConnectSQL } from '@edadma/rdb'
+import { ConnectSQL } from '@edadma/petradb'
 import { TextTable } from '@edadma/table'
 import { Navbar, Button, Space, Table, Alert, Kbd, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
@@ -144,7 +144,7 @@ function App() {
     <Flex direction="column" className="h-screen" data-theme="dark">
       <Navbar
         color="neutral"
-        start={<span className="font-bold text-lg">rdb playground</span>}
+        start={<span className="font-bold text-lg">PetraDB playground</span>}
         end={
           <Space>
             <Button variant="outline" size="sm" onClick={resetDb}>Reset DB</Button>
@@ -273,7 +273,7 @@ function App() {
       </div>
 
       <Flex justify="between" align="center" className="px-3 py-1 bg-base-200 text-xs text-base-content/40 shrink-0">
-        <span>@edadma/rdb — in-memory SQL database</span>
+        <span>@edadma/petradb — in-memory SQL database</span>
         <span>All queries run locally in your browser</span>
       </Flex>
     </Flex>

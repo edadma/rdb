@@ -1,17 +1,17 @@
-# RDB - Relational Database
+# PetraDB
 
-![Maven Central](https://img.shields.io/maven-central/v/io.github.edadma/rdb-engine_sjs1_3)
-[![Last Commit](https://img.shields.io/github/last-commit/edadma/rdb)](https://github.com/edadma/rdb/commits)
-![GitHub](https://img.shields.io/github/license/edadma/rdb)
+![Maven Central](https://img.shields.io/maven-central/v/io.github.edadma/petradb-engine_sjs1_3)
+[![Last Commit](https://img.shields.io/github/last-commit/edadma/petradb)](https://github.com/edadma/petradb/commits)
+![GitHub](https://img.shields.io/github/license/edadma/petradb)
 ![Scala Version](https://img.shields.io/badge/Scala-3.8.1-blue.svg)
 ![ScalaJS Version](https://img.shields.io/badge/Scala.js-1.20.2-blue.svg)
 ![Scala Native Version](https://img.shields.io/badge/Scala_Native-0.5.10-blue.svg)
 
-A cross-platform relational database implementation written in Scala that compiles to JVM, JavaScript, and Native platforms. RDB provides a full SQL interface with support for tables, queries, joins, aggregations, and more — with both in-memory and persistent storage backends.
+A cross-platform relational database implementation written in Scala that compiles to JVM, JavaScript, and Native platforms. PetraDB provides a full SQL interface with support for tables, queries, joins, aggregations, and more — with both in-memory and persistent storage backends.
 
 ## Overview
 
-RDB is designed to provide a lightweight, embeddable SQL database for applications that need relational data operations without the overhead of a full database server. It's particularly useful for:
+PetraDB is designed to provide a lightweight, embeddable SQL database for applications that need relational data operations without the overhead of a full database server. It's particularly useful for:
 
 - **Testing and development** - Quick setup without external database dependencies
 - **Client-side applications** - Running SQL queries in web browsers or Node.js
@@ -24,13 +24,13 @@ RDB is designed to provide a lightweight, embeddable SQL database for applicatio
 ### JavaScript/Node.js
 
 ```bash
-npm install @edadma/rdb
+npm install @edadma/petradb
 ```
 
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.7"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "0.1.7"
 ```
 
 ## Basic Usage
@@ -38,7 +38,7 @@ libraryDependencies += "io.github.edadma" %%% "rdb-engine" % "0.1.7"
 ### JavaScript/TypeScript
 
 ```javascript
-import { ConnectSQL } from '@edadma/rdb';
+import { ConnectSQL } from '@edadma/petradb';
 
 const db = new ConnectSQL();
 
@@ -71,7 +71,7 @@ const arrayDb = new ConnectSQL({ rowMode: 'array' });
 ### Scala (In-Memory)
 
 ```scala
-import io.github.edadma.rdb.*
+import io.github.edadma.petradb.*
 
 given Session = new MemoryDB().connect()
 
@@ -100,7 +100,7 @@ results.foreach(println)
 ### Scala (Persistent)
 
 ```scala
-import io.github.edadma.rdb.*
+import io.github.edadma.petradb.*
 
 // Create a new persistent database
 val db = PersistentDB.create("mydata.db", 4096)
@@ -162,7 +162,7 @@ Persistent databases use crash-safe atomic writes via [stow](https://github.com/
 
 ### SQL Compatibility
 
-RDB follows PostgreSQL conventions:
+PetraDB follows PostgreSQL conventions:
 
 - **Case-insensitive keywords** — `SELECT`, `select`, and `Select` are equivalent
 - **Unquoted identifier folding** — unquoted identifiers fold to lowercase (`CREATE TABLE Users` → table name `users`)
@@ -581,8 +581,8 @@ Contributions are welcome! Please follow these guidelines:
 ### Development Setup
 
 ```bash
-git clone https://github.com/edadma/rdb.git
-cd rdb
+git clone https://github.com/edadma/petradb.git
+cd petradb
 sbt compile
 sbt test
 ```

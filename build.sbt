@@ -19,8 +19,8 @@ ThisBuild / sonatypeProfileName := "io.github.edadma"
 
 ThisBuild / scmInfo := Some(
   ScmInfo(
-    url("https://github.com/edadma/rdb"),
-    "scm:git@github.com:edadma/rdb.git",
+    url("https://github.com/edadma/petradb"),
+    "scm:git@github.com:edadma/petradb.git",
   ),
 )
 ThisBuild / developers := List(
@@ -32,7 +32,7 @@ ThisBuild / developers := List(
   ),
 )
 
-ThisBuild / homepage    := Some(url("https://github.com/edadma/rdb"))
+ThisBuild / homepage    := Some(url("https://github.com/edadma/petradb"))
 ThisBuild / description := "Project description here"
 
 lazy val commonScalacOptions = Seq(
@@ -50,7 +50,7 @@ lazy val commonScalacOptions = Seq(
 lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
   .settings(
-    name    := "rdb-engine",
+    name    := "petradb-engine",
     version := "0.1.7",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
@@ -94,7 +94,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
   .in(file("cli"))
   .dependsOn(engine)
   .settings(
-    name    := "rdb-cli",
+    name    := "petradb-cli",
     version := "0.0.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
@@ -106,7 +106,7 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
   )
   .nativeSettings(
     libraryDependencies += "io.github.edadma" %%% "readline" % "0.0.2",
-    nativeConfig ~= { _.withBaseName("rdb") },
+    nativeConfig ~= { _.withBaseName("petradb") },
   )
 
 // ── root aggregate ──────────────────────────────────────────────────
@@ -118,7 +118,7 @@ lazy val root = project
     cli.jvm, cli.native,
   )
   .settings(
-    name                := "rdb",
+    name                := "petradb",
     publish / skip      := true,
     publishLocal / skip := true,
   )
