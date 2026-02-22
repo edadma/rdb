@@ -1,0 +1,32 @@
+---
+title: PetraDB
+description: A cross-platform embeddable SQL database for JVM, JavaScript, and Native.
+template: splash
+hero:
+  tagline: A lightweight, embeddable SQL database written in Scala — runs on JVM, JavaScript, and Native platforms.
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/edadma/petradb
+      variant: minimal
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+	<Card title="Full SQL support" icon="pencil">
+		PostgreSQL-compatible syntax with DDL, DML, joins, aggregations, subqueries, transactions, and more.
+	</Card>
+	<Card title="Cross-platform" icon="rocket">
+		Compiles to JVM, JavaScript (Node.js & browsers), and Native — one codebase, every runtime.
+	</Card>
+	<Card title="Zero dependencies" icon="approve-check">
+		No external services or native modules required. Import and query.
+	</Card>
+	<Card title="Persistent storage" icon="document">
+		Optional crash-safe durable storage with copy-on-write pages and double-buffered headers.
+	</Card>
+</CardGrid>
