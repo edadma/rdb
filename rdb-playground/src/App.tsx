@@ -74,8 +74,8 @@ function App() {
   const resultLabel = useCallback((r: any): string => {
     switch (r.command) {
       case 'insert': return `INSERT — ${JSON.stringify(r.result)}`
-      case 'update': return `UPDATE — ${r.rows} row(s)`
-      case 'delete': return `DELETE — ${r.rows} row(s)`
+      case 'update': return `UPDATE — ${r.rowCount} row(s)`
+      case 'delete': return `DELETE — ${r.rowCount} row(s)`
       case 'create table': return `CREATE TABLE ${r.table}`
       case 'drop table': return `DROP TABLE ${r.table}`
       case 'truncate table': return `TRUNCATE TABLE ${r.table}`

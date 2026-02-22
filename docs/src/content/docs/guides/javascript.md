@@ -90,10 +90,10 @@ Every result has a `command` field for easy discrimination:
 { command: 'alter table' }
 
 // DML
-{ command: 'insert', result: Record<string, any> }
+{ command: 'insert', result: Record<string, any>, rows: T[], fields: FieldInfo[] }
 { command: 'select', rows: T[], fields: { name: string, dataType: string }[] }
-{ command: 'update', rows: number }
-{ command: 'delete', rows: number }
+{ command: 'update', rowCount: number }
+{ command: 'delete', rowCount: number }
 
 // Transactions
 { command: 'begin' }

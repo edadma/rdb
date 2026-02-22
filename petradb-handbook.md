@@ -481,29 +481,29 @@ class Session {
 
 // INSERT result
 {
-  command: "insert", 
-  result: { id: 1, name: "John" }  // Auto-generated and RETURNING values
+  command: "insert",
+  result: { id: 1, name: "John" },  // Auto-generated and default values
+  rows: [{ id: 1, name: "John", email: "john@example.com" }],
+  fields: [{ name: "id", dataType: "serial" }, ...]
 }
 
-// SELECT result  
+// SELECT result
 {
   command: "select",
-  result: [
-    [1, "John", "john@example.com"],     // Row 1
-    [2, "Jane", "jane@example.com"]      // Row 2
-  ]
+  rows: [{ id: 1, name: "John", email: "john@example.com" }, ...],
+  fields: [{ name: "id", dataType: "serial" }, ...]
 }
 
 // UPDATE result
 {
   command: "update",
-  rows: 3  // Number of affected rows
+  rowCount: 3  // Number of affected rows
 }
 
 // DELETE result
 {
   command: "delete",
-  rows: 1  // Number of deleted rows
+  rowCount: 1  // Number of deleted rows
 }
 
 // DROP TABLE result

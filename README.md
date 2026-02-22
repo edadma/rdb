@@ -510,8 +510,8 @@ class Session {
 // ALTER TABLE
 { command: "alter table" }
 
-// INSERT — result contains generated/default column values
-{ command: "insert", result: { id: 1, uuid_col: "..." } }
+// INSERT — result contains generated/default column values; rows/fields mirror the inserted row
+{ command: "insert", result: { id: 1 }, rows: [{ id: 1, name: "Alice" }], fields: [{ name: "id", dataType: "serial" }, ...] }
 
 // SELECT — object mode (default)
 { command: "select", rows: [{ id: 1, name: "Alice" }, ...], fields: [{ name: "id", dataType: "serial" }, ...] }
@@ -520,8 +520,8 @@ class Session {
 { command: "select", rows: [[1, "Alice"], ...], fields: [{ name: "id", dataType: "serial" }, ...] }
 
 // UPDATE / DELETE
-{ command: "update", rows: 3 }
-{ command: "delete", rows: 1 }
+{ command: "update", rowCount: 3 }
+{ command: "delete", rowCount: 1 }
 ```
 
 ### Scala API

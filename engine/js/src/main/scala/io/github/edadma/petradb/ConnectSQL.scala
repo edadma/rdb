@@ -79,15 +79,18 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
     result match
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
-      case InsertResult(obj, _) =>
+      case InsertResult(obj, table) =>
         val res = obj.view.mapValues(toJS).toMap.toJSDictionary
-        js.Dynamic.literal(command = "insert", result = res)
+        val queryResult = buildQueryResult(table, rowMode)
+        val rows = queryResult.asInstanceOf[js.Dynamic].rows
+        val fields = queryResult.asInstanceOf[js.Dynamic].fields
+        js.Dynamic.literal(command = "insert", result = res, rows = rows, fields = fields)
       case QueryResult(table) =>
         buildQueryResult(table, rowMode)
       case UpdateResult(rows) =>
-        js.Dynamic.literal(command = "update", rows = rows)
+        js.Dynamic.literal(command = "update", rowCount = rows)
       case DeleteResult(rows) =>
-        js.Dynamic.literal(command = "delete", rows = rows)
+        js.Dynamic.literal(command = "delete", rowCount = rows)
       case DropTableResult(table) =>
         js.Dynamic.literal(command = "drop table", table = table)
       case CreateTypeResult(typ) =>

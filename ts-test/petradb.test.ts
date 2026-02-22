@@ -67,15 +67,15 @@ describe("Session", () => {
     it("UPDATE returns correct result", async () => {
       const [res] = await db.execute("UPDATE t1 SET name = 'Bob' WHERE name = 'Alice'");
       assert.equal(res.command, "update");
-      assert.equal(typeof res.rows, "number");
-      assert.equal(res.rows, 1);
+      assert.equal(typeof res.rowCount, "number");
+      assert.equal(res.rowCount, 1);
     });
 
     it("DELETE returns correct result", async () => {
       await db.execute("INSERT INTO t1 (name) VALUES ('ToDelete')");
       const [res] = await db.execute("DELETE FROM t1 WHERE name = 'ToDelete'");
       assert.equal(res.command, "delete");
-      assert.equal(typeof res.rows, "number");
+      assert.equal(typeof res.rowCount, "number");
     });
 
     it("TRUNCATE returns correct result", async () => {
@@ -304,16 +304,16 @@ describe("Session", () => {
       assert.equal(res.rows.length, 0);
     });
 
-    it("UPDATE affecting zero rows returns rows = 0", async () => {
+    it("UPDATE affecting zero rows returns rowCount = 0", async () => {
       const [res] = await db.execute("UPDATE empty_t SET name = 'x' WHERE id = 999");
       assert.equal(res.command, "update");
-      assert.equal(res.rows, 0);
+      assert.equal(res.rowCount, 0);
     });
 
-    it("DELETE affecting zero rows returns rows = 0", async () => {
+    it("DELETE affecting zero rows returns rowCount = 0", async () => {
       const [res] = await db.execute("DELETE FROM empty_t WHERE id = 999");
       assert.equal(res.command, "delete");
-      assert.equal(res.rows, 0);
+      assert.equal(res.rowCount, 0);
     });
   });
 
@@ -336,6 +336,16 @@ describe("Session", () => {
       const [res] = await db.execute("INSERT INTO uuid_t (name) VALUES ('test')");
       assert.equal(typeof res.result.id, "string");
       assert.match(res.result.id, /^[0-9a-f-]{36}$/);
+    });
+
+    it("INSERT result includes rows and fields", async () => {
+      await db.execute("CREATE TABLE ins_t (id SERIAL, name TEXT)");
+      const [res] = await db.execute("INSERT INTO ins_t (name) VALUES ('test')");
+      assert.equal(res.command, "insert");
+      assert.ok(res.result.id);
+      assert.ok(Array.isArray(res.rows));
+      assert.ok(Array.isArray(res.fields));
+      assert.equal(res.rows.length, 1);
     });
   });
 

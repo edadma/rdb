@@ -19,6 +19,7 @@ case class ResultJson(
   table: Option[String] = None,
   name: Option[String] = None,
   typ: Option[String] = None,
+  index: Option[String] = None,
 )
 
 object ResultJson:
@@ -33,7 +34,8 @@ object ResultJson:
     r.rowCount.foreach(n => buf += "rowCount" -> Json.Num(new java.math.BigDecimal(n)))
     r.table.foreach(t => buf += "table" -> Json.Str(t))
     r.name.foreach(n => buf += "name" -> Json.Str(n))
-    r.typ.foreach(t => buf += "typ" -> Json.Str(t))
+    r.typ.foreach(t => buf += "type" -> Json.Str(t))
+    r.index.foreach(i => buf += "index" -> Json.Str(i))
     Json.Obj(buf.toSeq*)
   }
 
