@@ -264,10 +264,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val selectExpression: P[Expr] =
-    (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression | star) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
-      case e ~ None    => e
-      case e ~ Some(a) => AliasExpr(e, a)
-    }
+    star |
+      (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+        case e ~ None    => e
+        case e ~ Some(a) => AliasExpr(e, a)
+      }
 
   lazy val selectExpressions: P[Seq[Expr]] = rep1sep(selectExpression, ",")
 
