@@ -6,8 +6,8 @@ import scala.scalajs.js
 import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
-@JSExportTopLevel("ConnectSQL")
-class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
+@JSExportTopLevel("Session")
+class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   private val db = new MemoryDB()
   given session: Session = db.connect()
@@ -79,15 +79,18 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
     result match
       case CreateTableResult(table) =>
         js.Dynamic.literal(command = "create table", table = table)
-      case InsertResult(obj, _) =>
+      case InsertResult(obj, table) =>
         val res = obj.view.mapValues(toJS).toMap.toJSDictionary
-        js.Dynamic.literal(command = "insert", result = res)
+        val queryResult = buildQueryResult(table, rowMode)
+        val rows = queryResult.asInstanceOf[js.Dynamic].rows
+        val fields = queryResult.asInstanceOf[js.Dynamic].fields
+        js.Dynamic.literal(command = "insert", result = res, rows = rows, fields = fields)
       case QueryResult(table) =>
         buildQueryResult(table, rowMode)
       case UpdateResult(rows) =>
-        js.Dynamic.literal(command = "update", rows = rows)
+        js.Dynamic.literal(command = "update", rowCount = rows)
       case DeleteResult(rows) =>
-        js.Dynamic.literal(command = "delete", rows = rows)
+        js.Dynamic.literal(command = "delete", rowCount = rows)
       case DropTableResult(table) =>
         js.Dynamic.literal(command = "drop table", table = table)
       case CreateTypeResult(typ) =>
@@ -114,22 +117,22 @@ class ConnectSQL(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "rollback")
 
   @JSExport
-  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+  def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
     val rowMode = options.toOption
       .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
       .getOrElse(defaultRowMode)
 
-    (executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray
+    js.Promise.resolve((executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray)
 
   @JSExport
   def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))
 
   class PreparedStatementJS(ps: PreparedStatement):
     @JSExport
-    def execute(params: js.Array[js.Any] = js.Array(), options: js.UndefOr[js.Dynamic] = js.undefined): js.Array[js.Any] =
+    def execute(params: js.Array[js.Any] = js.Array(), options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
       val rowMode = options.toOption
         .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
         .getOrElse(defaultRowMode)
       val paramValues = params.map(fromJS).toIndexedSeq
       val results = ps.execute(paramValues*)(using session)
-      (results map (r => resultToJS(r, rowMode))).toJSArray
+      js.Promise.resolve((results map (r => resultToJS(r, rowMode))).toJSArray)

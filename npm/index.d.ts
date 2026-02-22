@@ -1,4 +1,4 @@
-export interface ConnectSQLOptions {
+export interface SessionOptions {
     rowMode?: 'object' | 'array';
 }
 
@@ -75,6 +75,8 @@ export interface RollbackResult {
 export interface InsertResult {
     command: 'insert';
     result: Record<string, any>;
+    rows: Record<string, any>[];
+    fields: FieldInfo[];
 }
 
 export interface SelectResult<T = Record<string, any>> {
@@ -85,12 +87,12 @@ export interface SelectResult<T = Record<string, any>> {
 
 export interface UpdateResult {
     command: 'update';
-    rows: number;
+    rowCount: number;
 }
 
 export interface DeleteResult {
     command: 'delete';
-    rows: number;
+    rowCount: number;
 }
 
 export type ExecuteResult =
@@ -112,7 +114,12 @@ export type ExecuteResult =
     | CommitResult
     | RollbackResult;
 
-export class ConnectSQL {
-    constructor(options?: ConnectSQLOptions);
-    execute(sql: string, options?: ExecuteOptions): ExecuteResult[];
+export interface PreparedStatement {
+    execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>;
+}
+
+export class Session {
+    constructor(options?: SessionOptions);
+    execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>;
+    prepare(sql: string): PreparedStatement;
 }

@@ -30,7 +30,7 @@ npm install @petradb/engine
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.1"
 ```
 
 ## Basic Usage
@@ -38,12 +38,12 @@ libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.0"
 ### JavaScript/TypeScript
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
 // Create a table
-db.execute(`
+await db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
@@ -53,18 +53,18 @@ db.execute(`
 `);
 
 // Insert data
-db.execute(`
+await db.execute(`
   INSERT INTO users (name, email, created_at)
   VALUES ('John Doe', 'john@example.com', CURRENT_TIMESTAMP)
 `);
 
 // Query data — rows are objects by default
-const [{ rows, fields }] = db.execute('SELECT * FROM users');
+const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 console.log(fields); // [{ name: 'id', dataType: 'serial' }, ...]
 console.log(rows);   // [{ id: 1, name: 'John Doe', ... }]
 
 // Or use array mode
-const arrayDb = new ConnectSQL({ rowMode: 'array' });
+const arrayDb = new Session({ rowMode: 'array' });
 // Can also override per-call: db.execute(sql, { rowMode: 'array' })
 ```
 
@@ -478,7 +478,7 @@ EXECUTE add_user('Alice', 'alice@example.com');
 ### JavaScript/TypeScript API
 
 ```typescript
-interface ConnectSQLOptions {
+interface SessionOptions {
   rowMode?: 'object' | 'array';  // default: 'object'
 }
 
@@ -486,9 +486,10 @@ interface ExecuteOptions {
   rowMode?: 'object' | 'array';  // overrides constructor default
 }
 
-class ConnectSQL {
-  constructor(options?: ConnectSQLOptions)
-  execute(sql: string, options?: ExecuteOptions): ExecuteResult[]
+class Session {
+  constructor(options?: SessionOptions)
+  execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
+  prepare(sql: string): PreparedStatement
 }
 ```
 
@@ -509,8 +510,8 @@ class ConnectSQL {
 // ALTER TABLE
 { command: "alter table" }
 
-// INSERT — result contains generated/default column values
-{ command: "insert", result: { id: 1, uuid_col: "..." } }
+// INSERT — result contains generated/default column values; rows/fields mirror the inserted row
+{ command: "insert", result: { id: 1 }, rows: [{ id: 1, name: "Alice" }], fields: [{ name: "id", dataType: "serial" }, ...] }
 
 // SELECT — object mode (default)
 { command: "select", rows: [{ id: 1, name: "Alice" }, ...], fields: [{ name: "id", dataType: "serial" }, ...] }
@@ -519,8 +520,8 @@ class ConnectSQL {
 { command: "select", rows: [[1, "Alice"], ...], fields: [{ name: "id", dataType: "serial" }, ...] }
 
 // UPDATE / DELETE
-{ command: "update", rows: 3 }
-{ command: "delete", rows: 1 }
+{ command: "update", rowCount: 3 }
+{ command: "delete", rowCount: 1 }
 ```
 
 ### Scala API

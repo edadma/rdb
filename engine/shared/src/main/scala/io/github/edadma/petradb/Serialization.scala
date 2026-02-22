@@ -4,7 +4,7 @@ import io.github.edadma.dal.{BigDecType, DoubleType as DDoubleType, IntType as D
 import io.github.edadma.stow.{PageId, NoPage, WriteBatch, PageStore}
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, OffsetTime, ZoneOffset}
 import scala.collection.mutable.ArrayBuffer
 
 // Inline threshold: TEXT/BYTEA <= this many bytes stored inline; larger uses page chains
@@ -30,6 +30,7 @@ private val TagUUID: Byte        = 0x0f
 private val TagArray: Byte       = 0x10
 private val TagObject: Byte      = 0x11
 private val TagEnum: Byte        = 0x12
+private val TagTimeTZ: Byte      = 0x13
 
 // Sub-tags for inline vs chain
 private val SubTagInline: Byte = 0x00
@@ -57,6 +58,7 @@ private val TTagUUID: Byte          = 0x12
 private val TTagArray: Byte         = 0x13
 private val TTagJSON: Byte          = 0x14
 private val TTagEnum: Byte          = 0x15
+private val TTagTimeTZ: Byte        = 0x16
 
 // ---- Page Chains for large values ----
 
@@ -192,6 +194,11 @@ def serializeValue(v: Value, out: DataOutputStream, batch: WriteBatch, pageSize:
       out.writeLong(t.toLocalTime.toNanoOfDay)
       out.writeInt(t.getOffset.getTotalSeconds)
 
+    case TimeTZValue(t) =>
+      out.writeByte(TagTimeTZ)
+      out.writeLong(t.toLocalTime.toNanoOfDay)
+      out.writeInt(t.getOffset.getTotalSeconds)
+
     case IntervalValue(d) =>
       out.writeByte(TagInterval)
       out.writeLong(d.getSeconds)
@@ -300,6 +307,11 @@ def deserializeValue(in: DataInputStream, store: PageStore, enumTypes: Map[Strin
         LocalTime.ofNanoOfDay(nanoOfDay),
         ZoneOffset.ofTotalSeconds(offsetSec),
       )), None)
+
+    case TagTimeTZ =>
+      val nanoOfDay = in.readLong()
+      val offsetSec = in.readInt()
+      (TimeTZValue(OffsetTime.of(LocalTime.ofNanoOfDay(nanoOfDay), ZoneOffset.ofTotalSeconds(offsetSec))), None)
 
     case TagInterval =>
       val seconds = in.readLong()
@@ -410,6 +422,7 @@ def serializeType(typ: Type, out: DataOutputStream): Unit =
     case BooleanType         => out.writeByte(TTagBoolean)
     case DateType            => out.writeByte(TTagDate)
     case TimeType            => out.writeByte(TTagTime)
+    case TimeTZType          => out.writeByte(TTagTimeTZ)
     case TimestampType       => out.writeByte(TTagTimestamp)
     case TimestampTZType     => out.writeByte(TTagTimestampTZ)
     case IntervalType        => out.writeByte(TTagInterval)
@@ -447,6 +460,7 @@ def deserializeType(in: DataInputStream, enumTypes: Map[String, EnumType]): Type
     case TTagBoolean     => BooleanType
     case TTagDate        => DateType
     case TTagTime        => TimeType
+    case TTagTimeTZ      => TimeTZType
     case TTagTimestamp   => TimestampType
     case TTagTimestampTZ => TimestampTZType
     case TTagInterval    => IntervalType

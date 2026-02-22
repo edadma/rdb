@@ -11,20 +11,20 @@ npm install @petradb/engine
 
 ## Creating a Database
 
-Each `ConnectSQL` instance is a fully isolated in-memory database.
+Each `Session` instance is a fully isolated in-memory database.
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 ```
 
 ## Executing SQL
 
-Use `db.execute(sql)` to run one or more semicolon-separated SQL statements. It returns an array of result objects.
+Use `db.execute(sql)` to run one or more semicolon-separated SQL statements. It returns a promise that resolves to an array of result objects.
 
 ```javascript
-db.execute(`
+await db.execute(`
   CREATE TABLE users (
     id SERIAL,
     name TEXT NOT NULL,
@@ -33,10 +33,10 @@ db.execute(`
   )
 `);
 
-db.execute("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')");
-db.execute("INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')");
+await db.execute("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')");
+await db.execute("INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')");
 
-const [{ rows, fields }] = db.execute('SELECT * FROM users');
+const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 // rows:   [{ id: 1, name: 'Alice', email: 'alice@example.com' }, ...]
 // fields: [{ name: 'id', dataType: 'serial' }, { name: 'name', dataType: 'text' }, ...]
 ```
@@ -47,10 +47,10 @@ By default, SELECT rows are returned as objects keyed by column name. Use `rowMo
 
 ```javascript
 // Set default for all queries
-const db = new ConnectSQL({ rowMode: 'array' });
+const db = new Session({ rowMode: 'array' });
 
 // Or override per call
-const [{ rows }] = db.execute('SELECT id, name FROM users', { rowMode: 'array' });
+const [{ rows }] = await db.execute('SELECT id, name FROM users', { rowMode: 'array' });
 // rows: [[1, 'Alice'], [2, 'Bob']]
 ```
 
@@ -60,10 +60,10 @@ Use `db.prepare(sql)` with `$1`, `$2`, ... parameter placeholders. Returns a sta
 
 ```javascript
 const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
-const [{ rows }] = stmt.execute([42]);
+const [{ rows }] = await stmt.execute([42]);
 
 // With options
-const [{ rows }] = stmt.execute([42], { rowMode: 'array' });
+const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
 You can also use `PREPARE` / `EXECUTE` / `DEALLOCATE` via SQL:
@@ -90,10 +90,10 @@ Every result has a `command` field for easy discrimination:
 { command: 'alter table' }
 
 // DML
-{ command: 'insert', result: Record<string, any> }
+{ command: 'insert', result: Record<string, any>, rows: T[], fields: FieldInfo[] }
 { command: 'select', rows: T[], fields: { name: string, dataType: string }[] }
-{ command: 'update', rows: number }
-{ command: 'delete', rows: number }
+{ command: 'update', rowCount: number }
+{ command: 'delete', rowCount: number }
 
 // Transactions
 { command: 'begin' }
@@ -124,10 +124,10 @@ Every result has a `command` field for easy discrimination:
 Full type definitions are included. Use discriminated unions to narrow result types:
 
 ```typescript
-import { ConnectSQL, ExecuteResult } from '@petradb/engine';
+import { Session, ExecuteResult } from '@petradb/engine';
 
-const db = new ConnectSQL();
-const results: ExecuteResult[] = db.execute('SELECT * FROM users');
+const db = new Session();
+const results: ExecuteResult[] = await db.execute('SELECT * FROM users');
 
 for (const result of results) {
   if (result.command === 'select') {
@@ -139,11 +139,11 @@ for (const result of results) {
 ## Full Example
 
 ```javascript
-import { ConnectSQL } from '@petradb/engine';
+import { Session } from '@petradb/engine';
 
-const db = new ConnectSQL();
+const db = new Session();
 
-db.execute(`
+await db.execute(`
   CREATE TYPE status AS ENUM ('active', 'inactive');
   CREATE TABLE products (
     id SERIAL,
@@ -156,14 +156,14 @@ db.execute(`
   )
 `);
 
-db.execute(`
+await db.execute(`
   INSERT INTO products (name, price, tags, created_at) VALUES
     ('Laptop', 999.99, '["electronics", "computers"]', '2025-01-15 10:30:00');
   INSERT INTO products (name, price, tags, created_at) VALUES
     ('Coffee', 4.50, '["food", "organic"]', '2025-01-16 08:00:00')
 `);
 
-const [{ rows }] = db.execute(`
+const [{ rows }] = await db.execute(`
   SELECT name, price FROM products
   WHERE price > 10
   ORDER BY price DESC
@@ -175,9 +175,9 @@ console.log(rows); // [{ name: 'Laptop', price: 999.99 }]
 ## Error Handling
 
 ```javascript
-function safeExecute(db, sql) {
+async function safeExecute(db, sql) {
   try {
-    return db.execute(sql);
+    return await db.execute(sql);
   } catch (error) {
     console.error('SQL Error:', error.message);
     return null;

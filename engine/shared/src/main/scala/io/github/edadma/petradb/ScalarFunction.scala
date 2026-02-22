@@ -2,11 +2,13 @@ package io.github.edadma.petradb
 
 import scala.math.*
 
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, ZoneOffset}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, OffsetTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 case class ScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], typ: Type)
+
+private var rng = new java.util.Random()
 
 val scalarFunction: Map[String, ScalarFunction] =
   List(
@@ -225,7 +227,16 @@ val scalarFunction: Map[String, ScalarFunction] =
     ScalarFunction("exp", { case Seq(NumberValue(_, n)) => NumberValue(math.exp(n.doubleValue)) }, NumberType),
     ScalarFunction("ln", { case Seq(NumberValue(_, n)) => NumberValue(math.log(n.doubleValue)) }, NumberType),
     ScalarFunction("log10", { case Seq(NumberValue(_, n)) => NumberValue(math.log10(n.doubleValue)) }, NumberType),
-    ScalarFunction("random", { case Seq() => NumberValue(math.random) }, NumberType),
+    ScalarFunction("random", { case Seq() => NumberValue(rng.nextDouble()) }, NumberType),
+    ScalarFunction("setseed", { case Seq(NumberValue(_, seed)) =>
+      rng = new java.util.Random((seed.doubleValue * Int.MaxValue).toLong)
+      NullValue()
+    }, NullType),
+    ScalarFunction("scale", {
+      case Seq(NumberValue(io.github.edadma.dal.BigDecType, n)) =>
+        NumberValue(n.asInstanceOf[java.math.BigDecimal].scale())
+      case Seq(NumberValue(_, _)) => NumberValue(0)
+    }, NumberType),
     // UUID functions
     ScalarFunction("gen_random_uuid", { case Seq() => UUIDValue.generate }, UUIDType),
     // Null-handling functions
@@ -299,6 +310,13 @@ val scalarFunction: Map[String, ScalarFunction] =
             case "minute" => NumberValue(t.getMinute)
             case "second" => NumberValue(t.getSecond)
             case _        => NumberValue(0)
+        case Seq(TextValue(part), TimeTZValue(t)) =>
+          part.toLowerCase match
+            case "hour"     => NumberValue(t.getHour)
+            case "minute"   => NumberValue(t.getMinute)
+            case "second"   => NumberValue(t.getSecond)
+            case "timezone" => NumberValue(t.getOffset.getTotalSeconds)
+            case _          => NumberValue(0)
       },
       NumberType,
     ),
@@ -545,6 +563,48 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(v) => TextValue("\"" + v.string.replace("\"", "\"\"") + "\"") },
       TextType,
     ),
+    // format(formatstr, ...)
+    ScalarFunction(
+      "format",
+      { case args if args.nonEmpty =>
+        val TextValue(fmt) = args.head: @unchecked
+        val params = args.tail
+        val sb = new StringBuilder
+        var i = 0
+        var pi = 0
+        while i < fmt.length do
+          if fmt(i) == '%' && i + 1 < fmt.length then
+            fmt(i + 1) match
+              case '%' =>
+                sb += '%'
+                i += 2
+              case 's' =>
+                if pi < params.length then sb ++= params(pi).string
+                pi += 1
+                i += 2
+              case 'I' =>
+                if pi < params.length then
+                  val id = params(pi).string
+                  sb ++= "\"" + id.replace("\"", "\"\"") + "\""
+                pi += 1
+                i += 2
+              case 'L' =>
+                if pi < params.length then
+                  val v = params(pi)
+                  if v.isNull then sb ++= "NULL"
+                  else sb ++= "'" + v.string.replace("'", "''") + "'"
+                pi += 1
+                i += 2
+              case _ =>
+                sb += fmt(i)
+                i += 1
+          else
+            sb += fmt(i)
+            i += 1
+        TextValue(sb.toString)
+      },
+      TextType,
+    ),
     // clock_timestamp
     ScalarFunction(
       "clock_timestamp",
@@ -764,6 +824,17 @@ val scalarFunction: Map[String, ScalarFunction] =
         TimestampValue(LocalDateTime.of(y.intValue, mo.intValue, d.intValue, h.intValue, mi.intValue, s.intValue))
       },
       TimestampType,
+    ),
+    // make_timestamptz(y, mo, d, h, mi, s [, tz])
+    ScalarFunction(
+      "make_timestamptz",
+      {
+        case Seq(NumberValue(_, y), NumberValue(_, mo), NumberValue(_, d), NumberValue(_, h), NumberValue(_, mi), NumberValue(_, s), TextValue(tz)) =>
+          TimestampTZValue(OffsetDateTime.of(y.intValue, mo.intValue, d.intValue, h.intValue, mi.intValue, s.intValue, 0, ZoneOffset.of(tz)))
+        case Seq(NumberValue(_, y), NumberValue(_, mo), NumberValue(_, d), NumberValue(_, h), NumberValue(_, mi), NumberValue(_, s)) =>
+          TimestampTZValue(OffsetDateTime.of(y.intValue, mo.intValue, d.intValue, h.intValue, mi.intValue, s.intValue, 0, ZoneOffset.UTC))
+      },
+      TimestampTZType,
     ),
     // make_interval(days, hours, mins, secs)
     ScalarFunction(

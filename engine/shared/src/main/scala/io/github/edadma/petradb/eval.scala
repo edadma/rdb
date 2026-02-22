@@ -242,6 +242,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case "<<" => l << r.toInt
         case ">>" => l >> r.toInt
       ).toDouble)
+    case BinaryExpr(left, "^", right) =>
+      NumberValue(math.pow(neval(left, ctx).value.doubleValue, neval(right, ctx).value.doubleValue))
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "%"), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)

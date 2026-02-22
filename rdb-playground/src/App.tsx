@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { ConnectSQL } from '@petradb/engine'
+import { Session } from '@petradb/engine'
 import { TextTable } from '@edadma/table'
 import { Navbar, Button, Space, Table, Alert, Kbd, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
@@ -60,12 +60,12 @@ function App() {
   const terminalRef = useRef<TerminalRef>(null)
 
   const getDb = useCallback(() => {
-    if (!dbRef.current) dbRef.current = new ConnectSQL()
+    if (!dbRef.current) dbRef.current = new Session()
     return dbRef.current
   }, [])
 
   const resetDb = useCallback(() => {
-    dbRef.current = new ConnectSQL()
+    dbRef.current = new Session()
     setResults([])
     setExecTime(null)
     terminalRef.current?.writeln('\x1b[33mDatabase reset.\x1b[0m')
@@ -74,8 +74,8 @@ function App() {
   const resultLabel = useCallback((r: any): string => {
     switch (r.command) {
       case 'insert': return `INSERT — ${JSON.stringify(r.result)}`
-      case 'update': return `UPDATE — ${r.rows} row(s)`
-      case 'delete': return `DELETE — ${r.rows} row(s)`
+      case 'update': return `UPDATE — ${r.rowCount} row(s)`
+      case 'delete': return `DELETE — ${r.rowCount} row(s)`
       case 'create table': return `CREATE TABLE ${r.table}`
       case 'drop table': return `DROP TABLE ${r.table}`
       case 'truncate table': return `TRUNCATE TABLE ${r.table}`

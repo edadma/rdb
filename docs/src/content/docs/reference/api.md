@@ -5,7 +5,7 @@ description: JavaScript/TypeScript and Scala API reference for PetraDB.
 
 ## JavaScript / TypeScript API
 
-### `new ConnectSQL(options?)`
+### `new Session(options?)`
 
 Creates a new isolated in-memory database instance.
 
@@ -15,14 +15,14 @@ Creates a new isolated in-memory database instance.
 
 ### `db.execute(sql, options?)`
 
-Executes one or more SQL statements separated by `;`. Returns an array of results.
+Executes one or more SQL statements separated by `;`. Returns a promise that resolves to an array of results.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `rowMode` | `'object' \| 'array'` | constructor default | Row format for this call |
 
 ```javascript
-const [{ rows, fields }] = db.execute('SELECT * FROM users');
+const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 ```
 
 ### `db.prepare(sql)`
@@ -31,16 +31,16 @@ Creates a prepared statement with `$1`, `$2`, ... parameter placeholders. Return
 
 ```javascript
 const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
-const [{ rows }] = stmt.execute([42]);
+const [{ rows }] = await stmt.execute([42]);
 
 // With options
-const [{ rows }] = stmt.execute([42], { rowMode: 'array' });
+const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
 ### TypeScript Interfaces
 
 ```typescript
-interface ConnectSQLOptions {
+interface SessionOptions {
   rowMode?: 'object' | 'array';
 }
 
@@ -48,9 +48,14 @@ interface ExecuteOptions {
   rowMode?: 'object' | 'array';
 }
 
-class ConnectSQL {
-  constructor(options?: ConnectSQLOptions)
-  execute(sql: string, options?: ExecuteOptions): ExecuteResult[]
+interface PreparedStatement {
+  execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>
+}
+
+class Session {
+  constructor(options?: SessionOptions)
+  execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
+  prepare(sql: string): PreparedStatement
 }
 ```
 
@@ -70,10 +75,10 @@ Every result has a `command` field for discrimination:
 { command: 'alter table' }
 
 // DML
-{ command: 'insert', result: Record<string, any> }
+{ command: 'insert', result: Record<string, any>, rows: T[], fields: FieldInfo[] }
 { command: 'select', rows: T[], fields: { name: string, dataType: string }[] }
-{ command: 'update', rows: number }
-{ command: 'delete', rows: number }
+{ command: 'update', rowCount: number }
+{ command: 'delete', rowCount: number }
 
 // Transactions
 { command: 'begin' }

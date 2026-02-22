@@ -59,11 +59,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     reserved ++= Seq(
       "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
       "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
-      "cascade", "case", "cast", "char", "check", "column", "commit", "constraint",
+      "cascade", "case", "cast", "char", "check", "column", "commit", "conflict", "constraint",
       "create", "cross", "current_timestamp",
       "database", "date", "deallocate", "decimal", "default", "delete", "desc",
-      "distinct", "double", "drop",
-      "else", "end", "enum", "except", "exec", "execute", "exists", "extract",
+      "distinct", "do", "double", "drop",
+      "else", "end", "enum", "except", "exec", "execute", "exists", "explain", "extract",
       "false", "first", "float", "for", "foreign", "from", "full",
       "group",
       "having",
@@ -72,12 +72,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       "join", "json", "jsonb",
       "key",
       "last", "lateral", "left", "like", "limit",
-      "no", "not", "null", "nulls", "numeric",
+      "no", "not", "nothing", "null", "nulls", "numeric",
       "offset", "on", "or", "order", "outer", "overlay", "overlaps",
       "placing", "precision", "prepare", "primary", "procedure",
       "real", "references", "rename", "restrict", "returning", "right", "rollback",
       "select", "serial", "set", "smallint", "smallserial", "some", "symmetric",
-      "table", "text", "then", "time", "timestamp", "to", "transaction",
+      "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
       "true", "truncate", "type",
       "union", "unique", "unknown", "update", "uuid",
       "values", "varchar",
@@ -245,7 +245,7 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       case q ~ Some(a ~ None)        => AliasOperator(LateralExpr(q), a)
       case q ~ Some(a ~ Some(cols))  => ColumnAliasOperator(LateralExpr(q), a, cols)
     } |
-    (table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
+    (application | table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
       case s ~ None                  => s
       case s ~ Some(a ~ None)        => AliasOperator(s, a)
       case s ~ Some(a ~ Some(cols))  => ColumnAliasOperator(s, a, cols)
@@ -264,10 +264,11 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   )
 
   lazy val selectExpression: P[Expr] =
-    (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression | star) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
-      case e ~ None    => e
-      case e ~ Some(a) => AliasExpr(e, a)
-    }
+    star |
+      (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
+        case e ~ None    => e
+        case e ~ Some(a) => AliasExpr(e, a)
+      }
 
   lazy val selectExpressions: P[Seq[Expr]] = rep1sep(selectExpression, ",")
 
@@ -374,11 +375,18 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val multiplicative: P[Expr] = positioned(
     positioned(
-      multiplicative ~ ("*" | "/" | "%") ~ castExpression ^^ { case l ~ o ~ r =>
+      multiplicative ~ ("*" | "/" | "%") ~ exponentiation ^^ { case l ~ o ~ r =>
         BinaryExpr(l, o, r)
       } |
-        castExpression,
+        exponentiation,
     ),
+  )
+
+  lazy val exponentiation: P[Expr] = positioned(
+    exponentiation ~ "^" ~ castExpression ^^ { case l ~ o ~ r =>
+      BinaryExpr(l, o, r)
+    } |
+      castExpression,
   )
 
   lazy val extractField: P[String] =
@@ -503,19 +511,22 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
+  lazy val onConflictClause: P[Boolean] =
+    kw("ON") ~ kw("CONFLICT") ~ kw("DO") ~ kw("NOTHING") ^^^ true
+
   lazy val insert: P[Command] =
     kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ kw("VALUES") ~ rep1sep(
       row,
       ",",
-    ) ~ opt(
+    ) ~ opt(onConflictClause) ~ opt(
       kw("RETURNING") ~> identifier,
-    ) ^^ { case t ~ cs ~ _ ~ rs ~ ret =>
-      InsertCommand(t, cs, rs, ret)
+    ) ^^ { case t ~ cs ~ _ ~ rs ~ oc ~ ret =>
+      InsertCommand(t, cs, rs, ret, oc.getOrElse(false))
     } |
-    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ query ~ opt(
+    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ query ~ opt(onConflictClause) ~ opt(
       kw("RETURNING") ~> identifier,
-    ) ^^ { case t ~ cs ~ q ~ ret =>
-      InsertSelectCommand(t, cs, q, ret)
+    ) ^^ { case t ~ cs ~ q ~ oc ~ ret =>
+      InsertSelectCommand(t, cs, q, ret, oc.getOrElse(false))
     }
 
   lazy val tableConstraint: P[TableConstraint] =
@@ -588,17 +599,22 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       CreateEnumCommand(t, ls)
     }
 
+  lazy val returningClause: P[Seq[Expr]] =
+    kw("RETURNING") ~> ("*" ^^^ Seq(StarExpr(): Expr) | rep1sep(expression, ","))
+
   lazy val update: P[Command] =
     kw("UPDATE") ~> identifier ~ kw("SET") ~ rep1sep(set, ",") ~
       opt(kw("FROM") ~> rep1sep(sources, ",")) ~
-      opt(kw("WHERE") ~> booleanExpression) ^^ {
-      case t ~ _ ~ ss ~ f ~ c =>
-        UpdateCommand(t, ss, f, c)
+      opt(kw("WHERE") ~> booleanExpression) ~
+      opt(returningClause) ^^ {
+      case t ~ _ ~ ss ~ f ~ c ~ ret =>
+        UpdateCommand(t, ss, f, c, ret)
     }
 
   lazy val delete: P[Command] =
-    kw("DELETE") ~> kw("FROM") ~> identifier ~ opt(kw("WHERE") ~> booleanExpression) ^^ { case t ~ c =>
-      DeleteCommand(t, c)
+    kw("DELETE") ~> kw("FROM") ~> identifier ~ opt(kw("WHERE") ~> booleanExpression) ~ opt(returningClause) ^^ {
+      case t ~ c ~ ret =>
+        DeleteCommand(t, c, ret)
     }
 
   lazy val truncate: P[Command] =
@@ -625,6 +641,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       | kw("TIMESTAMP") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimestampTZType)
       | kw("TIMESTAMP") ~ opt(kw("WITHOUT") ~ kw("TIME") ~ kw("ZONE")) ^^^ Left(TimestampType)
       | kw("DATE") ^^^ Left(DateType)
+      | kw("TIMETZ") ^^^ Left(TimeTZType)
+      | kw("TIME") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimeTZType)
       | kw("TIME") ^^^ Left(TimeType)
       | kw("INTERVAL") ^^^ Left(IntervalType)
       | kw("BYTEA") ^^^ Left(ByteaType)
@@ -767,8 +785,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   lazy val commitCmd: P[Command] = kw("COMMIT") ~> opt(kw("TRANSACTION")) ^^^ CommitCommand
   lazy val rollbackCmd: P[Command] = kw("ROLLBACK") ~> opt(kw("TRANSACTION")) ^^^ RollbackCommand
 
+  lazy val explain: P[Command] =
+    kw("EXPLAIN") ~> command ^^ ExplainCommand.apply
+
   lazy val command: P[Command] =
-    beginCmd |
+    explain |
+      beginCmd |
       commitCmd |
       rollbackCmd |
       prepare |

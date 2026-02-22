@@ -81,6 +81,8 @@ abstract class DB:
 
   def connect(): Session = new Session(this)
 
+  def close(): Unit = ()
+
   override def toString: String = s"[Database '$name': ${tables map ((_, t) => t) mkString ", "}]"
 
   // ── Foreign Key Helpers ──────────────────────────────────────────
@@ -451,10 +453,10 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
     def countInCommand(cmd: Command): Seq[Int] =
       cmd match
         case QueryCommand(q)                    => countInExpr(q)
-        case InsertCommand(_, _, rows, _)       => rows.flatMap(_.flatMap(countInExpr))
-        case InsertSelectCommand(_, _, q, _)    => countInExpr(q)
-        case UpdateCommand(_, sets, from, cond)  => sets.flatMap(s => countInExpr(s.value)) ++ from.toSeq.flatMap(_.flatMap(countInExpr)) ++ cond.toSeq.flatMap(countInExpr)
-        case DeleteCommand(_, cond)             => cond.toSeq.flatMap(countInExpr)
+        case InsertCommand(_, _, rows, _, _)       => rows.flatMap(_.flatMap(countInExpr))
+        case InsertSelectCommand(_, _, q, _, _)    => countInExpr(q)
+        case UpdateCommand(_, sets, from, cond, _)  => sets.flatMap(s => countInExpr(s.value)) ++ from.toSeq.flatMap(_.flatMap(countInExpr)) ++ cond.toSeq.flatMap(countInExpr)
+        case DeleteCommand(_, cond, _)             => cond.toSeq.flatMap(countInExpr)
         case _                                  => Nil
     commands.flatMap(countInCommand).maxOption.getOrElse(0)
 

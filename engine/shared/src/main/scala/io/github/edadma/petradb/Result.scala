@@ -14,6 +14,7 @@ case class UpdateResult(rows: Int)                                  extends Resu
 case class DeleteResult(rows: Int)                                  extends Result
 case class TruncateResult(table: String)                            extends Result
 case class AlterTableResult()                                       extends Result
+case class ExplainResult(plan: String)                              extends Result
 case class PrepareResult(name: String)    extends Result
 case class DeallocateResult(name: String) extends Result
 case object BeginResult    extends Result

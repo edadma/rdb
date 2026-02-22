@@ -1,0 +1,37 @@
+{
+  "name": "@petradb/client",
+  "version": "1.0.1",
+  "description": "Network client for petradb-server with the same Session API as @petradb/engine",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": [
+    "SQL",
+    "database",
+    "client",
+    "petradb"
+  ],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/edadma/petradb/issues"
+  },
+  "homepage": "https://github.com/edadma/petradb#readme"
+}
