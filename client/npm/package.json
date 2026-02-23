@@ -1,0 +1,32 @@
+{
+  "name": "@petradb/client",
+  "version": "1.0.1",
+  "description": "PetraDB network client for JavaScript and TypeScript",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./main.js"
+    }
+  },
+  "main": "main.js",
+  "types": "index.d.ts",
+  "files": [
+    "main.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": [
+    "SQL",
+    "database",
+    "client",
+    "javascript",
+    "typescript"
+  ],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC"
+}

@@ -119,6 +119,32 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
   )
 
+// ── client: network client ───────────────────────────────────────────
+
+lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("client"))
+  .dependsOn(shared)
+  .settings(
+    name    := "petradb-client",
+    version := "1.0.1",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % Test,
+    publishMavenStyle      := true,
+    publishTo              := sonatypePublishToBundle.value,
+    Test / publishArtifact := false,
+  )
+  .jsSettings(
+    jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
+  )
+  .nativeSettings(
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+  )
+  .jvmSettings(
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+  )
+
 // ── cli: SQL interactive shell ──────────────────────────────────────
 
 lazy val cli = crossProject(JVMPlatform, NativePlatform)
@@ -170,6 +196,7 @@ lazy val root = project
   .aggregate(
     shared.js, shared.jvm, shared.native,
     engine.js, engine.jvm, engine.native,
+    client.js, client.jvm, client.native,
     cli.jvm, cli.native,
     server.jvm,
   )
