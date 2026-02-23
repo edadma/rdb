@@ -30,9 +30,9 @@ class PetraServer(
           RequestHandler.handleHealth()
 
         case _ =>
-          RequestHandler.HandlerResponse(404, """{"error":"Not found"}""")
+          RequestHandler.HandlerResponse(404, """{"error":"Not found"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")
 
-      res.status(result.status).sendJson(result.body)
+      res.status(result.status).set("Content-Type", result.contentType).end(result.body)
     }
 
     server.listen(port, host)(onListening)
