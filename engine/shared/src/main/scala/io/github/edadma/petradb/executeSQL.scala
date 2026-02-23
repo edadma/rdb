@@ -84,51 +84,76 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                 for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
               }
 
-            if onConflict then
-              // ON CONFLICT DO NOTHING: insert rows one at a time, skip on unique violations
-              var lastResult: Map[String, Value] = Map.empty
-              for d <- data do
-                try
-                  lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
-                catch
-                  case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
-
+            def buildInsertResult(lastResult: Map[String, Value]): InsertResult =
               val (row, metadata) =
                 returning match
                   case None =>
                     val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
                     val metadata    = Metadata(cols.toIndexedSeq)
                     (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                  case Some(ret @ Ident(returning)) =>
-                    if lastResult contains returning then
-                      val (cols, seq) = lastResult filter { case (k, _) => k == returning } map { case (k, v) =>
+                  case Some(ret @ Ident(retCol)) =>
+                    if lastResult contains retCol then
+                      val (cols, seq) = lastResult filter { case (k, _) => k == retCol } map { case (k, v) =>
                         (ColumnMetadata(Some(table), k, v.vtyp), v)
                       } unzip
                       val metadata = Metadata(cols.toIndexedSeq)
                       (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                    else throw UndefinedReferenceException(ret.pos, s"'$returning' not found in result from insert")
+                    else throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
               InsertResult(lastResult, TableValue(Vector(row), metadata))
-            else
-              val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
 
-              val (row, metadata) =
-                returning match
-                  case None =>
-                    val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                    val metadata    = Metadata(cols.toIndexedSeq)
+            onConflict match
+              case None =>
+                val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+                buildInsertResult(result)
 
-                    (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                  case Some(ret @ Ident(returning)) =>
-                    if result contains returning then
-                      val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
-                        (ColumnMetadata(Some(table), k, v.vtyp), v)
-                      } unzip
-                      val metadata = Metadata(cols.toIndexedSeq)
+              case Some(OnConflictDoNothing) =>
+                var lastResult: Map[String, Value] = Map.empty
+                for d <- data do
+                  try
+                    lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+                  catch
+                    case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
+                buildInsertResult(lastResult)
 
-                      (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                    else throw UndefinedReferenceException(ret.pos, s"'$returning' not found in result from insert")
-
-              InsertResult(result, TableValue(Vector(row), metadata))
+              case Some(OnConflictDoUpdate(conflictCols, updates)) =>
+                val conflictColNames = conflictCols.map(_.name)
+                val rewrites = updates.map { case UpdateSet(uid @ Ident(col), value) =>
+                  if !t.hasColumn(col) then throw UndefinedReferenceException(uid.pos, s"unknown column: $col")
+                  col -> rewrite(value)
+                }
+                val excludedMeta = Metadata(t.columns.map(spec => ColumnMetadata(Some("excluded"), spec.name, spec.typ)).toIndexedSeq)
+                var lastResult: Map[String, Value] = Map.empty
+                for d <- data do
+                  try
+                    lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), returning, fkCheck)
+                  catch
+                    case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
+                      val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
+                      val excludedData   = t.columns.map(spec => insertedColMap.getOrElse(spec.name, NullValue())).toIndexedSeq
+                      val excludedRow    = Row(excludedData, excludedMeta, None, None)
+                      val conflictValues = conflictColNames.map(insertedColMap.getOrElse(_, NullValue()))
+                      val conflictRow = t.iterator(Nil).find { row =>
+                        conflictColNames.zip(conflictValues).forall { (col, v) =>
+                          t.columnMap.get(col).exists(idx => row.data(idx) == v)
+                        }
+                      }
+                      conflictRow match
+                        case None => throw e
+                        case Some(existing) =>
+                          val evalCtx    = Seq(existing, excludedRow)
+                          val evalUpdates = rewrites.map { (col, rwExpr) => col -> eval(rwExpr, evalCtx) }
+                          existing.updater.getOrElse(sys.error("conflicting row is not updatable"))(evalUpdates)
+                          val updatedData = existing.data.toArray
+                          for (col, value) <- evalUpdates do
+                            updatedData(t.columnMap(col)) = value
+                          lastResult = t.columns.map(_.name).zip(updatedData).toMap
+                          returning match
+                            case Some(ret @ Ident(retCol)) =>
+                              t.columnMap.get(retCol) match
+                                case Some(idx) => lastResult = lastResult + (retCol -> updatedData(idx))
+                                case None      => throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
+                            case None =>
+                buildInsertResult(lastResult)
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
         val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
@@ -151,47 +176,76 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
             for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
           }
 
-        if onConflict then
-          var lastResult: Map[String, Value] = Map.empty
-          for d <- data do
-            try
-              lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
-            catch
-              case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
+        def buildSelectInsertResult(lastResult: Map[String, Value]): InsertResult =
           val (row, metadata) =
             returning match
               case None =>
                 val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
                 val metadata = Metadata(cols.toIndexedSeq)
                 (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              case Some(ret @ Ident(returning)) =>
-                if lastResult contains returning then
-                  val (cols, seq) = lastResult filter { case (k, _) => k == returning } map { case (k, v) =>
+              case Some(ret @ Ident(retCol)) =>
+                if lastResult contains retCol then
+                  val (cols, seq) = lastResult filter { case (k, _) => k == retCol } map { case (k, v) =>
                     (ColumnMetadata(Some(table), k, v.vtyp), v)
                   } unzip
                   val metadata = Metadata(cols.toIndexedSeq)
                   (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                else throw UndefinedReferenceException(ret.pos, s"'$returning' not found in result from insert")
+                else throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
           InsertResult(lastResult, TableValue(Vector(row), metadata))
-        else
-          val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
 
-          val (row, metadata) =
-            returning match
-              case None =>
-                val (cols, seq) = result map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                val metadata = Metadata(cols.toIndexedSeq)
-                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              case Some(ret @ Ident(returning)) =>
-                if result contains returning then
-                  val (cols, seq) = result filter { case (k, _) => k == returning } map { case (k, v) =>
-                    (ColumnMetadata(Some(table), k, v.vtyp), v)
-                  } unzip
-                  val metadata = Metadata(cols.toIndexedSeq)
-                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                else throw UndefinedReferenceException(ret.pos, s"'$returning' not found in result from insert")
+        onConflict match
+          case None =>
+            val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+            buildSelectInsertResult(result)
 
-          InsertResult(result, TableValue(Vector(row), metadata))
+          case Some(OnConflictDoNothing) =>
+            var lastResult: Map[String, Value] = Map.empty
+            for d <- data do
+              try
+                lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+              catch
+                case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
+            buildSelectInsertResult(lastResult)
+
+          case Some(OnConflictDoUpdate(conflictCols, updates)) =>
+            val conflictColNames = conflictCols.map(_.name)
+            val rewrites = updates.map { case UpdateSet(uid @ Ident(col), value) =>
+              if !t.hasColumn(col) then throw UndefinedReferenceException(uid.pos, s"unknown column: $col")
+              col -> rewrite(value)
+            }
+            val excludedMeta = Metadata(t.columns.map(spec => ColumnMetadata(Some("excluded"), spec.name, spec.typ)).toIndexedSeq)
+            var lastResult: Map[String, Value] = Map.empty
+            for d <- data do
+              try
+                lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), returning, fkCheck)
+              catch
+                case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
+                  val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
+                  val excludedData   = t.columns.map(spec => insertedColMap.getOrElse(spec.name, NullValue())).toIndexedSeq
+                  val excludedRow    = Row(excludedData, excludedMeta, None, None)
+                  val conflictValues = conflictColNames.map(insertedColMap.getOrElse(_, NullValue()))
+                  val conflictRow = t.iterator(Nil).find { row =>
+                    conflictColNames.zip(conflictValues).forall { (col, v) =>
+                      t.columnMap.get(col).exists(idx => row.data(idx) == v)
+                    }
+                  }
+                  conflictRow match
+                    case None => throw e
+                    case Some(existing) =>
+                      val evalCtx    = Seq(existing, excludedRow)
+                      val evalUpdates = rewrites.map { (col, rwExpr) => col -> eval(rwExpr, evalCtx) }
+                      existing.updater.getOrElse(sys.error("conflicting row is not updatable"))(evalUpdates)
+                      val updatedData = existing.data.toArray
+                      for (col, value) <- evalUpdates do
+                        updatedData(t.columnMap(col)) = value
+                      lastResult = t.columns.map(_.name).zip(updatedData).toMap
+                      returning match
+                        case Some(ret @ Ident(retCol)) =>
+                          t.columnMap.get(retCol) match
+                            case Some(idx) => lastResult = lastResult + (retCol -> updatedData(idx))
+                            case None      => throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
+                        case None =>
+            buildSelectInsertResult(lastResult)
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists) =>
         guardDDL()
@@ -621,9 +675,19 @@ private[petradb] def deepCopyCommand(cmd: Command, params: IndexedSeq[Value] = I
     case QueryCommand(query) =>
       QueryCommand(deepCopyExpr(query, params))
     case InsertCommand(table, columns, rows, returning, onConflict) =>
-      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning, onConflict)
+      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning,
+        onConflict.map {
+          case OnConflictDoNothing => OnConflictDoNothing
+          case OnConflictDoUpdate(cols, updates) =>
+            OnConflictDoUpdate(cols, updates.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))))
+        })
     case InsertSelectCommand(table, columns, query, returning, onConflict) =>
-      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning, onConflict)
+      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning,
+        onConflict.map {
+          case OnConflictDoNothing => OnConflictDoNothing
+          case OnConflictDoUpdate(cols, updates) =>
+            OnConflictDoUpdate(cols, updates.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))))
+        })
     case UpdateCommand(table, sets, from, cond, returning) =>
       UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))),
         from.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)),

@@ -511,8 +511,13 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
   lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
 
-  lazy val onConflictClause: P[Boolean] =
-    kw("ON") ~ kw("CONFLICT") ~ kw("DO") ~ kw("NOTHING") ^^^ true
+  lazy val onConflictClause: P[OnConflict] =
+    kw("ON") ~> kw("CONFLICT") ~> (
+      kw("DO") ~> kw("NOTHING") ^^^ OnConflictDoNothing
+      | "(" ~> rep1sep(identifier, ",") ~ (")" ~> kw("DO") ~> kw("UPDATE") ~> kw("SET") ~> rep1sep(set, ",")) ^^ {
+          case cols ~ assignments => OnConflictDoUpdate(cols, assignments)
+        }
+    )
 
   lazy val insert: P[Command] =
     kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ kw("VALUES") ~ rep1sep(
@@ -521,12 +526,12 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
     ) ~ opt(onConflictClause) ~ opt(
       kw("RETURNING") ~> identifier,
     ) ^^ { case t ~ cs ~ _ ~ rs ~ oc ~ ret =>
-      InsertCommand(t, cs, rs, ret, oc.getOrElse(false))
+      InsertCommand(t, cs, rs, ret, oc)
     } |
     kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ query ~ opt(onConflictClause) ~ opt(
       kw("RETURNING") ~> identifier,
     ) ^^ { case t ~ cs ~ q ~ oc ~ ret =>
-      InsertSelectCommand(t, cs, q, ret, oc.getOrElse(false))
+      InsertSelectCommand(t, cs, q, ret, oc)
     }
 
   lazy val tableConstraint: P[TableConstraint] =

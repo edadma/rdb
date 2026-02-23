@@ -15,12 +15,16 @@ case class ForeignKeyConstraint(
 ) extends TableConstraint
 case class CheckConstraint(name: Option[String], expression: Expr) extends TableConstraint
 
+sealed trait OnConflict
+case object OnConflictDoNothing extends OnConflict
+case class OnConflictDoUpdate(conflictColumns: Seq[Ident], updates: Seq[UpdateSet]) extends OnConflict
+
 trait Command
 
 case class QueryCommand(query: Expr) extends Command
-case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident], onConflict: Boolean = false)
+case class InsertCommand(table: Ident, columns: Option[Seq[Ident]], rows: Seq[Seq[Expr]], returning: Option[Ident], onConflict: Option[OnConflict] = None)
     extends Command
-case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query: Expr, returning: Option[Ident], onConflict: Boolean = false)
+case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query: Expr, returning: Option[Ident], onConflict: Option[OnConflict] = None)
     extends Command
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint], ifNotExists: Boolean = false) extends Command
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
