@@ -193,6 +193,19 @@ lazy val server = crossProject(JVMPlatform)
     ),
   )
 
+// ── integration: end-to-end client + server tests ───────────────────
+
+lazy val integration = project
+  .in(file("integration"))
+  .dependsOn(client.jvm, server.jvm)
+  .settings(
+    name                := "petradb-integration",
+    scalacOptions     ++= commonScalacOptions,
+    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+    publish / skip      := true,
+    publishLocal / skip := true,
+  )
+
 // ── root aggregate ──────────────────────────────────────────────────
 
 lazy val root = project
@@ -203,6 +216,7 @@ lazy val root = project
     client.js, client.jvm, client.native,
     cli.jvm, cli.native,
     server.jvm,
+    integration,
   )
   .settings(
     name                := "petradb",
