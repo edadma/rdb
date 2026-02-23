@@ -45,27 +45,58 @@ lazy val commonScalacOptions = Seq(
   "-language:dynamics",
 )
 
+// ── shared: result/value/type types + uPack codecs ──────────────────
+
+lazy val shared = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("shared"))
+  .settings(
+    name    := "petradb-shared",
+    version := "1.0.1",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies ++= Seq(
+      "io.github.edadma"       %%% "dal"                       % "0.0.10",
+      "com.lihaoyi"            %%% "upickle"                   % "4.0.2",
+      "io.github.cquiroz"      %%% "scala-java-time"           % "2.6.0",
+      "org.scala-lang.modules" %%% "scala-parser-combinators"  % "2.4.0",
+      "org.scalatest"          %%% "scalatest"                 % "3.2.19" % Test,
+    ),
+    publishMavenStyle      := true,
+    publishTo              := sonatypePublishToBundle.value,
+    Test / publishArtifact := false,
+  )
+  .jsSettings(
+    jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
+    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
+  )
+  .nativeSettings(
+    libraryDependencies += "org.scala-js"      %% "scalajs-stubs" % "1.1.0" % "provided",
+    libraryDependencies += "io.github.edadma" %%% "libuuid"       % "0.0.1",
+  )
+  .jvmSettings(
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+  )
+
 // ── engine: the SQL database engine ─────────────────────────────────
 
 lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
+  .dependsOn(shared)
   .settings(
     name    := "petradb-engine",
     version := "1.0.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "io.github.edadma"  %%% "dal"             % "0.0.10",
-      "io.github.edadma"  %%% "dllist"          % "0.0.6",
-      "io.github.edadma"  %%% "bptree"          % "0.0.3",
-      "io.github.edadma"  %%% "cross_platform"  % "0.1.3",
-      "io.github.edadma"  %%% "stow"            % "0.0.2",
-      "io.github.edadma"  %%% "table"           % "0.0.4",
-      "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
+      "io.github.edadma"  %%% "dllist"         % "0.0.6",
+      "io.github.edadma"  %%% "bptree"         % "0.0.3",
+      "io.github.edadma"  %%% "cross_platform" % "0.1.3",
+      "io.github.edadma"  %%% "stow"           % "0.0.2",
+      "io.github.edadma"  %%% "table"          % "0.0.4",
     ),
     libraryDependencies ++= Seq(
-      "org.scalatest"          %%% "scalatest"                % "3.2.19" % "test",
-      "com.lihaoyi"            %%% "pprint"                   % "0.9.3"  % "test",
-      "org.scala-lang.modules" %%% "scala-parser-combinators" % "2.4.0",
+      "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
+      "com.lihaoyi"   %%% "pprint"   % "0.9.3"  % "test",
     ),
     publishMavenStyle      := true,
     publishTo              := sonatypePublishToBundle.value,
@@ -137,6 +168,7 @@ lazy val server = crossProject(JVMPlatform)
 lazy val root = project
   .in(file("."))
   .aggregate(
+    shared.js, shared.jvm, shared.native,
     engine.js, engine.jvm, engine.native,
     cli.jvm, cli.native,
     server.jvm,
