@@ -2,7 +2,7 @@
 set -e
 
 echo "==> Building client..."
-cd client
+cd "$(dirname "$0")/client"
 npm run build
 
 echo "==> Package contents:"
