@@ -128,7 +128,11 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     name    := "petradb-client",
     version := "1.0.1",
     scalacOptions ++= commonScalacOptions,
-    libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % Test,
+    libraryDependencies ++= Seq(
+      "io.github.edadma" %%% "fetch"     % "0.0.1",
+      "com.lihaoyi"      %%% "upickle"   % "4.0.2",
+      "org.scalatest"    %%% "scalatest" % "3.2.19" % Test,
+    ),
     publishMavenStyle      := true,
     publishTo              := sonatypePublishToBundle.value,
     Test / publishArtifact := false,

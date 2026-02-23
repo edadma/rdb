@@ -1,42 +1,54 @@
 package io.github.edadma.petradb.client
 
+import io.github.edadma.fetch.*
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.Codecs.given
+import upickle.default.*
 import scala.concurrent.{Future, ExecutionContext}
 
 case class SessionOptions(
   host: String = "localhost",
   port: Int = 3000,
-  rowMode: String = "object",
 )
 
 class Session(options: SessionOptions = SessionOptions()):
 
-  private val baseUrl               = s"http://${options.host}:${options.port}"
+  private val baseUrl                   = s"http://${options.host}:${options.port}"
   private var sessionId: Option[String] = None
 
-  def execute(sql: String, rowMode: String = options.rowMode)(implicit ec: ExecutionContext): Future[Seq[Result]] =
-    val body    = ujson.write(ujson.Obj("sql" -> sql, "rowMode" -> rowMode))
-    val headers = sessionId.map(id => Map("X-Session-Id" -> id)).getOrElse(Map.empty)
-    platformPost(s"$baseUrl/sql", body, headers).map { response =>
-      if response.status >= 400 then
-        val msg = ujson.read(response.body).obj.get("error").map(_.str).getOrElse(response.body)
-        throw new RuntimeException(msg)
-      ResponseParser.parseResponse(response.body, rowMode)
+  private def sessionHeaders: Map[String, String] =
+    Map("Content-Type" -> "application/octet-stream") ++
+      sessionId.map("X-Session-Id" -> _)
+
+  def execute(sql: String)(implicit ec: ExecutionContext): Future[Seq[Result]] =
+    fetch(
+      s"$baseUrl/sql",
+      "POST",
+      body    = Some(sql),
+      headers = sessionHeaders,
+    ).flatMap { res =>
+      if res.ok then
+        Future.successful(readBinary[Seq[Result]](res.body))
+      else
+        Future.failed(new RuntimeException(res.bodyAsString))
     }
 
   def connect()(implicit ec: ExecutionContext): Future[String] =
-    platformPost(s"$baseUrl/session", "", Map.empty).map { response =>
-      if response.status >= 400 then
-        throw new RuntimeException(s"Failed to create session: ${response.body}")
-      val id = ujson.read(response.body)("sessionId").str
-      sessionId = Some(id)
-      id
+    fetch(s"$baseUrl/session", "POST", headers = Map.empty).flatMap { res =>
+      if res.ok then
+        val id = readBinary[Map[String, String]](res.body).apply("sessionId")
+        sessionId = Some(id)
+        Future.successful(id)
+      else
+        Future.failed(new RuntimeException(s"Failed to create session: ${res.bodyAsString}"))
     }
 
   def close()(implicit ec: ExecutionContext): Future[Unit] =
     sessionId match
-      case None     => Future.successful(())
+      case None => Future.unit
       case Some(id) =>
-        platformDelete(s"$baseUrl/session/$id", Map.empty).map { _ =>
+        fetch(s"$baseUrl/session/$id", "DELETE", headers = Map.empty).flatMap { res =>
           sessionId = None
+          if res.ok then Future.unit
+          else Future.failed(new RuntimeException(res.bodyAsString))
         }
