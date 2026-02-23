@@ -102,6 +102,12 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     super.dropIndex(indexName)
     persistCatalog()
 
+  override def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
+    super.alterTable(name, alteration)
+    alteration match
+      case _: RenameTableAlteration => () // renameTable already called persistCatalog
+      case _                        => persistCatalog()
+
   private def createPersistentIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, batch: WriteBatch): Unit =
     val table = tables(tableName)
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
@@ -599,45 +605,5 @@ class PersistentTable(
       writeHeaderPage(batch)
     }
 
-  // Override DDL methods to persist catalog after schema changes
-  override def addColumnToTable(spec: ColumnSpec, defaultValue: Value): Unit =
-    super.addColumnToTable(spec, defaultValue)
-    db.persistCatalog()
-
-  override def renameColumnInTable(oldName: String, newName: String): Unit =
-    super.renameColumnInTable(oldName, newName)
-    db.persistCatalog()
-
-  override def dropColumnFromTable(colName: String): Unit =
-    super.dropColumnFromTable(colName)
-    db.persistCatalog()
-
-  override def alterColumnType(colName: String, newType: Type): Unit =
-    super.alterColumnType(colName, newType)
-    db.persistCatalog()
-
-  override def alterColumnSetDefault(colName: String, default: Value): Unit =
-    super.alterColumnSetDefault(colName, default)
-    db.persistCatalog()
-
-  override def alterColumnDropDefault(colName: String): Unit =
-    super.alterColumnDropDefault(colName)
-    db.persistCatalog()
-
-  override def alterColumnSetNotNull(colName: String): Unit =
-    super.alterColumnSetNotNull(colName)
-    db.persistCatalog()
-
-  override def alterColumnDropNotNull(colName: String): Unit =
-    super.alterColumnDropNotNull(colName)
-    db.persistCatalog()
-
-  override def addConstraintToTable(spec: Spec): Unit =
-    super.addConstraintToTable(spec)
-    db.persistCatalog()
-
-  override def dropConstraintFromTable(constraintName: String): Unit =
-    super.dropConstraintFromTable(constraintName)
-    db.persistCatalog()
 
   override def toString: String = s"[PersistentTable '$name': $meta]"

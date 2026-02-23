@@ -522,58 +522,8 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         }
       case AlterTableCommand(id @ Ident(table), alter) =>
         guardDDL()
-        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
-        alter match
-          case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _)) =>
-            if t.hasColumn(colName) then throw SchemaException(cid.pos, s"column '$colName' already exists")
-            val typ = typeDesc match
-              case Left(primitive) => primitive
-              case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(throw UndefinedReferenceException(tid.pos, s"type '$defined' is undefined"))
-            val fk = references.map { case (tbl, col, onDel, onUpd) => (tbl.name, col.name, onDel, onUpd) }
-            val defaultValue = default.map(expr => eval(rewrite(expr), Nil)).getOrElse(NullValue())
-            val spec = ColumnSpec(colName, typ, required, false, unique, fk, default.map(expr => eval(rewrite(expr), Nil)))
-            t.addColumnToTable(spec, defaultValue)
-          case DropColumnTableAlteration(cid @ Ident(colName)) =>
-            if !t.hasColumn(colName) then throw UndefinedReferenceException(cid.pos, s"column '$colName' not found")
-            t.dropColumnFromTable(colName)
-          case AlterColumnTableAlteration(cid @ Ident(colName), mod) =>
-            if !t.hasColumn(colName) then throw UndefinedReferenceException(cid.pos, s"column '$colName' not found")
-            mod match
-              case SetDataTypeColumnModification(typeDesc) =>
-                val typ = typeDesc match
-                  case Left(primitive) => primitive
-                  case Right(tid @ Ident(defined)) => db.getType(defined).getOrElse(throw UndefinedReferenceException(tid.pos, s"type '$defined' is undefined"))
-                t.alterColumnType(colName, typ)
-              case SetDefaultColumnModification(expr) =>
-                t.alterColumnSetDefault(colName, eval(rewrite(expr), Nil))
-              case DropDefaultColumnModification() =>
-                t.alterColumnDropDefault(colName)
-              case SetNotNullColumnModification() =>
-                t.alterColumnSetNotNull(colName)
-              case DropNotNullColumnModification() =>
-                t.alterColumnDropNotNull(colName)
-          case AddConstraintTableAlteration(constraint) =>
-            val spec = constraint match
-              case UniqueConstraint(cname, cols) => UniqueSpec(cols.map(_.name), cname)
-              case PrimaryKeyConstraint(cname, cols) => PrimaryKeySpec(cols.map(_.name), cname)
-              case ForeignKeyConstraint(cname, cols, refTable, refCols, onDel, onUpd) =>
-                ForeignKeySpec(cols.map(_.name), refTable.name, refCols.map(_.name), cname, onDel, onUpd)
-              case CheckConstraint(cname, expr) =>
-                CheckSpec(exprToSQL(expr), expr, cname)
-            t.addConstraintToTable(spec)
-          case DropConstraintTableAlteration(cid @ Ident(constraintName)) =>
-            t.dropConstraintFromTable(constraintName)
-          case RenameTableAlteration(Ident(newName)) =>
-            db.renameTable(table, newName)
-          case RenameColumnTableAlteration(cid @ Ident(oldName), Ident(newName)) =>
-            if !t.hasColumn(oldName) then throw UndefinedReferenceException(cid.pos, s"column '$oldName' not found")
-            t.renameColumnInTable(oldName, newName)
-          case AddForeignKeyTableAlteration(fk, ref) =>
-            val spec = ForeignKeySpec(Seq(fk.name), ref.name, Seq(fk.name), None)
-            t.addConstraintToTable(spec)
-          case AddForeignKeyConstraintTableAlteration(constraint) =>
-            val spec = ForeignKeySpec(constraint.columns.map(_.name), constraint.referencedTable.name, constraint.referencedColumns.map(_.name), constraint.name, constraint.onDelete, constraint.onUpdate)
-            t.addConstraintToTable(spec)
+        if !db.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
+        db.alterTable(table, alter)
         AlterTableResult()
       case _ => sys.error(s"unexpected command")
     }
