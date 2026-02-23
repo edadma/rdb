@@ -32,7 +32,7 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
       server.stop(() => loop.stop())
       thread.join(3000)
 
-  private def withConnectedSession(test: Session => Unit): Unit =
+  private def withConnectedSession(test: (Session, Int) => Unit): Unit =
     val loop   = new EventLoop
     val db     = new MemoryDB
     val server = new PetraServer(loop, db, port = 0)
@@ -45,7 +45,7 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
     val session = Session(SessionOptions(port = port))
     Await.result(session.connect(), 5.seconds)
     try
-      test(session)
+      test(session, port)
     finally
       Await.ready(session.close(), 5.seconds)
       server.stop(() => loop.stop())
@@ -93,7 +93,7 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
 
   "connected session" - {
 
-    "state persists across execute calls" in withConnectedSession { session =>
+    "state persists across execute calls" in withConnectedSession { (session, _) =>
       Await.result(session.execute("CREATE TABLE t (id INT)"), 5.seconds)
       Await.result(session.execute("INSERT INTO t VALUES (1)"), 5.seconds)
       Await.result(session.execute("INSERT INTO t VALUES (2)"), 5.seconds)
@@ -103,7 +103,7 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
       count.asInstanceOf[NumberValue].value.intValue shouldBe 2
     }
 
-    "transaction commit" in withConnectedSession { session =>
+    "transaction commit" in withConnectedSession { (session, _) =>
       Await.result(session.execute("CREATE TABLE t (id INT)"), 5.seconds)
       Await.result(session.execute("BEGIN"), 5.seconds)
       Await.result(session.execute("INSERT INTO t VALUES (1)"), 5.seconds)
@@ -113,7 +113,7 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
       results.head.asInstanceOf[QueryResult].table.data.length shouldBe 1
     }
 
-    "transaction rollback" in withConnectedSession { session =>
+    "transaction rollback" in withConnectedSession { (session, _) =>
       Await.result(session.execute("CREATE TABLE t (id INT)"), 5.seconds)
       Await.result(session.execute("BEGIN"), 5.seconds)
       Await.result(session.execute("INSERT INTO t VALUES (1)"), 5.seconds)
@@ -123,29 +123,27 @@ class IntegrationTests extends AnyFreeSpec with Matchers:
       results.head.asInstanceOf[QueryResult].table.data.length shouldBe 0
     }
 
-    "two independent sessions see committed data" in withConnectedSession { session1 =>
-      val loop   = new EventLoop
-      val db     = new MemoryDB
-      val server = new PetraServer(loop, db, port = 0)
-      server.start()
-      val port   = server.actualPort
-      val thread = new Thread(() => loop.run())
-      thread.setDaemon(true)
-      thread.start()
-      Thread.sleep(100)
+    "two sessions on same server see each other's committed data" in withConnectedSession { (session1, port) =>
       val session2 = Session(SessionOptions(port = port))
       Await.result(session2.connect(), 5.seconds)
       try
-        // Note: session1 and session2 connect to different server instances
-        // and thus different DBs — this tests isolation within one server
-        Await.result(session1.execute("CREATE TABLE t (id INT)"), 5.seconds)
-        Await.result(session1.execute("INSERT INTO t VALUES (42)"), 5.seconds)
+        Await.result(session1.execute("CREATE TABLE t (id INT, name TEXT)"), 5.seconds)
+        Await.result(session1.execute("INSERT INTO t VALUES (1, 'from-session-1')"), 5.seconds)
 
-        val results = Await.result(session1.execute("SELECT * FROM t"), 5.seconds)
-        results.head.asInstanceOf[QueryResult].table.data(0).getInt("id") shouldBe 42
+        // session2 should see data committed by session1
+        val r1    = Await.result(session2.execute("SELECT * FROM t"), 5.seconds)
+        val table = r1.head.asInstanceOf[QueryResult].table
+        table.data.length shouldBe 1
+        table.data(0).getString("name") shouldBe "from-session-1"
+
+        // session2 inserts its own row
+        Await.result(session2.execute("INSERT INTO t VALUES (2, 'from-session-2')"), 5.seconds)
+
+        // session1 sees both rows
+        val r2    = Await.result(session1.execute("SELECT COUNT(*) FROM t"), 5.seconds)
+        val count = r2.head.asInstanceOf[QueryResult].table.data(0).data(0)
+        count.asInstanceOf[NumberValue].value.intValue shouldBe 2
       finally
         Await.ready(session2.close(), 5.seconds)
-        server.stop(() => loop.stop())
-        thread.join(3000)
     }
   }
