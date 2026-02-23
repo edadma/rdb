@@ -14,7 +14,7 @@ npm install @petradb/engine
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.0"
 ```
 
 ## Quick Start
@@ -110,6 +110,20 @@ db2.close()
 ```
 
 Persistent databases use crash-safe atomic writes via [stow](https://github.com/edadma/stow), with copy-on-write pages and double-buffered headers. All DDL and DML operations are durable — the catalog (table definitions, enum types, auto-increment state) and row data are persisted automatically.
+
+### Scala (Text File)
+
+`TextDB` stores the database as a human-editable `.ptxt` file — useful for development, configuration data, and version control.
+
+```scala
+import io.github.edadma.petradb.*
+
+val db = TextDB.open("mydata.ptxt")
+given Session = db.connect()
+
+executeSQL("CREATE TABLE settings (key TEXT, value TEXT)")
+executeSQL("INSERT INTO settings VALUES ('theme', 'dark')")
+```
 
 ## Overview
 

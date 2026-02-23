@@ -8,7 +8,7 @@ description: Using PetraDB from Scala on JVM, JS, and Native.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.0"
 ```
 
 The `%%%` operator selects the correct artifact for your platform (JVM, Scala.js, or Scala Native).
@@ -85,6 +85,36 @@ db.close()
 All tables, data, enum types, and auto-increment state are restored when you reopen.
 
 Persistent databases use copy-on-write pages and double-buffered headers for crash safety. All DDL and DML operations are durable.
+
+## Text Database
+
+`TextDB` stores the database as a human-editable `.ptxt` file. It loads into memory on open and rewrites the file after every change. Ideal for early development, configuration, and version control.
+
+```scala
+import io.github.edadma.petradb.*
+
+val db = TextDB.open("mydata.ptxt")
+given Session = db.connect()
+
+executeSQL("""
+  CREATE TABLE settings (key TEXT, value TEXT);
+  INSERT INTO settings (key, value) VALUES ('theme', 'dark');
+""")
+
+db.close()
+```
+
+Reopen the same file to restore all data:
+
+```scala
+val db = TextDB.open("mydata.ptxt")
+given Session = db.connect()
+
+val results = executeSQL("SELECT * FROM settings")
+results.foreach(println)
+```
+
+Works on JVM and Native. The `.ptxt` format is human-readable and diff-friendly. Use `PersistentDB` when you need crash-safe durability for production data.
 
 ## Executing SQL
 

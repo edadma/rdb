@@ -99,6 +99,7 @@ UPDATE ... SET ... WHERE
 UPDATE ... SET ... FROM ...    -- bulk update with join semantics
 DELETE FROM ... WHERE
 TRUNCATE TABLE                 -- fast table reset, resets serial sequences
+INSERT ... ON CONFLICT (col) DO UPDATE SET ... -- upsert with EXCLUDED pseudo-table
 ```
 
 ### Queries

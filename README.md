@@ -18,6 +18,7 @@ PetraDB is designed to provide a lightweight, embeddable SQL database for applic
 - **Data processing** - In-memory analytics and transformations
 - **Embedded systems** - Native compilation for resource-constrained environments
 - **Persistent storage** - Crash-safe durable storage backed by [stow](https://github.com/edadma/stow)
+- **Text storage** - Human-editable `.ptxt` files — great for early development and version control
 
 ## Installation
 
@@ -30,7 +31,7 @@ npm install @petradb/engine
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.0.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.0"
 ```
 
 ## Basic Usage
@@ -238,6 +239,13 @@ RETURNING id;
 -- Insert from a query
 INSERT INTO archive (customer_name, amount)
 SELECT customer_name, amount FROM orders WHERE status = 'delivered';
+
+-- Upsert — insert or update on conflict
+INSERT INTO orders (id, customer_name, amount)
+VALUES ('ord-1', 'Alice Smith', 149.99)
+ON CONFLICT (id) DO UPDATE SET
+  customer_name = EXCLUDED.customer_name,
+  amount        = EXCLUDED.amount;
 
 UPDATE orders SET status = 'shipped' WHERE amount > 100;
 
@@ -536,6 +544,10 @@ given Session = db.connect()
 
 // Reopen existing
 val db = PersistentDB.open("path/to/db")
+given Session = db.connect()
+
+// Text database — human-editable .ptxt file (creates or opens)
+val db = TextDB.open("path/to/db.ptxt")
 given Session = db.connect()
 
 // Execute SQL and get results
