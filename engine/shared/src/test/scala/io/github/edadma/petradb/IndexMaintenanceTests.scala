@@ -2,12 +2,7 @@ package io.github.edadma.petradb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
-
-  private def suppressStderr[A](block: => A): A =
-    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
 
   private def execDB(sql: String): (Seq[Result], DB) =
     given session: Session = new MemoryDB().connect()
@@ -19,17 +14,15 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
 
   "INSERT maintains indexes" - {
     "unique index rejects duplicate on insert" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          queryTable(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
-              |INSERT INTO t (id, name) VALUES (1, 'Alice');
-              |INSERT INTO t (id, name) VALUES (1, 'Bob');
-              |SELECT * FROM t;
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (1, 'Bob');
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
       }
     }
 
@@ -75,17 +68,15 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       table.data.length shouldBe 2
 
       // Now try a duplicate — should fail but not leave a ghost row
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          queryTable(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
-              |INSERT INTO t (id, name) VALUES (1, 'Alice');
-              |INSERT INTO t (id, name) VALUES (1, 'Bob');
-              |SELECT * FROM t;
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (1, 'Bob');
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
       }
     }
 
@@ -99,10 +90,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       )
 
       given Session = db.connect()
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
       }
       val result = executeSQL("SELECT * FROM t;")
       val table = result.collect { case QueryResult(t) => t }.head
@@ -122,10 +111,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
 
       given Session = db.connect()
       // id=2 is unique but name='Alice' is duplicate — should fail and roll back
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Alice');")
       }
       val result = executeSQL("SELECT * FROM t;")
       val table = result.collect { case QueryResult(t) => t }.head
@@ -149,10 +136,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       )
 
       given Session = db.connect()
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
       }
       // Original data should be intact
       val result = executeSQL("SELECT * FROM t ORDER BY id;")
@@ -164,10 +149,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       table.data(1).data(1) shouldBe TextValue("Bob")
 
       // The original key should still be in the index
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")
       }
     }
 
@@ -180,10 +163,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       )
 
       given Session = db.connect()
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("UPDATE t SET id = NULL WHERE id = 1;")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = NULL WHERE id = 1;")
       }
       val result = executeSQL("SELECT * FROM t;")
       val table = result.collect { case QueryResult(t) => t }.head
@@ -199,10 +180,8 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
       )
 
       given Session = db.connect()
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'Alice');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'Alice');")
       }
       val result = executeSQL("SELECT * FROM t;")
       val table = result.collect { case QueryResult(t) => t }.head
@@ -210,17 +189,15 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
     }
 
     "PK constraint enforced via auto-index" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          queryTable(
-            """
-              |CREATE TABLE t (id INTEGER, PRIMARY KEY (id));
-              |INSERT INTO t (id) VALUES (1);
-              |INSERT INTO t (id) VALUES (1);
-              |SELECT * FROM t;
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, PRIMARY KEY (id));
+            |INSERT INTO t (id) VALUES (1);
+            |INSERT INTO t (id) VALUES (1);
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
       }
     }
   }
@@ -306,19 +283,17 @@ class IndexMaintenanceTests extends AnyFreeSpec with Matchers:
     }
 
     "update violating unique constraint fails" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          queryTable(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT);
-              |CREATE UNIQUE INDEX idx ON t (id);
-              |INSERT INTO t (id, name) VALUES (1, 'Alice');
-              |INSERT INTO t (id, name) VALUES (2, 'Bob');
-              |UPDATE t SET id = 2 WHERE id = 1;
-              |SELECT * FROM t;
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        queryTable(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |CREATE UNIQUE INDEX idx ON t (id);
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (2, 'Bob');
+            |UPDATE t SET id = 2 WHERE id = 1;
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
       }
     }
 
@@ -347,10 +322,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
       executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id) VALUES (1);")
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id) VALUES (1);")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id) VALUES (1);")
       }
       db.close()
     }
@@ -382,10 +355,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       // Reopen and verify PK constraint still works
       val db2 = PersistentDB.open(tmpFile)
 
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")(using db2.connect())
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Charlie');")(using db2.connect())
       }
 
       // But a new unique value should work
@@ -403,10 +374,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
       executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
       executeSQL("INSERT INTO t (id, name) VALUES (2, 'Bob');")
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("UPDATE t SET id = 2 WHERE id = 1;")
       }
       db.close()
     }
@@ -508,10 +477,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       given Session = db.connect()
 
       executeSQL("CREATE TABLE t (id INTEGER, name TEXT, PRIMARY KEY (id));")
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (1, 'Charlie');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (1, 'Charlie');")
       }
       db.close()
     }
@@ -548,10 +515,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
       val db2 = PersistentDB.open(tmpFile)
       // PK constraint still enforced after reopen
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO t (id, name) VALUES (2, 'Duplicate');")(using db2.connect())
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO t (id, name) VALUES (2, 'Duplicate');")(using db2.connect())
       }
       val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2.connect())
       val table = result.collect { case QueryResult(t) => t }.head
@@ -572,10 +537,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
       executeSQL(s"INSERT INTO t (id, name) VALUES (2, '$longB');")
 
       // Duplicate long key should fail
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")
       }
 
       val result = executeSQL("SELECT id FROM t ORDER BY id;")
@@ -617,10 +580,8 @@ class PersistentIndexMaintenanceTests extends PersistentTestBase:
 
       val db2 = PersistentDB.open(tmpFile)
       // Unique constraint still enforced after reopen
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")(using db2.connect())
-        }
+      assertThrows[RuntimeException] {
+        executeSQL(s"INSERT INTO t (id, name) VALUES (3, '$longA');")(using db2.connect())
       }
       executeSQL(s"INSERT INTO t (id, name) VALUES (3, 'short');")(using db2.connect())
       val result = executeSQL("SELECT * FROM t ORDER BY id;")(using db2.connect())

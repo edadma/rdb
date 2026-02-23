@@ -87,7 +87,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
         scalarFunction get func.toLowerCase match
           case None =>
             aggregateFunction get func.toLowerCase match
-              case None    => problem(id, s"unknown function '$func'")
+              case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
               case Some(f) =>
                 val (instance, typ) = f.instantiate
 
@@ -95,7 +95,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           case Some(f) => ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
-        case None    => problem(id, s"unknown variable '$name'")
+        case None    => throw UndefinedReferenceException(id.pos, s"unknown variable '$name'")
         case Some(v) => VariableInstanceExpr(v.instance)
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery)) setType BooleanType
     case UnaryExpr(op, expr)  =>
@@ -168,12 +168,12 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             ) setType BooleanType,
           ) setType BooleanType
     case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit, _) =>
-      if where.isDefined then problem(where.get, "WHERE clause not allowed here")
-      if groupBy.isDefined then problem(where.get, "GROUP BY clause not allowed here")
-      if having.isDefined then problem(where.get, "HAVING clause not allowed here")
-      if orderBy.isDefined then problem(where.get, "ORDER BY clause not allowed here")
-      if offset.isDefined then problem(offset.get.pos, "OFFSET clause not allowed here")
-      if limit.isDefined then problem(limit.get.pos, "LIMIT clause not allowed here")
+      if where.isDefined then throw ParseException(where.get.pos, "WHERE clause not allowed here")
+      if groupBy.isDefined then throw ParseException(where.get.pos, "GROUP BY clause not allowed here")
+      if having.isDefined then throw ParseException(where.get.pos, "HAVING clause not allowed here")
+      if orderBy.isDefined then throw ParseException(where.get.pos, "ORDER BY clause not allowed here")
+      if offset.isDefined then throw ParseException(offset.get.pos, "OFFSET clause not allowed here")
+      if limit.isDefined then throw ParseException(limit.get.pos, "LIMIT clause not allowed here")
 
       val rewritten_projs = exprs map rewrite
 
@@ -288,14 +288,14 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val r5 =
         offset match
           case Some(Count(pos, count)) =>
-            if count < 0 then problem(pos, s"offset should be non-negative: $count")
+            if count < 0 then throw ExecutionException(pos, s"offset should be non-negative: $count")
 
             OffsetOperator(r_distinct, count)
           case None => r_distinct
       val r6 =
         limit match
           case Some(Count(pos, count)) =>
-            if count < 1 then problem(pos, s"limit should be positive: $count")
+            if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
 
             LimitOperator(r5, count)
           case None => r5
@@ -319,13 +319,13 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val r2 =
         offset match
           case Some(Count(pos, count)) =>
-            if count < 0 then problem(pos, s"offset should be non-negative: $count")
+            if count < 0 then throw ExecutionException(pos, s"offset should be non-negative: $count")
             OffsetOperator(r1, count)
           case None => r1
       val r3 =
         limit match
           case Some(Count(pos, count)) =>
-            if count < 1 then problem(pos, s"limit should be positive: $count")
+            if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
             LimitOperator(r2, count)
           case None => r2
       rewrite(r3)
@@ -364,7 +364,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case TableOperator(id @ Ident(name))  =>
       session.db.getTable(name) match
         case Some(t) => ProcessOperator(t)
-        case None    => problem(id, s"table '$name' not found")
+        case None    => throw UndefinedReferenceException(id.pos, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
       val rewritten_proc  = procRewrite(rel)

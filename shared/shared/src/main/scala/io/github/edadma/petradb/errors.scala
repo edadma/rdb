@@ -1,17 +1,13 @@
 package io.github.edadma.petradb
 
-import scala.util.parsing.input.{Position, Positional}
+import scala.util.parsing.input.Position
 
-def problem(p: Positional, msg: String): Nothing = problem(p.pos, msg)
+sealed abstract class PetraException(msg: String) extends RuntimeException(msg):
+  def pos: Position
 
-def problem(pos: Position, msg: String): Nothing =
-  printError(pos, msg)
-  sys.error(msg)
-
-def printError(pos: Position, msg: String): Unit =
-  if (pos eq null)
-    Console.err.println(msg)
-  else if (pos.line == 1)
-    Console.err.println(s"$msg\n${pos.longString}")
-  else
-    Console.err.println(s"${pos.line}: $msg\n${pos.longString}")
+case class ParseException(pos: Position, msg: String)              extends PetraException(msg)
+case class UndefinedReferenceException(pos: Position, msg: String) extends PetraException(msg)
+case class SchemaException(pos: Position, msg: String)             extends PetraException(msg)
+case class TypeException(pos: Position, msg: String)               extends PetraException(msg)
+case class ConstraintException(pos: Position, msg: String)         extends PetraException(msg)
+case class ExecutionException(pos: Position, msg: String)          extends PetraException(msg)

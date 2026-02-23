@@ -91,14 +91,11 @@ class TruncateTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "unknown table fails" in {
-      suppressStderr {
-        an[Exception] should be thrownBy results("TRUNCATE TABLE nonexistent;")
-      }
+      an[Exception] should be thrownBy results("TRUNCATE TABLE nonexistent;")
     }
 
     "FK constraint prevents truncate when referenced" in {
-      suppressStderr {
-        an[Exception] should be thrownBy results(
+      an[Exception] should be thrownBy results(
         """
           |CREATE TABLE parents (id INT, PRIMARY KEY (id));
           |INSERT INTO parents (id) VALUES (1), (2);
@@ -106,8 +103,7 @@ class TruncateTests extends AnyFreeSpec with Matchers with Testing {
           |INSERT INTO children (id, parent_id) VALUES (10, 1);
           |TRUNCATE TABLE parents;
           |""".trim.stripMargin
-        )
-      }
+      )
     }
 
     "truncate succeeds when no child rows reference it" in {

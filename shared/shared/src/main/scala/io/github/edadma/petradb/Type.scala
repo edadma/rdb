@@ -10,7 +10,7 @@ import scala.util.matching.Regex
 trait Type(val name: String):
   def convert(v: Value): Value =
     if v.isNull then v
-    else if v.vtyp != this then problem(v, s"can't auto-convert '$v' to type '$name'")
+    else if v.vtyp != this then throw TypeException(v.pos, s"can't auto-convert '$v' to type '$name'")
     else v
 
   def isNumber: Boolean = false
@@ -27,18 +27,18 @@ case object SmallintType extends Type("smallint"):
     v match
       case n @ NumberValue(DIntType, v) =>
         val i = v.intValue
-        if i < -32768 || i > 32767 then problem(n, s"value $i out of smallint range (-32768..32767)")
+        if i < -32768 || i > 32767 then throw TypeException(n.pos, s"value $i out of smallint range (-32768..32767)")
         n
       case NumberValue(_, n) =>
         val i = n.intValue
-        if i < -32768 || i > 32767 then problem(v, s"value $i out of smallint range (-32768..32767)")
+        if i < -32768 || i > 32767 then throw TypeException(v.pos, s"value $i out of smallint range (-32768..32767)")
         NumberValue(i)
       case TextValue(s) =>
         try
           val i = s.trim.toInt
-          if i < -32768 || i > 32767 then problem(v, s"value $i out of smallint range (-32768..32767)")
+          if i < -32768 || i > 32767 then throw TypeException(v.pos, s"value $i out of smallint range (-32768..32767)")
           NumberValue(i)
-        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to smallint")
+        catch case _: NumberFormatException => throw TypeException(v.pos, s"cannot cast '$s' to smallint")
       case _ => super.convert(v)
 
   override def init: Value = ONE
@@ -53,7 +53,7 @@ case object IntegerType extends Type("integer"):
       case BooleanValue(b)             => NumberValue(if b then 1 else 0)
       case TextValue(s) =>
         try NumberValue(s.trim.toInt)
-        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to integer")
+        catch case _: NumberFormatException => throw TypeException(v.pos, s"cannot cast '$s' to integer")
       case _ => super.convert(v)
 
   override def init: Value = ONE
@@ -67,7 +67,7 @@ case object BigintType extends Type("bigint"):
       case NumberValue(_, n)                        => NumberValue(DLongType, n.longValue)
       case TextValue(s) =>
         try NumberValue(DLongType, s.trim.toLong)
-        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to bigint")
+        catch case _: NumberFormatException => throw TypeException(v.pos, s"cannot cast '$s' to bigint")
       case _ => super.convert(v)
 
   override def init: Value = ONE
@@ -79,7 +79,7 @@ case object SmallSerialType extends Type("smallserial"):
     v match
       case n @ NumberValue(DIntType, v) =>
         val i = v.intValue
-        if i < -32768 || i > 32767 then problem(n, s"value $i out of smallint range (-32768..32767)")
+        if i < -32768 || i > 32767 then throw TypeException(n.pos, s"value $i out of smallint range (-32768..32767)")
         n
       case _ => super.convert(v)
 
@@ -115,7 +115,7 @@ case object DoubleType extends Type("double"):
       case BooleanValue(b)                            => NumberValue(if b then 1.0 else 0.0)
       case TextValue(s) =>
         try NumberValue(s.trim.toDouble)
-        catch case _: NumberFormatException => problem(v, s"cannot cast '$s' to double")
+        catch case _: NumberFormatException => throw TypeException(v.pos, s"cannot cast '$s' to double")
       case _ => super.convert(v)
 
 case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
@@ -164,7 +164,7 @@ case object UUIDType extends Type("uuid"):
       case id: UUIDValue => id
       case _             =>
         val textVal = v.toText
-        if !valid(textVal.s) then problem(v, "invalid version 4 UUID")
+        if !valid(textVal.s) then throw TypeException(v.pos, "invalid version 4 UUID")
         UUIDValue(textVal.s)
 
   override def init: Value = UUIDValue.generate
@@ -197,7 +197,7 @@ case object DateType extends Type("date"):
         catch
           case _: DateTimeParseException =>
             try DateValue(LocalDate.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd")))
-            catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as date")
+            catch case _: DateTimeParseException => throw TypeException(v.pos, s"cannot parse '$s' as date")
 
 case object TimeType extends Type("time"):
   override def convert(v: Value): Value =
@@ -211,7 +211,7 @@ case object TimeType extends Type("time"):
         catch
           case _: DateTimeParseException =>
             try TimeValue(LocalTime.parse(s, DateTimeFormatter.ofPattern("HH:mm")))
-            catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as time")
+            catch case _: DateTimeParseException => throw TypeException(v.pos, s"cannot parse '$s' as time")
 
 case object TimeTZType extends Type("timetz"):
   override def convert(v: Value): Value =
@@ -225,7 +225,7 @@ case object TimeTZType extends Type("timetz"):
         catch
           case _: DateTimeParseException =>
             try TimeTZValue(OffsetTime.parse(s, DateTimeFormatter.ofPattern("HH:mm:ssXXX")))
-            catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as timetz")
+            catch case _: DateTimeParseException => throw TypeException(v.pos, s"cannot parse '$s' as timetz")
 
 case object IntervalType extends Type("interval"):
   private val simplePattern = """(?i)(?:(\d+)\s*days?)?[,\s]*(?:(\d+)\s*hours?)?[,\s]*(?:(\d+)\s*minutes?)?[,\s]*(?:(\d+)\s*seconds?)?""".r
@@ -245,9 +245,9 @@ case object IntervalType extends Type("interval"):
                 val minutes = Option(m.group(3)).map(_.toLong).getOrElse(0L)
                 val seconds = Option(m.group(4)).map(_.toLong).getOrElse(0L)
                 if days == 0 && hours == 0 && minutes == 0 && seconds == 0 then
-                  problem(v, s"cannot parse '$s' as interval")
+                  throw TypeException(v.pos, s"cannot parse '$s' as interval")
                 IntervalValue(Duration.ofDays(days).plusHours(hours).plusMinutes(minutes).plusSeconds(seconds))
-              case None => problem(v, s"cannot parse '$s' as interval")
+              case None => throw TypeException(v.pos, s"cannot parse '$s' as interval")
 
 case object TimestampTZType extends Type("timestamptz"):
   override def convert(v: Value): Value =
@@ -258,7 +258,7 @@ case object TimestampTZType extends Type("timestamptz"):
       case _ =>
         val s = v.toText.s
         try TimestampTZValue(OffsetDateTime.parse(s))
-        catch case _: DateTimeParseException => problem(v, s"cannot parse '$s' as timestamp with time zone")
+        catch case _: DateTimeParseException => throw TypeException(v.pos, s"cannot parse '$s' as timestamp with time zone")
 
 case object ByteaType extends Type("bytea"):
   override def convert(v: Value): Value =
@@ -268,11 +268,11 @@ case object ByteaType extends Type("bytea"):
         val s = v.toText.s
         if s.startsWith("\\x") || s.startsWith("\\X") then
           val hex = s.drop(2)
-          if hex.length % 2 != 0 then problem(v, "invalid hex string: odd length")
+          if hex.length % 2 != 0 then throw TypeException(v.pos, "invalid hex string: odd length")
           try
             val bytes = hex.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
             ByteaValue(bytes)
-          catch case _: NumberFormatException => problem(v, s"invalid hex string: '$hex'")
+          catch case _: NumberFormatException => throw TypeException(v.pos, s"invalid hex string: '$hex'")
         else
           ByteaValue(s.getBytes("UTF-8"))
 
@@ -307,7 +307,7 @@ case object BooleanType extends Type("boolean"):
         s.trim.toLowerCase match
           case "true" | "t" | "yes" | "y" | "1" | "on"    => BooleanValue(true)
           case "false" | "f" | "no" | "n" | "0" | "off"   => BooleanValue(false)
-          case _ => problem(v, s"cannot cast '$s' to boolean")
+          case _ => throw TypeException(v.pos, s"cannot cast '$s' to boolean")
       case _ => super.convert(v)
 
 case object TableType extends Type("table")

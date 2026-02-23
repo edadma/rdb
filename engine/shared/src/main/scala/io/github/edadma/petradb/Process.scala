@@ -51,7 +51,7 @@ case class IndexScanProcess(table: Table, index: TableIndex, lookup: IndexLookup
         }
       case InQueryLookup(query) =>
         val res = teval(query, ctx)
-        if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
+        if res.meta.width != 1 then throw ExecutionException(query.pos, "sub-query must return rows of one column")
         res.data.map(_.data.head).distinct.iterator.flatMap { v =>
           table.indexPointScan(index, IndexedSeq(v)).getOrElse(Iterator.empty)
         }
@@ -123,7 +123,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Proc
         val lookupName = table.map(t => s"${t.name}.$name").getOrElse(name)
 
         lookup(lookupName, ctx) match
-          case None             => problem(c, s"'$lookupName' not found")
+          case None             => throw UndefinedReferenceException(c.pos, s"'$lookupName' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
       case (expr: Expr, _) => ColumnMetadata(None, exprToSQL(expr), expr.typ)
     })

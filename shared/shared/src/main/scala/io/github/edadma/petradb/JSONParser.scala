@@ -96,5 +96,5 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
 
     phrase(json)(tokens) match
       case Success(result, _)   => result
-      case Failure(error, rest) => problem(rest.pos, error)
-      case Error(error, rest)   => problem(rest.pos, error)
+      case Failure(error, rest) => throw ParseException(rest.pos, error)
+      case Error(error, rest)   => throw ParseException(rest.pos, error)

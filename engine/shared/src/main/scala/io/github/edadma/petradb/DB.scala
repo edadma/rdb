@@ -377,7 +377,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
       for (((i, v), s) <- mapping zip r zip specs)
         if v.isNull then
-          if s.required then problem(v, s"column '${s.name}' is required")
+          if s.required then throw ConstraintException(v.pos, s"column '${s.name}' is required")
           else arr(i) = v
         else arr(i) = s.typ.convert(v)
 
@@ -412,7 +412,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
       if returning.isDefined then
         val idx =
-          columnMap getOrElse (returning.get.name, problem(returning.get, s"column '${returning.get.name}' not found"))
+          columnMap.getOrElse(returning.get.name, throw UndefinedReferenceException(returning.get.pos, s"column '${returning.get.name}' not found"))
 
         result += (returning.get.name -> arr(idx))
 

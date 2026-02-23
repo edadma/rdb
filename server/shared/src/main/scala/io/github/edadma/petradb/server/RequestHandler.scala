@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{executeSQL, Session}
+import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseException, TypeException, UndefinedReferenceException, SchemaException, ConstraintException}
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 
@@ -26,8 +26,14 @@ object RequestHandler:
     val results =
       try executeSQL(requestBody)(using session)
       catch
-        case e: Exception =>
+        case e: (ParseException | TypeException | UndefinedReferenceException) =>
           return errorResponse(400, e.getMessage)
+        case e: (SchemaException | ConstraintException) =>
+          return errorResponse(409, e.getMessage)
+        case e: PetraException =>
+          return errorResponse(500, e.getMessage)
+        case e: Exception =>
+          return errorResponse(500, e.getMessage)
 
     HandlerResponse(200, writeBinary(results.toSeq))
 

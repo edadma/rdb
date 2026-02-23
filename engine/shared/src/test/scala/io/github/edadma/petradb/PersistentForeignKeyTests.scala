@@ -26,10 +26,8 @@ class PersistentForeignKeyTests extends PersistentTestBase:
       val db = PersistentDB.open(tmpFile)
       given Session = db.connect()
       // FK enforcement still works after reopen
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Bob', 99);")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Bob', 99);")
       }
       // Valid insert still works
       executeSQL("INSERT INTO employees (name, dept_id) VALUES ('Bob', 1);")
@@ -89,10 +87,8 @@ class PersistentForeignKeyTests extends PersistentTestBase:
     locally {
       val db = PersistentDB.open(tmpFile)
       given Session = db.connect()
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          executeSQL("INSERT INTO child (parent_id) VALUES (99);")
-        }
+      assertThrows[RuntimeException] {
+        executeSQL("INSERT INTO child (parent_id) VALUES (99);")
       }
       executeSQL("INSERT INTO child (parent_id) VALUES (1);")
       db.close()

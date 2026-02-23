@@ -649,14 +649,12 @@ class QueryTests extends AnyFreeSpec with Matchers with Testing {
 
   "SELECT * without FROM" - {
     "rejects SELECT * followed by bare identifier" in {
-      suppressStderr {
-        an[Exception] should be thrownBy query(
-          s"""
-            |$setup
-            |SELECT * products;
-            |""".trim.stripMargin
-        )
-      }
+      an[Exception] should be thrownBy query(
+        s"""
+          |$setup
+          |SELECT * products;
+          |""".trim.stripMargin
+      )
     }
 
     "allows SELECT * FROM table" in {

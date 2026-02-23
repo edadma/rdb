@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.util.parsing.input.{Position, Positional}
 
 trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
-  def toText: TextValue = problem(pos, "cannot be converted to text")
+  def toText: TextValue = throw TypeException(pos, "cannot be converted to text")
 
   def render: String = string
 
@@ -19,13 +19,13 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
     if this.isNull && that.isNull then 0
     else if this.isNull then -1
     else if that.isNull then 1
-    else if vtyp != that.vtyp then problem(pos, s"'$this' can't be compared to '$that''")
+    else if vtyp != that.vtyp then throw TypeException(pos, s"'$this' can't be compared to '$that''")
     else if this == that then 0
-    else problem(pos, s"'$this' can't be compared to '$that''")
+    else throw TypeException(pos, s"'$this' can't be compared to '$that''")
 
   def isNull: Boolean = isInstanceOf[NullValue]
 
-  def next: Value = problem(pos, "can't generate next value")
+  def next: Value = throw ExecutionException(pos, "can't generate next value")
 
 case class NumberValue(typ: dal.Type, value: Number) extends Value(NumberType) with TypedNumber:
   override def toText: TextValue = TextValue(value.toString)
@@ -205,7 +205,7 @@ case class TextValue(s: String) extends Value(TextType):
       case TextValue(t)    => s compare t
       case EnumValue(v, t) =>
         t.labelsMap get s match
-          case None    => problem(pos, s"'$s' is not a label of enum '${t.name}'")
+          case None    => throw TypeException(pos, s"'$s' is not a label of enum '${t.name}'")
           case Some(l) => l compare v
       case _ => super.compare(that)
 

@@ -689,23 +689,23 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       for c <- constraints do
         c match
           case ColPrimaryKey =>
-            if primaryKey then problem(name, s"duplicate PRIMARY KEY constraint on column '${name.name}'")
+            if primaryKey then throw SchemaException(name.pos, s"duplicate PRIMARY KEY constraint on column '${name.name}'")
             primaryKey = true
           case ColNotNull =>
-            if required then problem(name, s"duplicate NOT NULL constraint on column '${name.name}'")
+            if required then throw SchemaException(name.pos, s"duplicate NOT NULL constraint on column '${name.name}'")
             required = true
           case ColNull => () // explicit NULL (nullable), the default
           case ColUnique =>
-            if unique then problem(name, s"duplicate UNIQUE constraint on column '${name.name}'")
+            if unique then throw SchemaException(name.pos, s"duplicate UNIQUE constraint on column '${name.name}'")
             unique = true
           case ColDefault(expr) =>
-            if default.isDefined then problem(name, s"duplicate DEFAULT clause on column '${name.name}'")
+            if default.isDefined then throw SchemaException(name.pos, s"duplicate DEFAULT clause on column '${name.name}'")
             default = Some(expr)
           case ColReferences(table, column, onDel, onUpd) =>
-            if references.isDefined then problem(name, s"duplicate REFERENCES constraint on column '${name.name}'")
+            if references.isDefined then throw SchemaException(name.pos, s"duplicate REFERENCES constraint on column '${name.name}'")
             references = Some((table, column, onDel, onUpd))
           case ColCheck(expr) =>
-            if check.isDefined then problem(name, s"duplicate CHECK constraint on column '${name.name}'")
+            if check.isDefined then throw SchemaException(name.pos, s"duplicate CHECK constraint on column '${name.name}'")
             check = Some(expr)
 
       ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
@@ -816,8 +816,8 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
 
     phrase(parser)(tokens) match
       case Success(result, _)   => result
-      case Failure(error, rest) => problem(rest.pos, error)
-      case Error(error, rest)   => problem(rest.pos, error)
+      case Failure(error, rest) => throw ParseException(rest.pos, error)
+      case Error(error, rest)   => throw ParseException(rest.pos, error)
 
   def parseQuery(input: String): Expr = parse(input, query)
 

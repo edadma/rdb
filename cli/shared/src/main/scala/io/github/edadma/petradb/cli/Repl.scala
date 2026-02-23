@@ -66,7 +66,15 @@ class Repl(session: Session, rl: ReadLine):
       val results = executeSQL(sql)
       results.foreach(Output.printResult)
     catch
-      case e: Exception => println(s"Error: ${e.getMessage}")
+      case e: PetraException =>
+        val pos = e.pos
+        if pos == null || pos.line == 0 then
+          Console.err.println(e.getMessage)
+        else if pos.line == 1 then
+          Console.err.println(s"${e.getMessage}\n${pos.longString}")
+        else
+          Console.err.println(s"${pos.line}: ${e.getMessage}\n${pos.longString}")
+      case e: Exception => Console.err.println(s"Error: ${e.getMessage}")
 
   def executeFile(path: String): Unit =
     try

@@ -48,7 +48,7 @@ val aggregateFunction: Map[String, AggregateFunction] =
                 sum = BasicDAL.compute(PLUS, sum, v, NumberValue.from)
                 sum
               case Seq(v) if v.isNull => sum
-              case Seq(v) => problem(v, "only numbers can be summed")
+              case Seq(v) => throw TypeException(v.pos, "only numbers can be summed")
 
             def result: NumberValue = sum
 
@@ -75,12 +75,12 @@ val aggregateFunction: Map[String, AggregateFunction] =
                       minValue match
                         case n2: NumberValue =>
                           if n1.value.doubleValue < n2.value.doubleValue then minValue = n1
-                        case _ => problem(v, "inconsistent types in min")
+                        case _ => throw TypeException(v.pos, "inconsistent types in min")
                     case t1: TextValue =>
                       minValue match
                         case t2: TextValue =>
                           if t1.s < t2.s then minValue = t1
-                        case _ => problem(v, "inconsistent types in min")
+                        case _ => throw TypeException(v.pos, "inconsistent types in min")
                     case _ =>
                       if v.toString < minValue.toString then minValue = v
                 minValue
@@ -113,12 +113,12 @@ val aggregateFunction: Map[String, AggregateFunction] =
                       maxValue match
                         case n2: NumberValue =>
                           if n1.value.doubleValue > n2.value.doubleValue then maxValue = n1
-                        case _ => problem(v, "inconsistent types in max")
+                        case _ => throw TypeException(v.pos, "inconsistent types in max")
                     case t1: TextValue =>
                       maxValue match
                         case t2: TextValue =>
                           if t1.s > t2.s then maxValue = t1
-                        case _ => problem(v, "inconsistent types in max")
+                        case _ => throw TypeException(v.pos, "inconsistent types in max")
                     case _ =>
                       if v.toString > maxValue.toString then maxValue = v
                 maxValue
@@ -146,7 +146,7 @@ val aggregateFunction: Map[String, AggregateFunction] =
                 count += 1
                 sum
               case Seq(v) if v.isNull => sum
-              case Seq(v) => problem(v, "only numbers can be averaged")
+              case Seq(v) => throw TypeException(v.pos, "only numbers can be averaged")
 
             def result: Value =
               if count > 0 then NumberValue(sum.value.doubleValue / count.toDouble)

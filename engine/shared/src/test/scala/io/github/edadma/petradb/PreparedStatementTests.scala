@@ -2,13 +2,7 @@ package io.github.edadma.petradb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 class PreparedStatementTests extends AnyFreeSpec with Matchers:
-
-  private def suppressStderr[A](block: => A): A =
-    val devNull = new PrintStream(new ByteArrayOutputStream())
-    Console.withErr(devNull)(block)
 
   private def query(sql: String): TableValue =
     given Session = new MemoryDB().connect()
@@ -129,33 +123,27 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
 
     "EXECUTE non-existent statement fails" in {
       assertThrows[RuntimeException] {
-        suppressStderr {
-          given Session = new MemoryDB().connect()
-          executeSQL("EXECUTE nonexistent(1)")
-        }
+        given Session = new MemoryDB().connect()
+        executeSQL("EXECUTE nonexistent(1)")
       }
     }
 
     "DEALLOCATE non-existent statement fails" in {
       assertThrows[RuntimeException] {
-        suppressStderr {
-          given Session = new MemoryDB().connect()
-          executeSQL("DEALLOCATE nonexistent")
-        }
+        given Session = new MemoryDB().connect()
+        executeSQL("DEALLOCATE nonexistent")
       }
     }
 
     "duplicate PREPARE fails" in {
       assertThrows[RuntimeException] {
-        suppressStderr {
-          given Session = new MemoryDB().connect()
-          executeSQL(
-            """
-              |PREPARE q AS SELECT 1;
-              |PREPARE q AS SELECT 2;
-              |""".trim.stripMargin
-          )
-        }
+        given Session = new MemoryDB().connect()
+        executeSQL(
+          """
+            |PREPARE q AS SELECT 1;
+            |PREPARE q AS SELECT 2;
+            |""".trim.stripMargin
+        )
       }
     }
   }
@@ -254,17 +242,15 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
   "Parameter validation" - {
     "unbound parameter $3 when only 2 params provided" in {
       assertThrows[RuntimeException] {
-        suppressStderr {
-          given session: Session = new MemoryDB().connect()
-          executeSQL(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT);
-              |INSERT INTO t (id, name) VALUES (1, 'Alice');
-              |""".trim.stripMargin
-          )
-          val ps = session.prepare("SELECT * FROM t WHERE id = $3")
-          ps.execute(NumberValue(1), NumberValue(2))
-        }
+        given session: Session = new MemoryDB().connect()
+        executeSQL(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |""".trim.stripMargin
+        )
+        val ps = session.prepare("SELECT * FROM t WHERE id = $3")
+        ps.execute(NumberValue(1), NumberValue(2))
       }
     }
 

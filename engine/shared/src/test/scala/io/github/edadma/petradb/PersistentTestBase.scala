@@ -4,15 +4,9 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.BeforeAndAfterEach
 import io.github.edadma.cross_platform.{createTempFile, deleteFile}
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 import scala.compiletime.uninitialized
 
 trait PersistentTestBase extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
-  protected def suppressStderr[A](block: => A): A =
-    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
-
-
   protected var tmpFile: String = uninitialized
   protected val pageSize = 4096
 

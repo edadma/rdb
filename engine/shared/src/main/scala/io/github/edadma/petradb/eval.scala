@@ -38,13 +38,13 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
               case Some((idx, _, _)) => Some(hd.data(idx))
 
       lookup(lookupName, ctx) match
-        case None      => problem(c, s"'$lookupName' not found")
+        case None      => throw UndefinedReferenceException(c.pos, s"'$lookupName' not found")
         case Some(res) => res
     case QuantifiedCompareExpr(value, op, quantifier, expr) =>
       val v = eval(value, ctx)
       val arr = eval(expr, ctx) match
         case ArrayValue(elems) => elems
-        case other => problem(expr, s"ANY/ALL requires an array, got ${other.vtyp.name}")
+        case other => throw TypeException(expr.pos, s"ANY/ALL requires an array, got ${other.vtyp.name}")
 
       def cmp(item: Value): Boolean = op match
         case "="  => v.compare(item) == 0
@@ -63,15 +63,15 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val v   = eval(value, ctx)
       val res = teval(query, ctx)
 
-      if res.meta.width != 1 then problem(query, "sub-query must return rows of one column")
+      if res.meta.width != 1 then throw ExecutionException(query.pos, "sub-query must return rows of one column")
 
       BooleanValue(op.contains("NOT") ^ (res.data exists (_.data.head == v)))
     case SubqueryExpr(query) =>
       val res = teval(query, ctx)
 
-      if res.isEmpty then problem(query, "sub-query returned empty result")
-      else if res.length > 1 then problem(query, "sub-query returned more than one row")
-      else if res.data.head.data.length != 1 then problem(query, "sub-query must return a row of one column")
+      if res.isEmpty then throw ExecutionException(query.pos, "sub-query returned empty result")
+      else if res.length > 1 then throw ExecutionException(query.pos, "sub-query returned more than one row")
+      else if res.data.head.data.length != 1 then throw ExecutionException(query.pos, "sub-query must return a row of one column")
 
       res.data.head.data.head
     case ExistsExpr(expr)                                  => BooleanValue(aleval(expr, ctx).nonEmpty)
@@ -116,7 +116,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val l = eval(left, ctx)
       val path = eval(right, ctx) match
         case ArrayValue(elems) => elems.map(_.string)
-        case other             => problem(right, s"path operator requires array, got ${other.vtyp.name}")
+        case other             => throw TypeException(right.pos, s"path operator requires array, got ${other.vtyp.name}")
 
       @tailrec
       def navigate(v: Value, keys: Seq[String]): Value =
@@ -163,7 +163,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val l = eval(left, ctx)
       val keys = eval(right, ctx) match
         case ArrayValue(elems) => elems.map(_.string)
-        case other             => problem(right, s"key-existence operator requires array, got ${other.vtyp.name}")
+        case other             => throw TypeException(right.pos, s"key-existence operator requires array, got ${other.vtyp.name}")
       val exists: String => Boolean = l match
         case ObjectValue(props) => k => props.exists(_._1 == k)
         case ArrayValue(data)   => k => data.exists(_.string == k)
@@ -280,7 +280,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case (TimestampTZValue(t), "-", IntervalValue(dur)) => TimestampTZValue(t.minus(dur))
         // timestamptz - timestamptz => interval
         case (TimestampTZValue(t1), "-", TimestampTZValue(t2)) => IntervalValue(Duration.between(t2, t1))
-        case _ => problem(left, s"cannot apply '$op' to ${l.vtyp.name} and ${r.vtyp.name}")
+        case _ => throw TypeException(left.pos, s"cannot apply '$op' to ${l.vtyp.name} and ${r.vtyp.name}")
     case BinaryExpr(left, op @ ("<" | ">" | "<=" | ">="), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)
@@ -310,7 +310,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val keys = new mutable.HashSet[String]
 
       ObjectValue(properties map { case (id @ Ident(k), v) =>
-        if keys(k) then problem(id, s"duplicate property key: $k")
+        if keys(k) then throw ExecutionException(id.pos, s"duplicate property key: $k")
 
         k -> eval(v, ctx)
       })
@@ -329,7 +329,7 @@ def beval(expr: Expr, ctx: Seq[Row]): Boolean =
 def neval(expr: Expr, ctx: Seq[Row]): NumberValue =
   val v = eval(expr, ctx)
 
-  if v.vtyp != NumberType then problem(expr, "a number was expected")
+  if v.vtyp != NumberType then throw TypeException(expr.pos, "a number was expected")
 
   v.asInstanceOf[NumberValue]
 

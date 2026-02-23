@@ -2,15 +2,7 @@ package io.github.edadma.petradb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 class DDLTests extends AnyFreeSpec with Matchers:
-
-  /** Suppresses stderr output during block execution (for expected error messages). */
-  private def suppressStderr[A](block: => A): A =
-    val devNull = new PrintStream(new ByteArrayOutputStream())
-    val oldErr = Console.err
-    Console.withErr(devNull)(block)
 
   private def test(sql: String): String =
     given Session = new MemoryDB().connect()
@@ -22,17 +14,15 @@ class DDLTests extends AnyFreeSpec with Matchers:
 
   private def testExpectingError(sql: String): String =
     given Session = new MemoryDB().connect()
-    suppressStderr {
-      try {
-        executeSQL(sql).toString
-      } catch {
-        case e: RuntimeException => e.getMessage
-      }
+    try {
+      executeSQL(sql).toString
+    } catch {
+      case e: RuntimeException => e.getMessage
     }
 
   private def testExpectingException(sql: String): Unit =
     given Session = new MemoryDB().connect()
-    suppressStderr { executeSQL(sql) }
+    executeSQL(sql)
 
   private def query(sql: String): TableValue =
     given Session = new MemoryDB().connect()

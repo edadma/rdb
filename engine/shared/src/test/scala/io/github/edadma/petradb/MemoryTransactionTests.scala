@@ -2,12 +2,7 @@ package io.github.edadma.petradb
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 class MemoryTransactionTests extends AnyFreeSpec with Matchers:
-
-  private def suppressStderr[A](block: => A): A =
-    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
 
   private def withDB(f: Session => Unit): Unit =
     val db = new MemoryDB
@@ -146,10 +141,8 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
-      suppressStderr {
-        intercept[Exception] {
-          executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
-        }
+      intercept[Exception] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
       }
 
       the[RuntimeException] thrownBy {
@@ -164,10 +157,8 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       executeSQL("CREATE TABLE t (id INTEGER NOT NULL, name TEXT);")
       executeSQL("BEGIN;")
 
-      suppressStderr {
-        intercept[Exception] {
-          executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
-        }
+      intercept[Exception] {
+        executeSQL("INSERT INTO t (id, name) VALUES (NULL, 'bad');")
       }
 
       executeSQL("ROLLBACK;")

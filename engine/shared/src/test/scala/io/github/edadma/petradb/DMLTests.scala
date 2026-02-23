@@ -120,16 +120,14 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "rejects wrong number of values" in {
-      Console.withErr(java.io.OutputStream.nullOutputStream()) {
-        an[Exception] should be thrownBy {
-          query(
-            """
-              |CREATE TABLE t (name TEXT, age INT);
-              |INSERT INTO t VALUES ('Alice');
-              |SELECT * FROM t;
-              |""".trim.stripMargin
-          )
-        }
+      an[Exception] should be thrownBy {
+        query(
+          """
+            |CREATE TABLE t (name TEXT, age INT);
+            |INSERT INTO t VALUES ('Alice');
+            |SELECT * FROM t;
+            |""".trim.stripMargin
+        )
       }
     }
   }
@@ -326,15 +324,13 @@ class DMLTests extends AnyFreeSpec with Matchers with Testing {
     }
 
     "quoted uppercase column not accessible via unquoted name" in {
-      suppressStderr {
-        an[Exception] should be thrownBy query(
-          """
-            |CREATE TABLE t ("UPPER" TEXT);
-            |INSERT INTO t ("UPPER") VALUES ('val');
-            |SELECT UPPER FROM t;
-            |""".trim.stripMargin
-        )
-      }
+      an[Exception] should be thrownBy query(
+        """
+          |CREATE TABLE t ("UPPER" TEXT);
+          |INSERT INTO t ("UPPER") VALUES ('val');
+          |SELECT UPPER FROM t;
+          |""".trim.stripMargin
+      )
     }
 
     "quoted table name preserves case" in {

@@ -3,12 +3,7 @@ package io.github.edadma.petradb
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import io.github.edadma.cross_platform.{createTempFile, deleteFile}
-import java.io.{ByteArrayOutputStream, PrintStream}
-
 class IndexDDLTests extends AnyFreeSpec with Matchers:
-
-  private def suppressStderr[A](block: => A): A =
-    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
 
   private def exec(sql: String): Seq[Result] =
     given Session = new MemoryDB().connect()
@@ -77,37 +72,31 @@ class IndexDDLTests extends AnyFreeSpec with Matchers:
     }
 
     "fails on non-existent table" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          exec("CREATE INDEX idx ON nonexistent (col);")
-        }
+      assertThrows[RuntimeException] {
+        exec("CREATE INDEX idx ON nonexistent (col);")
       }
     }
 
     "fails on non-existent column" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          exec(
-            """
-              |CREATE TABLE t (id INTEGER);
-              |CREATE INDEX idx ON t (nonexistent);
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |CREATE INDEX idx ON t (nonexistent);
+            |""".trim.stripMargin
+        )
       }
     }
 
     "fails on duplicate index name" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          exec(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT);
-              |CREATE INDEX idx ON t (id);
-              |CREATE INDEX idx ON t (name);
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |CREATE INDEX idx ON t (id);
+            |CREATE INDEX idx ON t (name);
+            |""".trim.stripMargin
+        )
       }
     }
 
@@ -129,17 +118,15 @@ class IndexDDLTests extends AnyFreeSpec with Matchers:
     }
 
     "unique index rejects duplicate values on creation" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          exec(
-            """
-              |CREATE TABLE t (id INTEGER, name TEXT);
-              |INSERT INTO t (id, name) VALUES (1, 'Alice');
-              |INSERT INTO t (id, name) VALUES (1, 'Bob');
-              |CREATE UNIQUE INDEX idx_t_id ON t (id);
-              |""".trim.stripMargin
-          )
-        }
+      assertThrows[RuntimeException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER, name TEXT);
+            |INSERT INTO t (id, name) VALUES (1, 'Alice');
+            |INSERT INTO t (id, name) VALUES (1, 'Bob');
+            |CREATE UNIQUE INDEX idx_t_id ON t (id);
+            |""".trim.stripMargin
+        )
       }
     }
 
@@ -180,10 +167,8 @@ class IndexDDLTests extends AnyFreeSpec with Matchers:
     }
 
     "DROP INDEX on non-existent index fails" in {
-      suppressStderr {
-        assertThrows[RuntimeException] {
-          exec("DROP INDEX nonexistent;")
-        }
+      assertThrows[RuntimeException] {
+        exec("DROP INDEX nonexistent;")
       }
     }
 

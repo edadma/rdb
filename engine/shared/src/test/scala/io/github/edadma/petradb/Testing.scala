@@ -1,12 +1,8 @@
 package io.github.edadma.petradb
 
 import pprint.*
-import java.io.{ByteArrayOutputStream, PrintStream}
 
 trait Testing:
-  def suppressStderr[A](block: => A): A =
-    Console.withErr(new PrintStream(new ByteArrayOutputStream()))(block)
-
   def test(sql: String): String =
     given Session = new MemoryDB().connect()
 

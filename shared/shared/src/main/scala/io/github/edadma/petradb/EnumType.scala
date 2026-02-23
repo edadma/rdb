@@ -8,7 +8,7 @@ case class EnumType(enumName: String, labels: IndexedSeq[String]) extends Type(e
   override def convert(v: Value): Value =
     val textVal = v.toText
 
-    EnumValue(labelsMap getOrElse (textVal.s, problem(v, s"unknown label '${textVal.s}'")), this)
+    EnumValue(labelsMap.getOrElse(textVal.s, throw TypeException(v.pos, s"unknown label '${textVal.s}'")), this)
 
 case class EnumValue(value: Int, typ: EnumType) extends Value(typ):
   override def toText: TextValue = TextValue(string)
@@ -22,6 +22,6 @@ case class EnumValue(value: Int, typ: EnumType) extends Value(typ):
       case EnumValue(v, `typ`) => value compare v
       case t @ TextValue(s)    =>
         typ.labelsMap get s match
-          case None    => problem(t, s"'$s' is not a label of enum '${typ.name}'")
+          case None    => throw TypeException(t.pos, s"'$s' is not a label of enum '${typ.name}'")
           case Some(l) => value compare l
       case _ => super.compare(that)
