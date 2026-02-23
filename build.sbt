@@ -170,13 +170,13 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
 
 lazy val server = crossProject(JVMPlatform)
   .in(file("server"))
-  .dependsOn(engine)
+  .dependsOn(engine, shared)
   .settings(
     name    := "petradb-server",
     version := "1.0.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "dev.zio"       %%% "zio-json"    % "0.9.0",
+      "com.lihaoyi"   %%% "upickle"     % "4.0.2",
       "com.lihaoyi"   %%% "mainargs"    % "0.7.8",
       "org.scalatest" %%% "scalatest"   % "3.2.19" % Test,
     ),
