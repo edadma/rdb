@@ -97,6 +97,7 @@ class MemoryDB extends DB:
     val idx = MemoryTableIndex(meta, colIndices, tree, rowId)
     indexes(indexName) = meta
     table.tableIndexes(indexName) = idx
+    onMutation()
 
 class MemoryTable(name: String, specs: Seq[Spec], private[petradb] val db: MemoryDB) extends Table(name, specs):
   private[petradb] val data = new DLList[Array[Value]]
@@ -210,6 +211,7 @@ class MemoryTable(name: String, specs: Seq[Spec], private[petradb] val db: Memor
 
     // Record successful insert for transaction undo log
     db.recordInsert(this, node)
+    db.onMutation()
 
   class Updater private[MemoryTable] (node: DLListNode[Array[Value]]) extends (Seq[(String, Value)] => Unit):
     def apply(update: Seq[(String, Value)]): Unit =
@@ -271,6 +273,7 @@ class MemoryTable(name: String, specs: Seq[Spec], private[petradb] val db: Memor
 
       // Record successful update for transaction undo log
       db.recordUpdate(MemoryTable.this, node, oldValues)
+      db.onMutation()
 
     override def toString: String = "[MemoryDB Updater]"
 
@@ -294,6 +297,7 @@ class MemoryTable(name: String, specs: Seq[Spec], private[petradb] val db: Memor
 
       // Record successful delete for transaction undo log
       db.recordDelete(MemoryTable.this, savedData)
+      db.onMutation()
 
     override def toString: String = "[MemoryDB Deleter]"
 

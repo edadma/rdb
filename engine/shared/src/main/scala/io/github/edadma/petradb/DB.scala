@@ -24,6 +24,8 @@ abstract class DB:
 
   protected def addTable(name: String, specs: Seq[Spec]): Table
 
+  protected[petradb] def onMutation(): Unit = ()
+
   protected def registerTable(name: String, table: Table): Unit = tables(name) = table
 
   def createTable(name: String, specs: Seq[Spec]): Table =
@@ -32,6 +34,7 @@ abstract class DB:
     val table = addTable(name, specs)
 
     registerTable(name, table)
+    onMutation()
     table
 
   def dropTable(name: String): Unit =
@@ -42,11 +45,13 @@ abstract class DB:
       t.tableIndexes.clear()
     }
     tables.remove(name)
+    onMutation()
 
   def renameTable(oldName: String, newName: String): Unit =
     val table = tables.remove(oldName).getOrElse(sys.error(s"table '$oldName' not found"))
     table.name = newName
     tables(newName) = table
+    onMutation()
 
   protected def addEnum(name: String, labels: Seq[String]): EnumType
 
@@ -54,9 +59,11 @@ abstract class DB:
     require(!types.contains(name), s"type $name already exists")
 
     types(name) = addEnum(name, labels)
+    onMutation()
 
   def dropType(name: String): Unit =
     types.remove(name)
+    onMutation()
 
   infix def hasType(name: String): Boolean = types contains name
 
@@ -70,6 +77,7 @@ abstract class DB:
         tables.get(meta.tableName).foreach(_.tableIndexes.remove(indexName))
         indexes.remove(indexName)
       case None => sys.error(s"index '$indexName' not found")
+    onMutation()
 
   def hasIndex(name: String): Boolean = indexes contains name
 

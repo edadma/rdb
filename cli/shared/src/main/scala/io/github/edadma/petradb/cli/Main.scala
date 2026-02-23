@@ -22,9 +22,11 @@ object Main:
       if memory.value || path.isEmpty then new MemoryDB
       else
         val p = path.get
-        val f = new java.io.File(p)
-        if f.exists() then PersistentDB.open(p)
-        else PersistentDB.create(p, 4096)
+        if p.endsWith(".ptxt") then TextDB.open(p)
+        else
+          val f = new java.io.File(p)
+          if f.exists() then PersistentDB.open(p)
+          else PersistentDB.create(p, 4096)
 
     val session = db.connect()
     val rl      = PlatformReadLine.create()
