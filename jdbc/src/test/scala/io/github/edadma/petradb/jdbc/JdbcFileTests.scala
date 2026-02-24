@@ -169,3 +169,109 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       meta.getDriverName()          shouldBe "PetraDB JDBC Driver"
       meta.supportsTransactions()   shouldBe true
     finally conn.close()
+
+  "getTables returns all tables" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE authors (id SERIAL, name TEXT)")
+      st.executeUpdate("CREATE TABLE books (id SERIAL, title TEXT, author_id INT)")
+      val rs = conn.getMetaData.getTables(null, null, null, null)
+      val names = collection.mutable.Set[String]()
+      while rs.next() do names += rs.getString("TABLE_NAME")
+      names shouldBe Set("authors", "books")
+    finally conn.close()
+
+  "getTables filters by table name" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE authors (id SERIAL, name TEXT)")
+      st.executeUpdate("CREATE TABLE books (id SERIAL, title TEXT)")
+      val rs = conn.getMetaData.getTables(null, null, "authors", null)
+      rs.next() shouldBe true
+      rs.getString("TABLE_NAME") shouldBe "authors"
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getTables TABLE_TYPE is TABLE" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT)")
+      val rs = conn.getMetaData.getTables(null, null, null, null)
+      rs.next() shouldBe true
+      rs.getString("TABLE_TYPE") shouldBe "TABLE"
+    finally conn.close()
+
+  "getTables on empty database returns no rows" in:
+    val conn = memConn()
+    try
+      val rs = conn.getMetaData.getTables(null, null, null, null)
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getTableTypes returns TABLE" in:
+    val conn = memConn()
+    try
+      val rs = conn.getMetaData.getTableTypes()
+      rs.next() shouldBe true
+      rs.getString("TABLE_TYPE") shouldBe "TABLE"
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getColumns returns all columns for a table" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE books (id SERIAL, title TEXT, price NUMERIC(8,2))"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "books", null)
+      val cols = collection.mutable.ListBuffer[(String, String)]()
+      while rs.next() do
+        cols += ((rs.getString("COLUMN_NAME"), rs.getString("TYPE_NAME")))
+      cols.map(_._1) shouldBe Seq("id", "title", "price")
+    finally conn.close()
+
+  "getColumns ORDINAL_POSITION is 1-based" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (a INT, b TEXT, c BOOLEAN)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      var pos = 1
+      while rs.next() do
+        rs.getInt("ORDINAL_POSITION") shouldBe pos
+        pos += 1
+      pos shouldBe 4 // 3 columns checked
+    finally conn.close()
+
+  "getColumns filters by column name" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT, name TEXT, age INT)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "name")
+      rs.next() shouldBe true
+      rs.getString("COLUMN_NAME") shouldBe "name"
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getColumns DATA_TYPE matches expected JDBC type" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (i INT, t TEXT, b BOOLEAN, d DOUBLE PRECISION)"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val types = collection.mutable.ListBuffer[Int]()
+      while rs.next() do types += rs.getInt("DATA_TYPE")
+      types(0) shouldBe java.sql.Types.INTEGER
+      types(1) shouldBe java.sql.Types.VARCHAR
+      types(2) shouldBe java.sql.Types.BOOLEAN
+      types(3) shouldBe java.sql.Types.DOUBLE
+    finally conn.close()
+
+  "getColumns on unknown table returns no rows" in:
+    val conn = memConn()
+    try
+      val rs = conn.getMetaData.getColumns(null, null, "nonexistent", null)
+      rs.next() shouldBe false
+    finally conn.close()
