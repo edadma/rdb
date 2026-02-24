@@ -196,6 +196,26 @@ lazy val server = crossProject(JVMPlatform)
     ),
   )
 
+// ── jdbc: JDBC driver ───────────────────────────────────────────────
+
+lazy val jdbc = project
+  .in(file("jdbc"))
+  .dependsOn(client.jvm, engine.jvm, server.jvm)
+  .settings(
+    name    := "petradb-jdbc",
+    version := "1.1.0",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+    assembly / assemblyJarName := "petradb-jdbc-assembly.jar",
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "services", _*) => MergeStrategy.concat
+      case PathList("META-INF", _*)             => MergeStrategy.discard
+      case _                                    => MergeStrategy.first
+    },
+    publish / skip      := true,
+    publishLocal / skip := true,
+  )
+
 // ── integration: end-to-end client + server tests ───────────────────
 
 lazy val integration = project
@@ -220,6 +240,7 @@ lazy val root = project
     cli.jvm, cli.native,
     server.jvm,
     integration,
+    jdbc,
   )
   .settings(
     name                := "petradb",
