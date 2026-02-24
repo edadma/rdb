@@ -93,7 +93,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "io.github.edadma"  %%% "cross_platform" % "0.1.3",
       "io.github.edadma"  %%% "stow"           % "0.0.2",
       "io.github.edadma"  %%% "table"          % "0.0.4",
-      "io.github.edadma"  %%% "importer"       % "0.1.0",
+      "io.github.edadma"  %%% "importer"       % "0.1.1",
     ),
     libraryDependencies ++= Seq(
       "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
@@ -181,7 +181,7 @@ lazy val server = crossProject(JVMPlatform)
     version := "1.1.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "io.github.edadma" %%% "yaml"       % "0.0.2",
+      "com.indoorvivants" %% "toml"        % "0.3.0",
       "com.lihaoyi"      %%% "upickle"    % "4.0.2",
       "com.lihaoyi"      %%% "mainargs"   % "0.7.8",
       "org.scalatest"    %%% "scalatest"  % "3.2.19" % Test,
@@ -206,7 +206,7 @@ lazy val jdbc = project
     version := "1.1.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
-    assembly / assemblyJarName := "petradb-jdbc-assembly.jar",
+    assembly / assemblyJarName := "petradb-jdbc.jar",
     assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "services", _*) => MergeStrategy.concat
       case PathList("META-INF", _*)             => MergeStrategy.discard

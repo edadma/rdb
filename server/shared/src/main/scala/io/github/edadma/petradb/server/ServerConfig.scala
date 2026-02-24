@@ -1,29 +1,29 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.yaml.readFromString
+import toml.*
+import toml.derivation.auto.*
 import io.github.edadma.cross_platform.{exists, readFile}
 
 sealed trait AuthConfig
-case object NoAuth                                    extends AuthConfig
-case class BasicAuth(users: Map[String, String])      extends AuthConfig // username -> bcrypt hash
+case object NoAuth                               extends AuthConfig
+case class BasicAuth(users: Map[String, String]) extends AuthConfig // username -> bcrypt hash
 
 case class ServerConfig(auth: AuthConfig)
 
 object ServerConfig:
   val unrestricted: ServerConfig = ServerConfig(NoAuth)
 
+  private case class UserEntry(username: String, password: String)
+  private case class TomlConfig(auth: Option[String] = None, users: Option[List[UserEntry]] = None)
+
   def fromFile(path: String): ServerConfig =
     if !exists(path) then sys.error(s"Config file not found: $path")
-    val node = readFromString(readFile(path))
-    node.getStringOption("auth") match
-      case None | Some("none") => ServerConfig(NoAuth)
-      case Some("basic") =>
-        val users =
-          if node.contains("users") then
-            node.getSeq("users").map { u =>
-              u.getString("username") -> u.getString("password")
-            }.toMap
-          else Map.empty[String, String]
-        ServerConfig(BasicAuth(users))
-      case Some(other) =>
-        sys.error(s"Unknown auth mode: $other")
+    Toml.parseAs[TomlConfig](readFile(path)) match
+      case Left((_, msg)) => sys.error(s"Config parse error: $msg")
+      case Right(cfg) =>
+        cfg.auth.getOrElse("none") match
+          case "none" => ServerConfig(NoAuth)
+          case "basic" =>
+            val users = cfg.users.getOrElse(Nil).map(u => u.username -> u.password).toMap
+            ServerConfig(BasicAuth(users))
+          case other => sys.error(s"Unknown auth mode: $other")
