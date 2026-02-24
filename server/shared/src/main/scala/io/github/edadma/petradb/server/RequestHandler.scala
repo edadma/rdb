@@ -5,7 +5,6 @@ import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 
 import scala.util.Try
-import org.mindrot.jbcrypt.BCrypt
 
 object RequestHandler:
   case class HandlerResponse(
@@ -28,7 +27,7 @@ object RequestHandler:
               val decoded = new String(java.util.Base64.getDecoder.decode(header.drop(6)))
               decoded.split(":", 2) match
                 case Array(username, password) =>
-                  users.get(username).exists(hash => checkPassword(password, hash))
+                  users.get(username).exists(hash => Passwords.check(password, hash))
                 case _ => false
             }.getOrElse(false)
           case _ => false
@@ -40,9 +39,6 @@ object RequestHandler:
       "text/plain; charset=UTF-8",
       Map("WWW-Authenticate" -> """Basic realm="PetraDB""""),
     )
-
-  private def checkPassword(password: String, hash: String): Boolean =
-    Try(BCrypt.checkpw(password, hash)).getOrElse(false)
 
   def handleSql(
     sessionMgr: SessionManager,
