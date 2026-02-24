@@ -13,6 +13,8 @@ object Main:
     port: Int = 5432,
     @arg(short = 'h', doc = "Host address")
     host: String = "127.0.0.1",
+    @arg(short = 'c', doc = "Path to config file")
+    config: Option[String] = None,
     @arg(doc = "Database file path")
     path: Option[String] = None,
   ): Unit =
@@ -24,9 +26,13 @@ object Main:
         if f.exists() then PersistentDB.open(p)
         else PersistentDB.create(p, 4096)
 
+    val serverConfig = config match
+      case Some(p) => ServerConfig.fromFile(p)
+      case None    => ServerConfig.unrestricted
+
     val mode = if path.isDefined then s"persistent (${path.get})" else "in-memory"
     val loop = new EventLoop
-    val server = new PetraServer(loop, db, host, port)
+    val server = new PetraServer(loop, db, host, port, serverConfig.auth)
 
     server.start { () =>
       println(s"PetraDB server ($mode) listening on http://$host:$port")

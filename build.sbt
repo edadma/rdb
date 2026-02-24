@@ -181,9 +181,10 @@ lazy val server = crossProject(JVMPlatform)
     version := "1.1.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "com.lihaoyi"   %%% "upickle"     % "4.0.2",
-      "com.lihaoyi"   %%% "mainargs"    % "0.7.8",
-      "org.scalatest" %%% "scalatest"   % "3.2.19" % Test,
+      "io.github.edadma" %%% "yaml"       % "0.0.2",
+      "com.lihaoyi"      %%% "upickle"    % "4.0.2",
+      "com.lihaoyi"      %%% "mainargs"   % "0.7.8",
+      "org.scalatest"    %%% "scalatest"  % "3.2.19" % Test,
     ),
     publish / skip      := true,
     publishLocal / skip := true,
@@ -191,6 +192,7 @@ lazy val server = crossProject(JVMPlatform)
   .jvmSettings(
     libraryDependencies ++= Seq(
       "io.github.edadma" %% "microserve" % "0.2.0",
+      "org.mindrot"       % "jbcrypt"    % "0.4",
     ),
   )
 

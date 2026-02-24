@@ -4,15 +4,45 @@ import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseExcep
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 
+import scala.util.Try
+import org.mindrot.jbcrypt.BCrypt
+
 object RequestHandler:
   case class HandlerResponse(
     status: Int,
     body: Array[Byte],
     contentType: String = "application/octet-stream",
+    extraHeaders: Map[String, String] = Map.empty,
   )
 
   private def errorResponse(status: Int, message: String): HandlerResponse =
     HandlerResponse(status, message.getBytes("UTF-8"), "text/plain; charset=UTF-8")
+
+  def checkAuth(authHeader: Option[String], auth: AuthConfig): Boolean =
+    auth match
+      case NoAuth => true
+      case BasicAuth(users) =>
+        authHeader match
+          case Some(header) if header.startsWith("Basic ") =>
+            Try {
+              val decoded = new String(java.util.Base64.getDecoder.decode(header.drop(6)))
+              decoded.split(":", 2) match
+                case Array(username, password) =>
+                  users.get(username).exists(hash => checkPassword(password, hash))
+                case _ => false
+            }.getOrElse(false)
+          case _ => false
+
+  def handleUnauthorized(): HandlerResponse =
+    HandlerResponse(
+      401,
+      "Unauthorized".getBytes("UTF-8"),
+      "text/plain; charset=UTF-8",
+      Map("WWW-Authenticate" -> """Basic realm="PetraDB""""),
+    )
+
+  private def checkPassword(password: String, hash: String): Boolean =
+    Try(BCrypt.checkpw(password, hash)).getOrElse(false)
 
   def handleSql(
     sessionMgr: SessionManager,
