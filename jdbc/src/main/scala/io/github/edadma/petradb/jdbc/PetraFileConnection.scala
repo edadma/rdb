@@ -17,5 +17,8 @@ class PetraFileConnection(path: String) extends AbstractConnection:
 
   private given session: Session = db.connect()
 
-  def execute(sql: String): Seq[Result] = executeSQL(sql)
-  def doClose(): Unit                   = db.close()
+  def execute(sql: String): Seq[Result]                  = executeSQL(sql)
+  def doClose(): Unit                                    = db.close()
+  def tableNames: Iterable[String]                       = db.tableNames
+  def tableColumns(tableName: String): Seq[ColumnMetadata] =
+    db.getTable(tableName).map(_.meta.columns).getOrElse(Seq.empty)

@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.Result
+import io.github.edadma.petradb.{Result, ColumnMetadata}
 
 import java.sql.{SQLFeatureNotSupportedException, SQLWarning, Savepoint}
 import java.util.Properties
@@ -12,6 +12,8 @@ abstract class AbstractConnection extends java.sql.Connection:
   def doClose(): Unit
   def url: String
   def username: String
+  def tableNames: Iterable[String]
+  def tableColumns(tableName: String): Seq[ColumnMetadata]
 
   private var _closed         = false
   private var _autoCommit     = true

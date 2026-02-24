@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.Result
+import io.github.edadma.petradb.{Result, ColumnMetadata}
 import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.{Session => ClientSession, SessionOptions}
 
@@ -34,3 +34,6 @@ class PetraServerConnection(
 
   def doClose(): Unit =
     Await.result(clientSession.close(), timeout)
+
+  def tableNames: Iterable[String]                         = Iterable.empty
+  def tableColumns(tableName: String): Seq[ColumnMetadata] = Seq.empty
