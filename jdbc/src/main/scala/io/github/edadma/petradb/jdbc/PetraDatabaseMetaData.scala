@@ -24,6 +24,17 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
 
   override def getConnection(): java.sql.Connection = conn
 
+  override def getSchemas(): java.sql.ResultSet =
+    val meta = Metadata(IndexedSeq(
+      ColumnMetadata(None, "TABLE_SCHEM",   TextType),
+      ColumnMetadata(None, "TABLE_CATALOG", TextType),
+    ))
+    val rows = Vector(Row(IndexedSeq(TextValue(""), NullValue()), meta, None, None))
+    new PetraResultSet(TableValue(rows, meta))
+
+  override def getSchemas(catalog: String, schemaPattern: String): java.sql.ResultSet =
+    getSchemas()
+
   override def getTableTypes(): java.sql.ResultSet =
     val meta = Metadata(IndexedSeq(ColumnMetadata(None, "TABLE_TYPE", TextType)))
     val rows = Vector(Row(IndexedSeq(TextValue("TABLE")), meta, None, None))
@@ -45,7 +56,7 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
       .filter(n => pattern.forall(_ == n))
       .map { name =>
         Row(
-          IndexedSeq(NullValue(), NullValue(), TextValue(name), TextValue("TABLE"), TextValue("")),
+          IndexedSeq(NullValue(), TextValue(""), TextValue(name), TextValue("TABLE"), TextValue("")),
           meta, None, None,
         )
       }.toVector

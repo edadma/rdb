@@ -275,3 +275,25 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       val rs = conn.getMetaData.getColumns(null, null, "nonexistent", null)
       rs.next() shouldBe false
     finally conn.close()
+
+  "getSchemas returns one default schema" in:
+    val conn = memConn()
+    try
+      val rs = conn.getMetaData.getSchemas()
+      rs.next() shouldBe true
+      rs.getString("TABLE_SCHEM") shouldBe ""
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getTables TABLE_SCHEM matches getSchemas" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT)")
+      val schemaRs = conn.getMetaData.getSchemas()
+      schemaRs.next()
+      val schemaName = schemaRs.getString("TABLE_SCHEM")
+
+      val tablesRs = conn.getMetaData.getTables(null, null, null, null)
+      tablesRs.next() shouldBe true
+      tablesRs.getString("TABLE_SCHEM") shouldBe schemaName
+    finally conn.close()
