@@ -22,3 +22,7 @@ class PetraFileConnection(path: String) extends AbstractConnection:
   def tableNames: Iterable[String]                       = db.tableNames
   def tableColumns(tableName: String): Seq[ColumnMetadata] =
     db.getTable(tableName).map(_.meta.columns).getOrElse(Seq.empty)
+  def tableColumnSpecs(tableName: String): Seq[ColumnSpec] =
+    db.getTable(tableName).map(_.columns.toSeq).getOrElse(Seq.empty)
+  def tablePrimaryKey(tableName: String): Option[PrimaryKeySpec] =
+    db.getTable(tableName).flatMap(_.primaryKey)

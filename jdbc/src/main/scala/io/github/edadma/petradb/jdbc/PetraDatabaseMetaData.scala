@@ -67,53 +67,65 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
     tableNamePattern: String, columnNamePattern: String,
   ): java.sql.ResultSet =
     val meta = Metadata(IndexedSeq(
-      ColumnMetadata(None, "TABLE_CAT",         TextType),
-      ColumnMetadata(None, "TABLE_SCHEM",       TextType),
-      ColumnMetadata(None, "TABLE_NAME",        TextType),
-      ColumnMetadata(None, "COLUMN_NAME",       TextType),
-      ColumnMetadata(None, "DATA_TYPE",         IntegerType),
-      ColumnMetadata(None, "TYPE_NAME",         TextType),
-      ColumnMetadata(None, "COLUMN_SIZE",       IntegerType),
-      ColumnMetadata(None, "BUFFER_LENGTH",     IntegerType),
-      ColumnMetadata(None, "DECIMAL_DIGITS",    IntegerType),
-      ColumnMetadata(None, "NUM_PREC_RADIX",    IntegerType),
-      ColumnMetadata(None, "NULLABLE",          IntegerType),
-      ColumnMetadata(None, "REMARKS",           TextType),
-      ColumnMetadata(None, "COLUMN_DEF",        TextType),
-      ColumnMetadata(None, "SQL_DATA_TYPE",     IntegerType),
-      ColumnMetadata(None, "SQL_DATETIME_SUB",  IntegerType),
-      ColumnMetadata(None, "CHAR_OCTET_LENGTH", IntegerType),
-      ColumnMetadata(None, "ORDINAL_POSITION",  IntegerType),
-      ColumnMetadata(None, "IS_NULLABLE",       TextType),
+      ColumnMetadata(None, "TABLE_CAT",          TextType),
+      ColumnMetadata(None, "TABLE_SCHEM",        TextType),
+      ColumnMetadata(None, "TABLE_NAME",         TextType),
+      ColumnMetadata(None, "COLUMN_NAME",        TextType),
+      ColumnMetadata(None, "DATA_TYPE",          IntegerType),
+      ColumnMetadata(None, "TYPE_NAME",          TextType),
+      ColumnMetadata(None, "COLUMN_SIZE",        IntegerType),
+      ColumnMetadata(None, "BUFFER_LENGTH",      IntegerType),
+      ColumnMetadata(None, "DECIMAL_DIGITS",     IntegerType),
+      ColumnMetadata(None, "NUM_PREC_RADIX",     IntegerType),
+      ColumnMetadata(None, "NULLABLE",           IntegerType),
+      ColumnMetadata(None, "REMARKS",            TextType),
+      ColumnMetadata(None, "COLUMN_DEF",         TextType),
+      ColumnMetadata(None, "SQL_DATA_TYPE",      IntegerType),
+      ColumnMetadata(None, "SQL_DATETIME_SUB",   IntegerType),
+      ColumnMetadata(None, "CHAR_OCTET_LENGTH",  IntegerType),
+      ColumnMetadata(None, "ORDINAL_POSITION",   IntegerType),
+      ColumnMetadata(None, "IS_NULLABLE",        TextType),
+      ColumnMetadata(None, "IS_AUTOINCREMENT",   TextType),
+      ColumnMetadata(None, "IS_GENERATEDCOLUMN", TextType),
     ))
     val tablePattern = Option(tableNamePattern).filter(_ != "%")
     val colPattern   = Option(columnNamePattern).filter(_ != "%")
-    val nullable     = NumberValue(java.sql.ResultSetMetaData.columnNullable)
     val rows = conn.tableNames
       .filter(n => tablePattern.forall(_ == n))
       .flatMap { tableName =>
-        conn.tableColumns(tableName).zipWithIndex.flatMap { case (col, idx) =>
+        conn.tableColumnSpecs(tableName).zipWithIndex.flatMap { case (col, idx) =>
           if colPattern.forall(_ == col.name) then
+            val isSerial   = col.typ == SerialType || col.typ == BigSerialType || col.typ == SmallSerialType
+            val isUUID     = col.typ == UUIDType
+            val isAuto     = isSerial || isUUID
+            val nullable   = if col.required then java.sql.ResultSetMetaData.columnNoNulls
+                             else java.sql.ResultSetMetaData.columnNullable
+            val isNullStr  = if col.required then "NO" else "YES"
+            val defaultStr = col.default match
+              case Some(v) if !isSerial => TextValue(sqlLiteral(v))
+              case _                    => NullValue()
             Some(Row(
               IndexedSeq(
-                NullValue(),                        // TABLE_CAT
-                NullValue(),                        // TABLE_SCHEM
-                TextValue(tableName),               // TABLE_NAME
-                TextValue(col.name),                // COLUMN_NAME
-                NumberValue(jdbcType(col.typ)),      // DATA_TYPE
-                TextValue(col.typ.name),             // TYPE_NAME
-                NumberValue(0),                      // COLUMN_SIZE
-                NullValue(),                         // BUFFER_LENGTH
-                NullValue(),                         // DECIMAL_DIGITS
-                NumberValue(10),                     // NUM_PREC_RADIX
-                nullable,                            // NULLABLE
-                TextValue(""),                       // REMARKS
-                NullValue(),                         // COLUMN_DEF
-                NumberValue(0),                      // SQL_DATA_TYPE
-                NullValue(),                         // SQL_DATETIME_SUB
-                NullValue(),                         // CHAR_OCTET_LENGTH
-                NumberValue(idx + 1),                // ORDINAL_POSITION
-                TextValue("YES"),                    // IS_NULLABLE
+                NullValue(),                                        // TABLE_CAT
+                TextValue(""),                                      // TABLE_SCHEM
+                TextValue(tableName),                               // TABLE_NAME
+                TextValue(col.name),                                // COLUMN_NAME
+                NumberValue(jdbcType(col.typ)),                     // DATA_TYPE
+                TextValue(col.typ.name),                            // TYPE_NAME
+                NumberValue(0),                                     // COLUMN_SIZE
+                NullValue(),                                        // BUFFER_LENGTH
+                NullValue(),                                        // DECIMAL_DIGITS
+                NumberValue(10),                                    // NUM_PREC_RADIX
+                NumberValue(nullable),                              // NULLABLE
+                TextValue(""),                                      // REMARKS
+                defaultStr,                                         // COLUMN_DEF
+                NumberValue(0),                                     // SQL_DATA_TYPE
+                NullValue(),                                        // SQL_DATETIME_SUB
+                NullValue(),                                        // CHAR_OCTET_LENGTH
+                NumberValue(idx + 1),                               // ORDINAL_POSITION
+                TextValue(isNullStr),                               // IS_NULLABLE
+                TextValue(if isAuto then "YES" else "NO"),          // IS_AUTOINCREMENT
+                TextValue(if isAuto then "YES" else "NO"),          // IS_GENERATEDCOLUMN
               ),
               meta, None, None,
             ))
@@ -121,6 +133,46 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
         }
       }.toVector
     new PetraResultSet(TableValue(rows, meta))
+
+  override def getPrimaryKeys(
+    catalog: String, schema: String, table: String,
+  ): java.sql.ResultSet =
+    val meta = Metadata(IndexedSeq(
+      ColumnMetadata(None, "TABLE_CAT",   TextType),
+      ColumnMetadata(None, "TABLE_SCHEM", TextType),
+      ColumnMetadata(None, "TABLE_NAME",  TextType),
+      ColumnMetadata(None, "COLUMN_NAME", TextType),
+      ColumnMetadata(None, "KEY_SEQ",     IntegerType),
+      ColumnMetadata(None, "PK_NAME",     TextType),
+    ))
+    val rows = conn.tablePrimaryKey(table) match
+      case None => Vector.empty
+      case Some(pk) =>
+        pk.columns.zipWithIndex.map { case (colName, idx) =>
+          Row(
+            IndexedSeq(
+              NullValue(),
+              TextValue(""),
+              TextValue(table),
+              TextValue(colName),
+              NumberValue(idx + 1),
+              pk.name.map(TextValue.apply).getOrElse(NullValue()),
+            ),
+            meta, None, None,
+          )
+        }.toVector
+    new PetraResultSet(TableValue(rows, meta))
+
+  private def sqlLiteral(v: Value): String = v match
+    case _: NullValue      => "NULL"
+    case TextValue(s)      => s"'${s.replace("'", "''")}'"
+    case BooleanValue(b)   => if b then "TRUE" else "FALSE"
+    case NumberValue(_, n) => n.toString
+    case TimestampValue(t) => s"'$t'"
+    case DateValue(d)      => s"'$d'"
+    case UUIDValue(id)     => s"'$id'"
+    case EnumValue(_, _)   => s"'${v.string}'"
+    case _                 => v.string
 
   private def jdbcType(typ: Type): Int =
     import java.sql.Types

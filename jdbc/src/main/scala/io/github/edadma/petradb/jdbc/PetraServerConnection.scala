@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, ColumnMetadata}
+import io.github.edadma.petradb.{Result, ColumnMetadata, ColumnSpec, PrimaryKeySpec}
 import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.{Session => ClientSession, SessionOptions}
 
@@ -37,3 +37,5 @@ class PetraServerConnection(
 
   def tableNames: Iterable[String]                         = Iterable.empty
   def tableColumns(tableName: String): Seq[ColumnMetadata] = Seq.empty
+  def tableColumnSpecs(tableName: String): Seq[ColumnSpec]      = Seq.empty
+  def tablePrimaryKey(tableName: String): Option[PrimaryKeySpec] = None

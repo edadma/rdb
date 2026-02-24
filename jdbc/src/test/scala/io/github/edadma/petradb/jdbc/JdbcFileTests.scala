@@ -276,6 +276,80 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       rs.next() shouldBe false
     finally conn.close()
 
+  "getColumns NOT NULL is populated" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val cols = collection.mutable.Map[String, (Int, String)]()
+      while rs.next() do
+        cols(rs.getString("COLUMN_NAME")) = (rs.getInt("NULLABLE"), rs.getString("IS_NULLABLE"))
+      cols("id")._2   shouldBe "NO"
+      cols("name")._2 shouldBe "NO"
+      cols("bio")._2  shouldBe "YES"
+    finally conn.close()
+
+  "getColumns IS_AUTOINCREMENT is YES for serial" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val auto = collection.mutable.Map[String, String]()
+      while rs.next() do auto(rs.getString("COLUMN_NAME")) = rs.getString("IS_AUTOINCREMENT")
+      auto("id")   shouldBe "YES"
+      auto("name") shouldBe "NO"
+    finally conn.close()
+
+  "getColumns COLUMN_DEF shows default value" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (id INT, status TEXT DEFAULT 'active', score INT DEFAULT 0)"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val defs = collection.mutable.Map[String, String]()
+      while rs.next() do defs(rs.getString("COLUMN_NAME")) = rs.getString("COLUMN_DEF")
+      defs("status") shouldBe "'active'"
+      defs("score")  shouldBe "0"
+    finally conn.close()
+
+  "getPrimaryKeys returns pk columns" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)"
+      )
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      rs.next() shouldBe true
+      rs.getString("COLUMN_NAME") shouldBe "id"
+      rs.getInt("KEY_SEQ")        shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "getPrimaryKeys composite key" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate(
+        "CREATE TABLE t (a INT, b INT, c TEXT, PRIMARY KEY (a, b))"
+      )
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      val pks = collection.mutable.ListBuffer[(String, Int)]()
+      while rs.next() do pks += ((rs.getString("COLUMN_NAME"), rs.getInt("KEY_SEQ")))
+      pks.toSeq shouldBe Seq(("a", 1), ("b", 2))
+    finally conn.close()
+
+  "getPrimaryKeys no pk returns empty" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      rs.next() shouldBe false
+    finally conn.close()
+
   "getSchemas returns one default schema" in:
     val conn = memConn()
     try
