@@ -53,6 +53,6 @@ class PlatformRepl(session: Session) extends Repl(session):
       else
         collecting = true
         buffer.clear()
-        buffer.append(line)
+        buffer.append(trimmed)
         askLine(contPrompt)
     }: js.Function1[String, Unit])

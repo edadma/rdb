@@ -44,9 +44,6 @@ abstract class Repl(val session: Session):
             if cont.trim.endsWith(";") then done = true
     executeSql(buf.toString)
 
-  def collectAndExecute(first: String): Unit =
-    executeSql(first)
-
   def executeSql(sql: String): Unit =
     given Session = session
     try
