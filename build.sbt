@@ -153,7 +153,7 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 // ── cli: SQL interactive shell ──────────────────────────────────────
 
-lazy val cli = crossProject(JVMPlatform, NativePlatform)
+lazy val cli = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .in(file("cli"))
   .dependsOn(engine)
   .settings(
@@ -166,6 +166,11 @@ lazy val cli = crossProject(JVMPlatform, NativePlatform)
   )
   .jvmSettings(
     libraryDependencies += "org.jline" % "jline" % "3.29.0",
+  )
+  .jsSettings(
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+    scalaJSLinkerConfig ~= { _.withSourceMap(false) },
+    scalaJSUseMainModuleInitializer := true,
   )
   .nativeSettings(
     libraryDependencies += "io.github.edadma" %%% "readline" % "0.0.2",
@@ -238,7 +243,7 @@ lazy val root = project
     shared.js, shared.jvm, shared.native,
     engine.js, engine.jvm, engine.native,
     client.js, client.jvm, client.native,
-    cli.jvm, cli.native,
+    cli.js, cli.jvm, cli.native,
     server.jvm,
     integration,
     jdbc,

@@ -1,30 +1,17 @@
 package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb.*
-import scala.io.Source
+import io.github.edadma.cross_platform.readFile
 
-class Repl(session: Session, rl: ReadLine):
-  private val prompt     = "petra> "
-  private val contPrompt = "  -> "
+abstract class Repl(val session: Session):
+  val prompt     = "petra> "
+  val contPrompt = "  -> "
 
-  def run(): Unit =
-    var running = true
+  def run(): Unit
 
-    while running do
-      rl.readLine(prompt) match
-        case None => running = false
-        case Some(line) =>
-          val trimmed = line.trim
-          if trimmed.nonEmpty then
-            rl.addHistory(line)
-            if trimmed.startsWith("\\") then
-              running = handleMeta(trimmed)
-            else
-              collectAndExecute(trimmed)
+  def readStdin(): Option[String] = None
 
-    rl.close()
-
-  private def handleMeta(input: String): Boolean =
+  def handleMeta(input: String): Boolean =
     MetaCommand.parse(input) match
       case MetaCommand.Quit =>
         false
@@ -45,20 +32,20 @@ class Repl(session: Session, rl: ReadLine):
         println("Available: \\dt  \\d <table>  \\dump  \\i <file>  \\q")
         true
 
-  private def collectAndExecute(first: String): Unit =
+  def collectAndExecute(first: String, readLine: String => Option[String]): Unit =
     val buf = new StringBuilder(first)
-
     if !first.endsWith(";") then
       var done = false
       while !done do
-        rl.readLine(contPrompt) match
+        readLine(contPrompt) match
           case None => done = true
           case Some(cont) =>
-            rl.addHistory(cont)
             buf.append("\n").append(cont)
             if cont.trim.endsWith(";") then done = true
-
     executeSql(buf.toString)
+
+  def collectAndExecute(first: String): Unit =
+    executeSql(first)
 
   def executeSql(sql: String): Unit =
     given Session = session
@@ -78,11 +65,7 @@ class Repl(session: Session, rl: ReadLine):
 
   def executeFile(path: String): Unit =
     try
-      val source = Source.fromFile(path)
-      try
-        val sql = source.mkString
-        executeSql(sql)
-      finally source.close()
+      val sql = readFile(path)
+      executeSql(sql)
     catch
-      case e: java.io.FileNotFoundException => println(s"File not found: $path")
-      case e: Exception                     => println(s"Error reading file: ${e.getMessage}")
+      case e: Exception => println(s"Error reading file: ${e.getMessage}")

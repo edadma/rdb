@@ -1,13 +1,13 @@
 package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb.*
+import io.github.edadma.cross_platform
 
 object Dump:
   def run(path: String): Unit =
-    val f = new java.io.File(path)
-    if !f.exists() then
-      System.err.println(s"Error: database file not found: $path")
-      sys.exit(1)
+    if !cross_platform.exists(path) then
+      Console.err.println(s"Error: database file not found: $path")
+      cross_platform.processExit(1)
 
     val db = PersistentDB.open(path)
 
