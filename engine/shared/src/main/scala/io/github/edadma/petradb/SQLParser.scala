@@ -361,8 +361,17 @@ object SQLParser:
   private def decimalPrimary[p: P]: P[Expr] =
     P(Index ~ decimalLit).map((idx, s) => pos(idx, NumberExpr(s.toDouble)))
 
+  // Parse integer value as Long to handle BIGINT-range literals
+  private def longLit[p: P]: P[Long] = {
+    import NoWhitespace._
+    P(CharsWhileIn("0-9", 1).!).map(_.toLong)
+  }
+
   private def integerPrimary[p: P]: P[Expr] =
-    P(Index ~ integerLit).map((idx, n) => pos(idx, NumberExpr(n)))
+    P(Index ~ longLit).map((idx, n) =>
+      if n >= Int.MinValue && n <= Int.MaxValue then pos(idx, NumberExpr(n.toInt))
+      else pos(idx, NumberExpr(n))
+    )
 
   private def parameterPrimary[p: P]: P[Expr] =
     P(Index ~ parameterLit).map((idx, n) => pos(idx, ParameterExpr(n)))

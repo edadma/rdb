@@ -1,6 +1,6 @@
 package io.github.edadma.petradb
 
-import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, TypedNumber, Type as DType}
+import io.github.edadma.dal.{BasicDAL, DoubleType, IntType, LongType, TypedNumber, Type as DType}
 import java.time.Duration
 
 import scala.annotation.tailrec
@@ -20,6 +20,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case ScalarFunctionExpr(f, args)        => f.func(args map (e => eval(e, ctx)))
     case ProcessOperator(proc)              => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case e @ NumberExpr(n: Int)             => NumberValue(IntType, n).setPos(e.pos)
+    case e @ NumberExpr(n: Long)            => NumberValue(LongType, n).setPos(e.pos)
     case e @ NumberExpr(n: Double)          => NumberValue(DoubleType, n).setPos(e.pos)
     case e @ StringExpr(s)                  => TextValue(s).setPos(e.pos)
     case e @ NullExpr()                     => NullValue().setPos(e.pos)
