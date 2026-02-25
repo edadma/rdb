@@ -351,11 +351,26 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       ProcessOperator(LeftLateralJoinProcess(
         procRewrite(rel1), procRewrite(stripLateralExpr(rel2)), rewrite(on)))
     case InnerJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(SeqScanProcess(CrossProcess(procRewrite(rel1), procRewrite(rel2)), rewrite(on)))
+      val proc1 = procRewrite(rel1)
+      val proc2 = procRewrite(rel2)
+      val rwOn = rewrite(on)
+      tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = false)
+        .map(ProcessOperator(_))
+        .getOrElse(ProcessOperator(SeqScanProcess(CrossProcess(proc1, proc2), rwOn)))
     case LeftJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(LeftCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+      val proc1 = procRewrite(rel1)
+      val proc2 = procRewrite(rel2)
+      val rwOn = rewrite(on)
+      tryIndexJoin(proc1, proc2, rwOn, isLeft = true, isRight = false)
+        .map(ProcessOperator(_))
+        .getOrElse(ProcessOperator(LeftCrossJoinProcess(proc1, proc2, rwOn)))
     case RightJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(RightCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+      val proc1 = procRewrite(rel1)
+      val proc2 = procRewrite(rel2)
+      val rwOn = rewrite(on)
+      tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = true)
+        .map(ProcessOperator(_))
+        .getOrElse(ProcessOperator(RightCrossJoinProcess(proc1, proc2, rwOn)))
     case FullJoinOperator(rel1, rel2, on) =>
       ProcessOperator(FullCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
@@ -526,5 +541,129 @@ def tryIndexScan(table: Table, cond: Expr)(using Session): Option[Process] =
     }.headOption
 
   tryComposite.orElse(tryEquality).orElse(tryInList).orElse(tryRange)
+
+private def extractTable(proc: Process): Option[(Table, Metadata)] =
+  proc match
+    case t: Table                           => Some((t, t.meta))
+    case AliasProcess(t: Table, _)          => Some((t, proc.meta))
+    case ColumnAliasProcess(t: Table, _, _) => Some((t, proc.meta))
+    case _                                  => None
+
+private def columnOfMeta(meta: Metadata, expr: Expr): Option[String] =
+  expr match
+    case ColumnExpr(None, Ident(name))           => if meta.columnMap.contains(name) then Some(name) else None
+    case ColumnExpr(Some(Ident(t)), Ident(name)) => if meta.columnMap.contains(s"$t.$name") then Some(name) else None
+    case _                                       => None
+
+private def tryIndexJoin(
+    left: Process,
+    right: Process,
+    cond: Expr,
+    isLeft: Boolean,
+    isRight: Boolean,
+)(using Session): Option[Process] =
+  val conjuncts = flattenAnd(cond)
+  val leftMeta = left.meta
+  val rightMeta = right.meta
+
+  case class EquiPair(leftExpr: Expr, rightExpr: Expr, leftCol: String, rightCol: String, conjIdx: Int)
+
+  val equiPairs = mutable.ArrayBuffer[EquiPair]()
+  val otherIndices = mutable.Set[Int]()
+
+  conjuncts.zipWithIndex.foreach { case (conj, idx) =>
+    conj match
+      case BinaryExpr(l, "=", r) =>
+        val pair = for
+          lc <- columnOfMeta(leftMeta, l)
+          rc <- columnOfMeta(rightMeta, r)
+        yield EquiPair(l, r, lc, rc, idx)
+
+        pair.orElse {
+          for
+            rc <- columnOfMeta(rightMeta, l)
+            lc <- columnOfMeta(leftMeta, r)
+          yield EquiPair(r, l, lc, rc, idx)
+        } match
+          case Some(ep) => equiPairs += ep
+          case None     => otherIndices += idx
+      case _ =>
+        otherIndices += idx
+  }
+
+  if equiPairs.isEmpty then return None
+
+  def tryIndexedInner(
+      innerTable: Table,
+      getInnerCol: EquiPair => String,
+      getOuterKeyExpr: EquiPair => Expr,
+  ): Option[(TableIndex, Seq[Expr], Set[Int])] =
+    val colMap = mutable.Map[String, (Expr, Int)]()
+    equiPairs.foreach { ep =>
+      val col = getInnerCol(ep)
+      if !colMap.contains(col) then colMap(col) = (getOuterKeyExpr(ep), ep.conjIdx)
+    }
+
+    val compositeResult = innerTable.tableIndexes.values.toSeq.filter(_.meta.columns.length > 1).flatMap { idx =>
+      val prefix = idx.meta.columns.takeWhile(c => colMap.contains(c))
+      if prefix.length >= 2 then
+        val keyExprs = prefix.map(c => colMap(c)._1)
+        val usedIndices = prefix.map(c => colMap(c)._2).toSet
+        Some((idx, keyExprs, usedIndices, prefix.length, idx.meta.unique))
+      else None
+    }.sortBy { case (_, _, _, prefixLen, unique) =>
+      (-prefixLen, if unique then 0 else 1)
+    }.headOption.map { case (idx, keyExprs, usedIndices, _, _) =>
+      (idx, keyExprs, usedIndices)
+    }
+
+    compositeResult.orElse {
+      equiPairs.flatMap { ep =>
+        val col = getInnerCol(ep)
+        findIndex(innerTable, col).map { case (idx, unique) =>
+          (idx, Seq(getOuterKeyExpr(ep)), Set(ep.conjIdx), unique)
+        }
+      }.sortBy { case (_, _, _, unique) => if unique then 0 else 1 }
+        .headOption.map { case (idx, keyExprs, usedIndices, _) =>
+          (idx, keyExprs, usedIndices)
+        }
+    }
+
+  def buildProcess(
+      outerProc: Process,
+      innerTable: Table,
+      innerMeta: Metadata,
+      idx: TableIndex,
+      keyExprs: Seq[Expr],
+      usedConjIndices: Set[Int],
+      outerIsLeft: Boolean,
+  ): Process =
+    val residualConj = conjuncts.zipWithIndex.collect { case (c, i) if !usedConjIndices.contains(i) => c }
+    val residual = residualConj.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+
+    if isLeft then
+      LeftIndexNestedLoopJoinProcess(outerProc, innerTable, idx, keyExprs, innerMeta, residual)
+    else if isRight then
+      RightIndexNestedLoopJoinProcess(outerProc, innerTable, idx, keyExprs, innerMeta, residual)
+    else
+      IndexNestedLoopJoinProcess(outerProc, innerTable, idx, keyExprs, innerMeta, residual, outerIsLeft)
+
+  val tryRight = if !isRight then
+    extractTable(right).flatMap { case (rightTable, rightOuterMeta) =>
+      tryIndexedInner(rightTable, _.rightCol, _.leftExpr).map { case (idx, keyExprs, usedIndices) =>
+        buildProcess(left, rightTable, rightOuterMeta, idx, keyExprs, usedIndices, outerIsLeft = true)
+      }
+    }
+  else None
+
+  tryRight.orElse {
+    if !isLeft then
+      extractTable(left).flatMap { case (leftTable, leftOuterMeta) =>
+        tryIndexedInner(leftTable, _.leftCol, _.rightExpr).map { case (idx, keyExprs, usedIndices) =>
+          buildProcess(right, leftTable, leftOuterMeta, idx, keyExprs, usedIndices, outerIsLeft = false)
+        }
+      }
+    else None
+  }
 
 def procRewrite(expr: Expr)(using session: Session): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

@@ -551,6 +551,12 @@ private def formatProcess(proc: Process, indent: Int): String =
     case p: CrossProcess       => s"${prefix}Cross Join\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
     case p: AliasProcess       => s"${prefix}Alias (${p.alias})\n${formatProcess(p.input, indent + 1)}"
     case p: IndexScanProcess   => s"${prefix}Index Scan on ${p.table.name} using ${p.index.meta.name}"
+    case p: IndexNestedLoopJoinProcess =>
+      s"${prefix}Index Nested Loop Join using ${p.index.meta.name} on ${p.table.name}\n${formatProcess(p.outer, indent + 1)}"
+    case p: LeftIndexNestedLoopJoinProcess =>
+      s"${prefix}Index Nested Loop Left Join using ${p.index.meta.name} on ${p.table.name}\n${formatProcess(p.outer, indent + 1)}"
+    case p: RightIndexNestedLoopJoinProcess =>
+      s"${prefix}Index Nested Loop Right Join using ${p.index.meta.name} on ${p.table.name}\n${formatProcess(p.outer, indent + 1)}"
     case p: UnionProcess       => s"${prefix}Union${if p.all then " All" else ""}\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
     case p: GenerateSeriesProcess => s"${prefix}Generate Series"
     case t: Table              => s"${prefix}Seq Scan on ${t.name}"

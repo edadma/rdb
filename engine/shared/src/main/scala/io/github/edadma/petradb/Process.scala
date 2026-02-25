@@ -334,6 +334,84 @@ case class FullCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
 
     leftResults ++ rightUnmatched
 
+case class IndexNestedLoopJoinProcess(
+    outer: Process,
+    table: Table,
+    index: TableIndex,
+    outerKeyExprs: Seq[Expr],
+    innerMeta: Metadata,
+    residual: Option[Expr],
+    outerIsLeft: Boolean,
+) extends Process:
+  val meta: Metadata =
+    if outerIsLeft then Metadata(outer.meta.columns ++ innerMeta.columns)
+    else Metadata(innerMeta.columns ++ outer.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    outer.iterator(ctx).flatMap { outerRow =>
+      val key = outerKeyExprs.map(e => eval(e, outerRow +: ctx)).toIndexedSeq
+      val innerIter = table.indexPointScan(index, key).getOrElse(Iterator.empty)
+      val matches = innerIter.flatMap { innerRow =>
+        val combined =
+          if outerIsLeft then Row(outerRow.data ++ innerRow.data, meta, None, None)
+          else Row(innerRow.data ++ outerRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }
+      matches
+    }
+
+case class LeftIndexNestedLoopJoinProcess(
+    outer: Process,
+    table: Table,
+    index: TableIndex,
+    outerKeyExprs: Seq[Expr],
+    innerMeta: Metadata,
+    residual: Option[Expr],
+) extends Process:
+  val meta: Metadata = Metadata(outer.meta.columns ++ innerMeta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    outer.iterator(ctx).flatMap { outerRow =>
+      val key = outerKeyExprs.map(e => eval(e, outerRow +: ctx)).toIndexedSeq
+      val innerIter = table.indexPointScan(index, key).getOrElse(Iterator.empty)
+      val matches = innerIter.flatMap { innerRow =>
+        val combined = Row(outerRow.data ++ innerRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }
+      if matches.isEmpty then
+        Iterator(Row(outerRow.data ++ Vector.fill(innerMeta.width)(NULL), meta, None, None))
+      else matches
+    }
+
+case class RightIndexNestedLoopJoinProcess(
+    outer: Process,
+    table: Table,
+    index: TableIndex,
+    outerKeyExprs: Seq[Expr],
+    innerMeta: Metadata,
+    residual: Option[Expr],
+) extends Process:
+  val meta: Metadata = Metadata(innerMeta.columns ++ outer.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    outer.iterator(ctx).flatMap { outerRow =>
+      val key = outerKeyExprs.map(e => eval(e, outerRow +: ctx)).toIndexedSeq
+      val innerIter = table.indexPointScan(index, key).getOrElse(Iterator.empty)
+      val matches = innerIter.flatMap { innerRow =>
+        val combined = Row(innerRow.data ++ outerRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }
+      if matches.isEmpty then
+        Iterator(Row(Vector.fill(innerMeta.width)(NULL) ++ outerRow.data, meta, None, None))
+      else matches
+    }
+
 case class GenerateSeriesProcess(startExpr: Expr, stopExpr: Expr, stepExpr: Option[Expr]) extends Process:
   val meta: Metadata = Metadata(Vector(ColumnMetadata(None, "generate_series", NumberType)))
 
