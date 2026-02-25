@@ -4,6 +4,8 @@ import io.github.edadma.petradb.Session
 import io.github.edadma.readline
 
 class PlatformRepl(session: Session) extends Repl(session):
+  private val historyFile = System.getProperty("user.home") + "/.petradb_history"
+
   override def readStdin(): Option[String] =
     val s = scala.io.Source.stdin.mkString
     if s.trim.nonEmpty then Some(s) else None
@@ -14,6 +16,7 @@ class PlatformRepl(session: Session) extends Repl(session):
       case line => Some(line)
 
   def run(): Unit =
+    readline.read_history(historyFile)
     var running = true
     while running do
       nativeReadLine(prompt) match
@@ -26,3 +29,4 @@ class PlatformRepl(session: Session) extends Repl(session):
               running = handleMeta(trimmed)
             else
               collectAndExecute(trimmed, nativeReadLine)
+    readline.write_history(historyFile)
