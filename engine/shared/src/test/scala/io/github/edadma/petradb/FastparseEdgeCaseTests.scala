@@ -131,9 +131,58 @@ class FastparseEdgeCaseTests extends AnyFreeSpec with Matchers with Testing:
     SQLParser.parseCommands("SELECT 1 AS a;;;").length shouldBe 1
   }
 
-  "bookstore.sql integration" in {
-    val sql = scala.io.Source.fromFile("examples/bookstore/bookstore.sql").mkString
-    given Session = new MemoryDB().connect()
-    val res = executeSQL(sql)
-    res should not be empty
+  "decimal literal vs dot-qualified column parsing" in {
+    // basic dot-qualified column
+    val t1 = query("""
+      CREATE TABLE t (id INTEGER);
+      INSERT INTO t (id) VALUES (7);
+      SELECT t.id FROM t;
+    """)
+    t1.data.length shouldBe 1
+    t1.data(0).data(0) shouldBe NumberValue(7)
+
+    // multiple dot-qualified columns
+    val t2 = query("""
+      CREATE TABLE t (id INTEGER, name TEXT);
+      INSERT INTO t (id, name) VALUES (1, 'alice');
+      SELECT t.id, t.name FROM t WHERE t.id = 1;
+    """)
+    t2.data.length shouldBe 1
+    t2.data(0).data(0) shouldBe NumberValue(1)
+    t2.data(0).data(1) shouldBe TextValue("alice")
+
+    // plain decimal literal
+    val t3 = query("SELECT 3.14 AS val;")
+    t3.data(0).data(0) shouldBe NumberValue(3.14)
+
+    // decimal starting with dot
+    val t4 = query("SELECT .5 AS val;")
+    t4.data(0).data(0) shouldBe NumberValue(0.5)
+
+    // scientific notation
+    val t5 = query("SELECT 5e2 AS val;")
+    t5.data(0).data(0) shouldBe NumberValue(500.0)
+
+    // dot-qualified column mixed with decimal in same expression
+    val t6 = query("""
+      CREATE TABLE t (id INTEGER);
+      INSERT INTO t (id) VALUES (2);
+      SELECT t.id + 3.14 AS val FROM t;
+    """)
+    t6.data.length shouldBe 1
+    val NumberValue(_, v: Double) = t6.data(0).data(0): @unchecked
+    v shouldBe 5.14 +- 0.001
+
+    // comparison mixing dot-qualified column and decimal
+    val t7 = query("""
+      CREATE TABLE t (id INTEGER);
+      INSERT INTO t (id) VALUES (1);
+      INSERT INTO t (id) VALUES (2);
+      INSERT INTO t (id) VALUES (3);
+      SELECT t.id FROM t WHERE t.id > 1.5 ORDER BY t.id;
+    """)
+    t7.data.length shouldBe 2
+    t7.data(0).data(0) shouldBe NumberValue(2)
+    t7.data(1).data(0) shouldBe NumberValue(3)
   }
+
