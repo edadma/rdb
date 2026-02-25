@@ -14,7 +14,7 @@ npm install @petradb/engine
 ### Scala (SBT)
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.1"
 ```
 
 ## Quick Start

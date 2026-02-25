@@ -2,7 +2,7 @@ import xerial.sbt.Sonatype.sonatypeCentralHost
 
 ThisBuild / licenses               := Seq("ISC" -> url("https://opensource.org/licenses/ISC"))
 ThisBuild / versionScheme          := Some("semver-spec")
-ThisBuild / version                := "1.1.0"
+ThisBuild / version                := "1.1.1"
 ThisBuild / evictionErrorLevel     := Level.Warn
 ThisBuild / scalaVersion           := "3.8.1"
 ThisBuild / organization           := "io.github.edadma"
@@ -51,7 +51,7 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("shared"))
   .settings(
     name    := "petradb-shared",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"       %%% "dal"                       % "0.0.10",
@@ -85,7 +85,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-engine",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dllist"         % "0.0.6",
@@ -128,7 +128,7 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-client",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "fetch"     % "0.0.1",
@@ -158,7 +158,7 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .dependsOn(engine)
   .settings(
     name    := "petradb-cli",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
@@ -184,7 +184,7 @@ lazy val server = crossProject(JVMPlatform)
   .dependsOn(engine, shared)
   .settings(
     name    := "petradb-server",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "com.indoorvivants" %% "toml"        % "0.3.0",
@@ -209,7 +209,7 @@ lazy val jdbc = project
   .dependsOn(client.jvm, engine.jvm, server.jvm)
   .settings(
     name    := "petradb-jdbc",
-    version := "1.1.0",
+    version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     assembly / assemblyJarName := "petradb-jdbc.jar",

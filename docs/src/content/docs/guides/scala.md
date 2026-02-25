@@ -8,7 +8,7 @@ description: Using PetraDB from Scala on JVM, JS, and Native.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.1"
 ```
 
 The `%%%` operator selects the correct artifact for your platform (JVM, Scala.js, or Scala Native).
