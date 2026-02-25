@@ -94,6 +94,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "io.github.edadma"  %%% "stow"           % "0.0.2",
       "io.github.edadma"  %%% "table"          % "0.0.4",
       "io.github.edadma"  %%% "importer"       % "0.1.1",
+      "com.lihaoyi"       %%% "fastparse"      % "3.1.1",
     ),
     libraryDependencies ++= Seq(
       "org.scalatest" %%% "scalatest" % "3.2.19" % "test",

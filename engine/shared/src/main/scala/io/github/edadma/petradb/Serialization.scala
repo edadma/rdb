@@ -759,7 +759,7 @@ def deserializeCatalog(
           val hasName = in.readByte() != 0
           val cName   = if hasName then Some(readString(in)) else None
           val exprSource = readString(in)
-          val parsed = SQLParser.parse(exprSource, SQLParser.booleanExpression)
+          val parsed = SQLParser.parseBooleanExpression(exprSource)
           constraints += CheckSpec(exprSource, parsed, cName)
         case other => sys.error(s"unknown constraint type tag: $other")
 

@@ -1,665 +1,922 @@
 package io.github.edadma.petradb
 
 import scala.collection.immutable.ArraySeq
-import scala.language.postfixOps
-import scala.util.parsing.combinator.PackratParsers
-import scala.util.parsing.combinator.lexical.StdLexical
-import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.input.CharSequenceReader.EofCh
 import scala.util.parsing.input.{Position, Positional}
+import fastparse._
 
-object SQLParser extends StandardTokenParsers with PackratParsers:
+object SQLParser:
 
-  class SQLLexer extends StdLexical:
-    delimiters ++= Seq(
-      "+",
-      "-",
-      "*",
-      "/",
-      "%",
-      "(",
-      ")",
-      ".",
-      "||",
-      "<=",
-      ">=",
-      "<",
-      ">",
-      "=",
-      "!=",
-      "<>",
-      ",",
-      "&",
-      "|",
-      "^",
-      "~",
-      "<<",
-      ">>",
-      "#",
-      "@",
-      "{",
-      "}",
-      "::",
-      ":",
-      "[",
-      "]",
-      ";",
-      "$",
-      "->>",
-      "->",
-      "#>>",
-      "#>",
-      "@>",
-      "<@",
-      "?|",
-      "?&",
-      "?",
-      "&&",
-    )
-    reserved ++= Seq(
-      "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
-      "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
-      "cascade", "case", "cast", "char", "check", "column", "commit", "conflict", "constraint",
-      "create", "cross", "current_timestamp",
-      "database", "date", "deallocate", "decimal", "default", "delete", "desc",
-      "distinct", "do", "double", "drop",
-      "else", "end", "enum", "except", "exec", "execute", "exists", "explain", "extract",
-      "false", "first", "float", "for", "foreign", "from", "full",
-      "group",
-      "having",
-      "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
-      "intersect", "interval", "into", "is",
-      "join", "json", "jsonb",
-      "key",
-      "last", "lateral", "left", "like", "limit",
-      "no", "not", "nothing", "null", "nulls", "numeric",
-      "offset", "on", "or", "order", "outer", "overlay", "overlaps",
-      "placing", "precision", "prepare", "primary", "procedure",
-      "real", "references", "rename", "restrict", "returning", "right", "rollback",
-      "select", "serial", "set", "smallint", "smallserial", "some", "symmetric",
-      "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
-      "true", "truncate", "type",
-      "union", "unique", "unknown", "update", "uuid",
-      "values", "varchar",
-      "when", "where", "with", "without",
-      "zone",
-    )
+  // ── Position bridging ──────────────────────────────────────────────
 
-    override protected def processIdent(name: String): Token =
-      val lower = name.toLowerCase
-      if reserved.contains(lower) then Keyword(lower) else Identifier(lower)
+  private var currentInput: String = ""
 
-    case class DecimalLit(chars: String) extends Token {
-      override def toString: String = chars
-    }
+  private class IndexPosition(input: String, idx: Int) extends Position:
+    private lazy val computed: (Int, Int, String) =
+      var line = 1
+      var col = 1
+      var lineStart = 0
+      var i = 0
+      while i < idx && i < input.length do
+        if input.charAt(i) == '\n' then
+          line += 1
+          col = 1
+          lineStart = i + 1
+        else
+          col += 1
+        i += 1
+      val lineEnd = input.indexOf('\n', lineStart)
+      val contents = if lineEnd < 0 then input.substring(lineStart) else input.substring(lineStart, lineEnd)
+      (line, col, contents)
 
-    case class ParameterLit(index: Int) extends Token {
-      def chars: String = s"$$$index"
-      override def toString: String = chars
-    }
+    def line: Int = computed._1
+    def column: Int = computed._2
+    protected def lineContents: String = computed._3
 
-    override def token: Parser[Token] = quotedToken | stringToken | parameterToken | decimalToken | super.token
+  private def mkPos(idx: Int): Position = new IndexPosition(currentInput, idx)
 
-    private def parameterToken: Parser[Token] =
-      '$' ~> rep1(digit) ^^ { digits => ParameterLit(digits.mkString.toInt) }
+  private def pos[T <: Positional](idx: Int, t: T): T =
+    t.setPos(mkPos(idx))
+    t
 
-    // Add support for SQL comments
-    override def whitespace: Parser[Any] = rep[Any](
-      whitespaceChar
-        | '/' ~ '*' ~ comment                     // Keep /* */ block comments
-        | '-' ~ '-' ~ rep(chrExcept(EofCh, '\n')) // Add -- line comments for SQL
-        | '/' ~ '*' ~ rep(elem("", _ => true)) ~> err("unclosed comment"),
-    )
+  // ── Whitespace handler ─────────────────────────────────────────────
 
-    private def decimalToken: Parser[Token] =
-      digits ~ '.' ~ digits ~ optExponent ^^ { case intPart ~ _ ~ fracPart ~ exp =>
-        DecimalLit(s"$intPart.$fracPart$exp")
-      } |
-        '.' ~ digits ~ optExponent ^^ { case _ ~ fracPart ~ exp =>
-          DecimalLit(s".$fracPart$exp")
-        } |
-        digits ~ exponent ^^ { case intPart ~ exp =>
-          DecimalLit(s"$intPart$exp")
-        }
+  implicit val whitespace: fastparse.Whitespace = { implicit ctx: ParsingRun[?] =>
+    val input = ctx.input
+    var idx = ctx.index
+    val length = input.length
+    var continue = true
 
-    private def digits = rep1(digit) ^^ (_ mkString)
+    while continue && idx < length do
+      val c = input(idx)
+      if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' then
+        idx += 1
+      else if c == '-' && idx + 1 < length && input(idx + 1) == '-' then
+        idx += 2
+        while idx < length && input(idx) != '\n' do idx += 1
+      else if c == '/' && idx + 1 < length && input(idx + 1) == '*' then
+        idx += 2
+        var depth = 1
+        while idx < length && depth > 0 do
+          if input(idx) == '/' && idx + 1 < length && input(idx + 1) == '*' then
+            depth += 1
+            idx += 2
+          else if input(idx) == '*' && idx + 1 < length && input(idx + 1) == '/' then
+            depth -= 1
+            idx += 2
+          else
+            idx += 1
+        if depth > 0 then
+          ctx.freshFailure(idx)
+          ctx.asInstanceOf[ParsingRun[Unit]]
+        else
+          continue = false // re-loop to handle whitespace after comment
+          continue = true
+      else
+        continue = false
 
-    private def chr(c: Char) = elem("", ch => ch == c)
+    ctx.freshSuccessUnit(idx)
+    ctx.asInstanceOf[ParsingRun[Unit]]
+  }
 
-    private def exponent = (chr('e') | 'E') ~ opt(chr('+') | '-') ~ digits ^^ {
-      case e ~ None ~ exp    => List(e, exp) mkString
-      case e ~ Some(s) ~ exp => List(e, s, exp) mkString
-    }
+  // ── Character predicates ───────────────────────────────────────────
 
-    private def optExponent = opt(exponent) ^^ {
-      case None    => ""
-      case Some(e) => e
-    }
+  private def identStartChar(c: Char): Boolean = c.isLetter || c == '_'
+  private def identChar(c: Char): Boolean = c.isLetterOrDigit || c == '_'
 
-    private def quotedToken: Parser[Token] =
-      '"' ~> rep(guard(not('"')) ~> elem("", _ => true)) <~ '"' ^^ { l => Identifier(l mkString) }
+  // ── Reserved words ─────────────────────────────────────────────────
 
-    private def stringToken: Parser[Token] =
-      'E' ~> '\'' ~> rep(guard(not('\'')) ~> (('\\' ~ '\'' ^^^ "\\'") | elem("", _ => true))) <~ '\'' ^^ (l =>
-        StringLit(unescape(l mkString))
-      ) |
-      '\'' ~> rep(('\'' ~ '\'' ^^^ '\'') | guard(not('\'')) ~> elem("", _ => true)) <~ '\'' ^^ (l =>
-        StringLit(l mkString)
-      )
-
-  override val lexical: SQLLexer = new SQLLexer
-
-  import lexical.{DecimalLit, ParameterLit}
-
-  def decimalLit: Parser[String] =
-    elem("decimal", _.isInstanceOf[DecimalLit]) ^^ (_.asInstanceOf[DecimalLit].chars)
-
-  def parameterLit: P[Int] =
-    elem("parameter", _.isInstanceOf[ParameterLit]) ^^ (_.asInstanceOf[ParameterLit].index)
-
-  type P[+T] = PackratParser[T]
-
-  def kw(s: String): P[String] = keyword(s.toLowerCase) ^^^ s.toUpperCase
-
-  lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
-
-  lazy val valuesClause: P[Expr] =
-    kw("VALUES") ~> rep1sep("(" ~> rep1sep(expression, ",") <~ ")", ",") ^^ ValuesExpr.apply
-
-  lazy val selectCore: P[Expr] =
-    kw(
-      "SELECT",
-    ) ~ opt(kw("DISTINCT")) ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause ^^ {
-      case _ ~ d ~ p ~ f ~ w ~ g ~ h =>
-        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = d.isDefined)
-    } | valuesClause | "(" ~> compoundSelect <~ ")"
-
-  lazy val intersectSelect: P[Expr] =
-    intersectSelect ~ kw("INTERSECT") ~ selectCore ^^ { case l ~ _ ~ r =>
-      SetOperationExpr("INTERSECT", l, r)
-    } | selectCore
-
-  lazy val compoundSelect: P[Expr] =
-    compoundSelect ~ kw("UNION") ~ kw("ALL") ~ intersectSelect ^^ { case l ~ _ ~ _ ~ r =>
-      SetOperationExpr("UNION ALL", l, r)
-    } |
-      compoundSelect ~ kw("UNION") ~ intersectSelect ^^ { case l ~ _ ~ r =>
-        SetOperationExpr("UNION", l, r)
-      } |
-      compoundSelect ~ kw("EXCEPT") ~ intersectSelect ^^ { case l ~ _ ~ r =>
-        SetOperationExpr("EXCEPT", l, r)
-      } |
-      intersectSelect
-
-  lazy val query: P[Expr] =
-    compoundSelect ~ orderByClause ~ limitClause ~ offsetClause ^^ {
-      case (s: SQLSelectExpr) ~ o ~ l ~ of            => s.copy(orderBy = o, limit = l, offset = of)
-      case s ~ None ~ None ~ None                     => s
-      case s ~ o ~ l ~ of                             => CompoundQueryExpr(s, o, of, l)
-    }
-
-  lazy val fromClause: P[Option[Seq[Expr]]] = opt(kw("FROM") ~> rep1sep(sources, ","))
-
-  lazy val whereClause: P[Option[Expr]] = opt(kw("WHERE") ~> booleanExpression)
-
-  lazy val groupByClause: P[Option[Seq[Expr]]] = opt(kw("GROUP") ~> kw("BY") ~> rep1sep(expression, ","))
-
-  lazy val havingClause: P[Option[Expr]] = opt(kw("HAVING") ~> booleanExpression)
-
-  lazy val orderByClause: P[Option[Seq[OrderBy]]] = opt(kw("ORDER") ~> kw("BY") ~> rep1sep(orderBy, ","))
-
-  lazy val count: P[Count] = pos ~ integer ^^ { case p ~ c => Count(p, c) }
-
-  lazy val offsetClause: P[Option[Count]] = opt(kw("OFFSET") ~> count)
-
-  lazy val limitClause: P[Option[Count]] = opt(kw("LIMIT") ~> count)
-
-  lazy val orderBy: P[OrderBy] =
-    expression ~ opt(kw("ASC") | kw("DESC")) ~ opt(kw("NULLS") ~> (kw("FIRST") | kw("LAST"))) ^^ {
-      case e ~ (None | Some("ASC")) ~ (None | Some("FIRST")) => OrderBy(e, true, true)
-      case e ~ _ ~ (None | Some("FIRST"))                    => OrderBy(e, false, true)
-      case e ~ (None | Some("ASC")) ~ _                      => OrderBy(e, true, false)
-      case e ~ _ ~ _                                         => OrderBy(e, false, false)
-    }
-
-  lazy val joinType: P[String] =
-    kw("INNER") ^^^ "INNER" |
-      kw("LEFT") ~ opt(kw("OUTER")) ^^^ "LEFT" |
-      kw("RIGHT") ~ opt(kw("OUTER")) ^^^ "RIGHT" |
-      kw("FULL") ~ opt(kw("OUTER")) ^^^ "FULL"
-
-  lazy val sources: P[Expr] =
-    sources ~ kw("CROSS") ~ kw("JOIN") ~ source ^^ {
-      case l ~ _ ~ _ ~ r => CrossOperator(l, r)
-    } |
-      sources ~ opt(joinType) ~ kw("JOIN") ~ source ~ kw("ON") ~ booleanExpression ^^ {
-        case l ~ Some("LEFT") ~ _ ~ r ~ _ ~ c  => LeftJoinOperator(l, r, c)
-        case l ~ Some("RIGHT") ~ _ ~ r ~ _ ~ c => RightJoinOperator(l, r, c)
-        case l ~ Some("FULL") ~ _ ~ r ~ _ ~ c  => FullJoinOperator(l, r, c)
-        case l ~ _ ~ _ ~ r ~ _ ~ c             => InnerJoinOperator(l, r, c)
-      } | source
-
-  lazy val source: P[Expr] =
-    kw("LATERAL") ~> ("(" ~> query <~ ")") ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
-      case q ~ None                  => LateralExpr(q)
-      case q ~ Some(a ~ None)        => AliasOperator(LateralExpr(q), a)
-      case q ~ Some(a ~ Some(cols))  => ColumnAliasOperator(LateralExpr(q), a, cols)
-    } |
-    (application | table | valuesClause | ("(" ~> query <~ ")")) ~ opt(opt(kw("AS")) ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")")) ^^ {
-      case s ~ None                  => s
-      case s ~ Some(a ~ None)        => AliasOperator(s, a)
-      case s ~ Some(a ~ Some(cols))  => ColumnAliasOperator(s, a, cols)
-    }
-
-  lazy val table: P[Expr] = positioned(
-    identifier ^^ TableOperator.apply,
+  private val reservedWords: Set[String] = Set(
+    "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
+    "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
+    "cascade", "case", "cast", "char", "check", "column", "commit", "conflict", "constraint",
+    "create", "cross", "current_timestamp",
+    "database", "date", "deallocate", "decimal", "default", "delete", "desc",
+    "distinct", "do", "double", "drop",
+    "else", "end", "enum", "except", "exec", "execute", "exists", "explain", "extract",
+    "false", "first", "float", "for", "foreign", "from", "full",
+    "group",
+    "having",
+    "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
+    "intersect", "interval", "into", "is",
+    "join", "json", "jsonb",
+    "key",
+    "last", "lateral", "left", "like", "limit",
+    "no", "not", "nothing", "null", "nulls", "numeric",
+    "offset", "on", "or", "order", "outer", "overlay", "overlaps",
+    "placing", "precision", "prepare", "primary", "procedure",
+    "real", "references", "rename", "restrict", "returning", "right", "rollback",
+    "select", "serial", "set", "smallint", "smallserial", "some", "symmetric",
+    "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
+    "true", "truncate", "type",
+    "union", "unique", "unknown", "update", "uuid",
+    "values", "varchar",
+    "when", "where", "with", "without",
+    "zone",
   )
 
-  lazy val star: P[Expr] = positioned(
-    "*" ^^^ StarExpr(),
-  )
+  // ── Keywords and identifiers ───────────────────────────────────────
 
-  lazy val identifier: P[Ident] = positioned(
-    ident ^^ Ident.apply,
-  )
+  // kw returns P[Unit] — matches keyword case-insensitively, ensures not followed by ident char
+  private def kw[p: P](s: String): P[Unit] = {
+    import NoWhitespace._
+    P(IgnoreCase(s) ~ !CharPred(identChar))
+  }
 
-  lazy val selectExpression: P[Expr] =
-    star |
-      (expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } | expression) ~ opt(opt(kw("AS")) ~> identifier) ^^ {
-        case e ~ None    => e
-        case e ~ Some(a) => AliasExpr(e, a)
+  // identRaw returns P[String] — unquoted identifier, lowercased, not a reserved word
+  private def identRaw[p: P]: P[String] = {
+    import NoWhitespace._
+    P((CharPred(identStartChar) ~ CharsWhile(identChar, 0)).!)
+      .map(_.toLowerCase)
+      .filter(!reservedWords.contains(_))
+  }
+
+  // quotedIdent returns P[String] — double-quoted identifier, preserves case
+  private def quotedIdent[p: P]: P[String] = {
+    import NoWhitespace._
+    P("\"" ~ CharsWhile(_ != '"', 1).! ~ "\"")
+  }
+
+  // ident returns P[String]
+  private def ident[p: P]: P[String] = P(quotedIdent | identRaw)
+
+  // identifier returns P[Ident] with position
+  private def identifier[p: P]: P[Ident] =
+    P(Index ~ ident).map((idx, name) => pos(idx, Ident(name)))
+
+  // ── Literals ───────────────────────────────────────────────────────
+
+  private def digits[p: P]: P[String] = {
+    import NoWhitespace._
+    P(CharsWhileIn("0-9", 1).!)
+  }
+
+  private def exponent[p: P]: P[String] = {
+    import NoWhitespace._
+    P((CharIn("eE") ~ CharIn("+\\-").? ~ CharsWhileIn("0-9", 1)).!)
+  }
+
+  // decimalLit returns P[String] — the raw decimal text
+  private def decimalLit[p: P]: P[String] = {
+    import NoWhitespace._
+    P(
+      (CharsWhileIn("0-9", 1) ~ "." ~ CharsWhileIn("0-9", 1) ~ exponent.?).!
+      | ("." ~ CharsWhileIn("0-9", 1) ~ exponent.?).!
+      | (CharsWhileIn("0-9", 1) ~ exponent).!
+    )
+  }
+
+  // integerLit returns P[Int]
+  private def integerLit[p: P]: P[Int] = {
+    import NoWhitespace._
+    P(CharsWhileIn("0-9", 1).!).map(_.toInt)
+  }
+
+  // parameterLit returns P[Int] — the parameter index
+  private def parameterLit[p: P]: P[Int] = {
+    import NoWhitespace._
+    P("$" ~ CharsWhileIn("0-9", 1).!).map(_.toInt)
+  }
+
+  // sqlStringLit returns P[String] — standard SQL string with '' escape
+  private def sqlStringLit[p: P]: P[String] = {
+    import NoWhitespace._
+    P("'" ~ (("''" | (!"'" ~ AnyChar)).rep.!) ~ "'").map(_.replace("''", "'"))
+  }
+
+  // eStringLit returns P[String] — E'...' string with backslash escapes
+  private def eStringLit[p: P]: P[String] = {
+    import NoWhitespace._
+    P(IgnoreCase("e") ~ "'" ~ (("\\" ~ AnyChar) | (!"'" ~ AnyChar)).rep.! ~ "'").map(unescape)
+  }
+
+  // stringLit returns P[String]
+  private def stringLit[p: P]: P[String] = P(eStringLit | sqlStringLit)
+
+  // integer returns P[Int] (with whitespace)
+  private def integer[p: P]: P[Int] = P(integerLit)
+
+  // ── Types ──────────────────────────────────────────────────────────
+
+  private def baseTypNumeric[p: P]: P[Either[Type, Ident]] =
+    P(
+      kw("boolean").map(_ => Left(BooleanType))
+      | kw("smallint").map(_ => Left(SmallintType))
+      | (kw("integer") | kw("int")).map(_ => Left(IntegerType))
+      | kw("bigint").map(_ => Left(BigintType))
+      | kw("smallserial").map(_ => Left(SmallSerialType))
+      | kw("serial").map(_ => Left(SerialType))
+      | kw("bigserial").map(_ => Left(BigSerialType))
+      | (kw("double") ~ kw("precision").? | kw("float") | kw("real")).map(_ => Left(DoubleType))
+      | (kw("numeric") ~ "(" ~ integer ~ ("," ~ integer).? ~ ")").map { case (p, s) => Left(NumericType(p, s.getOrElse(0))) }
+      | kw("numeric").map(_ => Left(NumericType(0, 0)))
+      | (kw("decimal") ~ "(" ~ integer ~ ("," ~ integer).? ~ ")").map { case (p, s) => Left(NumericType(p, s.getOrElse(0))) }
+      | kw("decimal").map(_ => Left(NumericType(0, 0)))
+    )
+
+  private def baseTypString[p: P]: P[Either[Type, Ident]] =
+    P(
+      (kw("char") ~ "(" ~ integer ~ ")").map(n => Left(CharType(n)))
+      | (kw("varchar") ~ "(" ~ integer ~ ")").map(n => Left(VarcharType(n)))
+      | kw("varchar").map(_ => Left(TextType))
+      | kw("jsonb").map(_ => Left(JSONType))
+      | kw("json").map(_ => Left(JSONType))
+      | kw("bytea").map(_ => Left(ByteaType))
+      | kw("text").map(_ => Left(TextType))
+      | kw("uuid").map(_ => Left(UUIDType))
+    )
+
+  private def baseTypTemporal[p: P]: P[Either[Type, Ident]] =
+    P(
+      (kw("timestamp") ~ kw("with") ~ kw("time") ~ kw("zone")).map(_ => Left(TimestampTZType))
+      | (kw("timestamp") ~ (kw("without") ~ kw("time") ~ kw("zone")).?).map(_ => Left(TimestampType))
+      | kw("date").map(_ => Left(DateType))
+      | kw("timetz").map(_ => Left(TimeTZType))
+      | (kw("time") ~ kw("with") ~ kw("time") ~ kw("zone")).map(_ => Left(TimeTZType))
+      | kw("time").map(_ => Left(TimeType))
+      | kw("interval").map(_ => Left(IntervalType))
+    )
+
+  private def baseTyp[p: P]: P[Either[Type, Ident]] =
+    P(baseTypNumeric | baseTypString | baseTypTemporal | identifier.map(Right(_)))
+
+  private def typ[p: P]: P[Either[Type, Ident]] =
+    P(baseTyp ~ ("[" ~ "]").!.?).map { case (base, arr) =>
+      if arr.isDefined then
+        base match
+          case Left(t) => Left(ArrayColumnType(t))
+          case other => other
+      else base
+    }
+
+  private def castType[p: P]: P[Type] =
+    typ.flatMap {
+      case Left(t) => Pass.map(_ => t)
+      case Right(_) => Fail.opaque("cannot cast to custom type")
+    }
+
+  // ── Expression chain ───────────────────────────────────────────────
+
+  // All binary chains: left ~ (op ~ right).rep → foldLeft
+  private def expression[p: P]: P[Expr] = P(concatenation)
+
+  private def concatenation[p: P]: P[Expr] =
+    P(bitwise ~ ("||".! ~ bitwise).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def bitwiseOp[p: P]: P[String] = {
+    import NoWhitespace._
+    P("<<".! | ">>".! | ("&" ~ !"&").!.map(_ => "&") | ("|" ~ !"|").!.map(_ => "|") | ("#" ~ !">").!.map(_ => "#"))
+  }
+
+  private def bitwise[p: P]: P[Expr] =
+    P(additive ~ (bitwiseOp ~ additive).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def additiveOp[p: P]: P[String] = {
+    import NoWhitespace._
+    P("+".! | ("-" ~ !("-" | ">")).!.map(_ => "-"))
+  }
+
+  private def additive[p: P]: P[Expr] =
+    P(multiplicative ~ (additiveOp ~ multiplicative).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def multiplicativeOp[p: P]: P[String] = P("*".! | "/".! | "%".!)
+
+  private def multiplicative[p: P]: P[Expr] =
+    P(exponentiation ~ (multiplicativeOp ~ exponentiation).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def exponentiation[p: P]: P[Expr] =
+    P(castExpression ~ ("^".! ~ castExpression).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def castExpression[p: P]: P[Expr] =
+    P(jsonAccess ~ ("::" ~ castType).?).map {
+      case (e, Some(t)) => CastExpr(e, t).setPos(e.pos).asInstanceOf[Expr]
+      case (e, None) => e
+    }
+
+  private def jsonAccessOp[p: P]: P[String] = {
+    import NoWhitespace._
+    P("->>".! | ("->" ~ !">").!.map(_ => "->") | "#>>".! | ("#>" ~ !">").!.map(_ => "#>"))
+  }
+
+  private def jsonAccess[p: P]: P[Expr] =
+    P(primary ~ (jsonAccessOp ~ primary).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  // ── Extract field ──────────────────────────────────────────────────
+
+  private def extractField[p: P]: P[String] =
+    P(
+      kw("timestamp").map(_ => "timestamp")
+      | kw("time").map(_ => "time")
+      | kw("date").map(_ => "date")
+      | ident.map(_.toLowerCase)
+    )
+
+  // ── Primary expressions ────────────────────────────────────────────
+
+  private def primaryLiterals[p: P]: P[Expr] =
+    P(
+      decimalPrimary
+      | integerPrimary
+      | parameterPrimary
+      | stringPrimary
+      | nullPrimary
+      | booleanLiteral
+      | jsonLiteral
+    )
+
+  private def primaryKeyword[p: P]: P[Expr] =
+    P(
+      arrayPrimary
+      | castPrimary
+      | extractPrimary
+      | overlayPrimary
+      | tableConstructorPrimary
+    )
+
+  private def primaryComplex[p: P]: P[Expr] =
+    P(
+      application
+      | column
+      | variable
+      | caseExpression.map(_.asInstanceOf[Expr])
+      | unaryMinusPrimary
+      | bitwiseNotPrimary
+      | subqueryPrimary
+      | parenExpr
+    )
+
+  private def primary[p: P]: P[Expr] = P(primaryLiterals | primaryKeyword | primaryComplex)
+
+  private def decimalPrimary[p: P]: P[Expr] =
+    P(Index ~ decimalLit).map((idx, s) => pos(idx, NumberExpr(s.toDouble)))
+
+  private def integerPrimary[p: P]: P[Expr] =
+    P(Index ~ integerLit).map((idx, n) => pos(idx, NumberExpr(n)))
+
+  private def parameterPrimary[p: P]: P[Expr] =
+    P(Index ~ parameterLit).map((idx, n) => pos(idx, ParameterExpr(n)))
+
+  private def stringPrimary[p: P]: P[Expr] =
+    P(Index ~ stringLit).map((idx, s) => pos(idx, StringExpr(s)))
+
+  // Index ~ kw("null") => just Int (kw returns Unit, dropped)
+  private def nullPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("null")).map(idx => pos(idx, NullExpr()))
+
+  // Index ~ kw("array") ~ "[" ~ ... ~ "]" => (Int, Seq[Expr])
+  private def arrayPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("array") ~ "[" ~ expression.rep(sep = ",") ~ "]").map((idx, elems) =>
+      pos(idx, ArrayExpr(elems))
+    )
+
+  // CAST(expr AS type) => (Int, Expr, Type)
+  private def castPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("cast") ~ "(" ~ expression ~ kw("as") ~ castType ~ ")").map((idx, e, t) =>
+      pos(idx, CastExpr(e, t))
+    )
+
+  // EXTRACT(field FROM expr) => (Int, String, Expr)
+  private def extractPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("extract") ~ "(" ~ extractField ~ kw("from") ~ expression ~ ")").map((idx, field, source) =>
+      pos(idx, ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source)))
+    )
+
+  // OVERLAY(s PLACING repl FROM start [FOR count]) => complex
+  private def overlayPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("overlay") ~ "(" ~ expression ~ kw("placing") ~ expression ~ kw("from") ~ expression ~ (kw("for") ~ expression).? ~ ")").map {
+      case (idx, s, repl, start, Some(count)) => pos(idx, ApplyExpr(Ident("overlay"), Seq(s, repl, start, count)))
+      case (idx, s, repl, start, None) => pos(idx, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
+    }
+
+  // func(args...) — identifier ~ "(" ~ args ~ ")" => (Int, Ident, Seq[Expr])
+  private def application[p: P]: P[Expr] =
+    P(Index ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")").map((idx, f, as) =>
+      pos(idx, ApplyExpr(f, as))
+    )
+
+  // table.column or just column — identifier ~ ("." ~ identifier).? => (Int, Ident, Option[Ident])
+  private def column[p: P]: P[ColumnExpr] =
+    P(Index ~ identifier ~ ("." ~ identifier).?).map {
+      case (idx, c, None) => pos(idx, ColumnExpr(None, c))
+      case (idx, t, Some(c)) => pos(idx, ColumnExpr(Some(t), c))
+    }
+
+  // CURRENT_TIMESTAMP — Index ~ kw => just Int
+  private def variable[p: P]: P[VariableExpr] =
+    P(Index ~ kw("current_timestamp")).map(idx =>
+      pos(idx, VariableExpr(pos(idx, Ident("CURRENT_TIMESTAMP"))))
+    )
+
+  private def unaryMinusPrimary[p: P]: P[Expr] =
+    P(Index ~ "-" ~ primary).map((idx, e) => pos(idx, UnaryExpr("-", e)))
+
+  private def bitwiseNotPrimary[p: P]: P[Expr] =
+    P(Index ~ "~" ~ primary).map((idx, e) => pos(idx, UnaryExpr("~", e)))
+
+  // TABLE(query)
+  private def tableConstructorPrimary[p: P]: P[Expr] =
+    P(Index ~ kw("table") ~ "(" ~ query ~ ")").map((idx, q) => pos(idx, TableConstructorExpr(q)))
+
+  // (query) as subquery — only when followed by set ops, order, limit, offset, ), ;, or end
+  private def subqueryPrimary[p: P]: P[Expr] =
+    P("(" ~ query ~ ")" ~ &(kw("union") | kw("intersect") | kw("except") | kw("order") | kw("limit") | kw("offset") | ")" | ";" | End)).map(q =>
+      SubqueryExpr(q).setPos(q.pos).asInstanceOf[Expr]
+    )
+
+  private def parenExpr[p: P]: P[Expr] = P("(" ~ expression ~ ")")
+
+  // ── Literal (for JSON values) ──────────────────────────────────────
+
+  private def literal[p: P]: P[Expr] =
+    P(
+      booleanLiteral
+      | jsonLiteral
+      | decimalPrimary
+      | integerPrimary
+      | stringPrimary
+      | nullPrimary
+      | (Index ~ "-" ~ primary).map((idx, e) => pos(idx, UnaryExpr("-", e)))
+    )
+
+  // ── Boolean expression chain ───────────────────────────────────────
+
+  private def booleanExpression[p: P]: P[Expr] = P(orExpression)
+
+  private def orExpression[p: P]: P[Expr] =
+    P(andExpression ~ (kw("or") ~ andExpression).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, r) => BinaryExpr(l, "OR", r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def andExpression[p: P]: P[Expr] =
+    P(notExpression ~ (kw("and") ~ notExpression).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, r) => BinaryExpr(l, "AND", r).setPos(l.pos).asInstanceOf[Expr] }
+    }
+
+  private def notExpression[p: P]: P[Expr] =
+    P(
+      (Index ~ kw("not") ~ booleanPrimary).map((idx, e) => pos(idx, UnaryExpr("NOT", e)))
+      | booleanPrimary
+    )
+
+  // ── Boolean primary ────────────────────────────────────────────────
+
+  private def booleanPrimary[p: P]: P[Expr] =
+    P(existsExpr | overlapsExpr | booleanLiteral | nullBoolExpr | parenBoolExpr | exprWithSuffix)
+
+  private def existsExpr[p: P]: P[Expr] =
+    P(Index ~ kw("exists") ~ "(" ~ query ~ ")").map((idx, q) => pos(idx, ExistsExpr(q)))
+
+  private def overlapsExpr[p: P]: P[Expr] =
+    P(Index ~ "(" ~ expression ~ "," ~ expression ~ ")" ~ kw("overlaps") ~ "(" ~ expression ~ "," ~ expression ~ ")").map {
+      (idx, s1, e1, s2, e2) => pos(idx, OverlapsExpr(s1, e1, s2, e2))
+    }
+
+  private def nullBoolExpr[p: P]: P[Expr] =
+    P(Index ~ kw("null")).map(idx => pos(idx, NullExpr()))
+
+  private def parenBoolExpr[p: P]: P[Expr] = P("(" ~ booleanExpression ~ ")")
+
+  private def exprWithSuffix[p: P]: P[Expr] =
+    P(expression ~ booleanSuffix.?).map {
+      case (e, Some(f)) => f(e)
+      case (e, None) => e
+    }
+
+  private def booleanSuffix[p: P]: P[Expr => Expr] =
+    P(jsonbOpSuffix | quantifiedSuffix | isDistinctSuffix | comparisonSuffix | betweenSuffix | isNullSuffix | inSuffix)
+
+  // @>, <@, &&, ?&, ?|, ? — operator ~ expression => (String, Expr)
+  private def jsonbOpSuffix[p: P]: P[Expr => Expr] =
+    P(("@>".! | "<@".! | "&&".! | "?&".! | "?|".! | "?".!) ~ expression).map { case (op, right) =>
+      (left: Expr) => BinaryExpr(left, op, right).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  private def quantifiedSuffix[p: P]: P[Expr => Expr] =
+    P(eqAnyArraySuffix | eqAnyQuerySuffix | cmpQuantifiedSuffix)
+
+  // = ANY/SOME(ARRAY[...]) => Seq[Expr]
+  private def eqAnyArraySuffix[p: P]: P[Expr => Expr] =
+    P("=" ~ (kw("any") | kw("some")) ~ "(" ~ kw("array") ~ "[" ~ expressions ~ "]" ~ ")").map { es =>
+      (left: Expr) => InSeqExpr(left, "IN", es).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  // = ANY/SOME(query) => Expr
+  private def eqAnyQuerySuffix[p: P]: P[Expr => Expr] =
+    P("=" ~ (kw("any") | kw("some")) ~ "(" ~ query ~ ")").map { q =>
+      (left: Expr) => InQueryExpr(left, "IN", q).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  // comparison ANY/SOME/ALL(expr) => (String, String, Expr)
+  private def cmpQuantifiedSuffix[p: P]: P[Expr => Expr] =
+    P(comparison ~ (kw("any") | kw("some") | kw("all")).!.map(_.toUpperCase) ~ "(" ~ expression ~ ")").map { case (cmp, quant, arr) =>
+      val q = if quant == "SOME" then "ANY" else quant
+      (left: Expr) => QuantifiedCompareExpr(left, cmp, q, arr).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  private def isDistinctSuffix[p: P]: P[Expr => Expr] =
+    P(
+      (kw("is") ~ kw("not") ~ kw("distinct") ~ kw("from") ~ expression).map { right =>
+        (left: Expr) => BinaryExpr(left, "IS NOT DISTINCT FROM", right).setPos(left.pos).asInstanceOf[Expr]
       }
-
-  lazy val selectExpressions: P[Seq[Expr]] = rep1sep(selectExpression, ",")
-
-  lazy val expressions: P[Seq[Expr]] = rep1sep(expression, ",")
-
-  lazy val booleanExpression: P[Expr] = orExpression
-
-  lazy val orExpression: P[Expr] = positioned(
-    orExpression ~ kw("OR") ~ andExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "OR", r) } |
-      andExpression,
-  )
-
-  lazy val andExpression: P[Expr] = positioned(
-    andExpression ~ kw("AND") ~ notExpression ^^ { case l ~ _ ~ r => BinaryExpr(l, "AND", r) } |
-      notExpression,
-  )
-
-  lazy val notExpression: P[Expr] = positioned(
-    kw("NOT") ~> booleanPrimary ^^ (e => UnaryExpr("NOT", e)) |
-      booleanPrimary,
-  )
-
-  lazy val booleanPrimary: P[Expr] = positioned(
-    expression ~ ("@>" | "<@" | "&&") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
-      expression ~ ("?&" | "?|" | "?") ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
-      kw("EXISTS") ~> "(" ~> query <~ ")" ^^ ExistsExpr.apply |
-      expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ kw("ARRAY") ~ "[" ~ expressions ~ "]" ~ ")" ^^ {
-        case e ~ _ ~ _ ~ _ ~ _ ~ _ ~ es ~ _ ~ _ => InSeqExpr(e, "IN", es)
-      } |
-      expression ~ "=" ~ (kw("ANY") | kw("SOME")) ~ "(" ~ query ~ ")" ^^ {
-        case e ~ _ ~ _ ~ _ ~ q ~ _ => InQueryExpr(e, "IN", q)
-      } |
-      expression ~ comparison ~ (kw("ANY") | kw("SOME") | kw("ALL")) ~ "(" ~ expression ~ ")" ^^ {
-        case e ~ c ~ q ~ _ ~ arr ~ _ =>
-          QuantifiedCompareExpr(e, c, if q == "SOME" then "ANY" else q, arr)
-      } |
-      expression ~ kw("IS") ~ kw("NOT") ~ kw("DISTINCT") ~ kw("FROM") ~ expression ^^ {
-        case l ~ _ ~ _ ~ _ ~ _ ~ r => BinaryExpr(l, "IS NOT DISTINCT FROM", r)
-      } |
-      expression ~ kw("IS") ~ kw("DISTINCT") ~ kw("FROM") ~ expression ^^ {
-        case l ~ _ ~ _ ~ _ ~ r => BinaryExpr(l, "IS DISTINCT FROM", r)
-      } |
-      expression ~ comparison ~ expression ^^ { case l ~ c ~ r => BinaryExpr(l, c, r) } |
-      expression ~ (kw("NOT") ~ kw("BETWEEN") ~ kw("SYMMETRIC") ^^^ "NOT BETWEEN SYMMETRIC"
-        | kw("NOT") ~ kw("BETWEEN") ^^^ "NOT BETWEEN"
-        | kw("BETWEEN") ~ kw("SYMMETRIC") ^^^ "BETWEEN SYMMETRIC"
-        | kw("BETWEEN")) ~ expression ~ kw("AND") ~ expression ^^ { case e ~ b ~ l ~ _ ~ u =>
-        BetweenExpr(e, b, l, u)
-      } |
-      expression ~ isNull ^^ { case e ~ n => UnaryExpr(n, e) } |
-      expression ~ in ~ ("(" ~> expressions <~ ")") ^^ { case e ~ i ~ es => InSeqExpr(e, i, es) } |
-      expression ~ in ~ ("(" ~> query <~ ")") ^^ { case e ~ i ~ q => InQueryExpr(e, i, q) } |
-      booleanLiteral |
-      kw("NULL") ^^^ NullExpr() |
-      ("(" ~> expression ~ ("," ~> expression) <~ ")") ~ kw("OVERLAPS") ~ ("(" ~> expression ~ ("," ~> expression) <~ ")") ^^ {
-        case (s1 ~ e1) ~ _ ~ (s2 ~ e2) => OverlapsExpr(s1, e1, s2, e2)
-      } |
-      "(" ~> booleanExpression <~ ")",
-  )
-
-  lazy val isNull: P[String] =
-    kw("IS") ~ kw("NOT") ~ kw("NULL") ^^^ "IS NOT NULL"
-    | kw("IS") ~ kw("NOT") ~ kw("TRUE") ^^^ "IS NOT TRUE"
-    | kw("IS") ~ kw("NOT") ~ kw("FALSE") ^^^ "IS NOT FALSE"
-    | kw("IS") ~ kw("NOT") ~ kw("UNKNOWN") ^^^ "IS NOT UNKNOWN"
-    | kw("IS") ~ kw("NULL") ^^^ "IS NULL"
-    | kw("IS") ~ kw("TRUE") ^^^ "IS TRUE"
-    | kw("IS") ~ kw("FALSE") ^^^ "IS FALSE"
-    | kw("IS") ~ kw("UNKNOWN") ^^^ "IS UNKNOWN"
-
-  lazy val in: P[String] = kw("NOT") ~ kw("IN") ^^^ "NOT IN" | kw("IN")
-
-  lazy val comparison: P[String] =
-    "<=" | ">=" | "<>" ^^^ "!=" | "<" | ">" | "=" | "!=" | kw("LIKE") | kw("ILIKE") | (kw("NOT") ~ kw("LIKE") ^^^ "NOT LIKE" | kw(
-      "NOT",
-    ) ~ kw("ILIKE") ^^^ "NOT ILIKE")
-
-  lazy val booleanLiteral: P[Expr] = positioned(
-    (kw("TRUE") | kw("FALSE")) ^^ (s => BooleanExpr(s.equalsIgnoreCase("TRUE"))),
-  )
-
-  lazy val expression: P[Expr] = concatenation
-
-  lazy val concatenation: P[Expr] = positioned(
-    concatenation ~ "||" ~ bitwise ^^ { case l ~ o ~ r =>
-      BinaryExpr(l, o, r)
-    } |
-      bitwise,
-  )
-
-  lazy val bitwise: P[Expr] = positioned(
-    bitwise ~ ("&" | "|" | "#" | "<<" | ">>") ~ additive ^^ { case l ~ o ~ r =>
-      BinaryExpr(l, o, r)
-    } |
-      additive,
-  )
-
-  lazy val additive: P[Expr] = positioned(
-    additive ~ ("+" | "-") ~ multiplicative ^^ { case l ~ o ~ r =>
-      BinaryExpr(l, o, r)
-    } |
-      multiplicative,
-  )
-
-  lazy val multiplicative: P[Expr] = positioned(
-    positioned(
-      multiplicative ~ ("*" | "/" | "%") ~ exponentiation ^^ { case l ~ o ~ r =>
-        BinaryExpr(l, o, r)
-      } |
-        exponentiation,
-    ),
-  )
-
-  lazy val exponentiation: P[Expr] = positioned(
-    exponentiation ~ "^" ~ castExpression ^^ { case l ~ o ~ r =>
-      BinaryExpr(l, o, r)
-    } |
-      castExpression,
-  )
-
-  lazy val extractField: P[String] =
-    ident ^^ (_.toLowerCase) |
-      kw("TIMESTAMP") ^^^ "timestamp" |
-      kw("TIME") ^^^ "time" |
-      kw("DATE") ^^^ "date"
-
-  lazy val castType: P[Type] = typ ^? (
-    { case Left(t) => t },
-    _ => "cannot cast to custom type",
-  )
-
-  lazy val castExpression: P[Expr] = positioned(
-    jsonAccess ~ "::" ~ castType ^^ { case e ~ _ ~ t => CastExpr(e, t) }
-      | jsonAccess,
-  )
-
-  lazy val jsonAccess: P[Expr] = positioned(
-    jsonAccess ~ ("->>" | "->" | "#>>" | "#>") ~ primary ^^ { case l ~ o ~ r =>
-      BinaryExpr(l, o, r)
-    } | primary,
-  )
-
-  lazy val pair: P[(Ident, Expr)] =
-    identifier ~ ":" ~ (arrayExpression | objectExpression | literal) ^^ { case k ~ _ ~ v =>
-      k -> v
-    }
-
-  lazy val arrayExpression: P[Expr] = positioned(
-    "[" ~> repsep(arrayExpression | objectExpression | literal, ",") <~ "]" ^^ ArrayExpr.apply,
-  )
-
-  lazy val objectExpression: P[Expr] = positioned(
-    "{" ~> repsep(pair, ",") <~ "}" ^^ ObjectExpr.apply,
-  )
-
-  lazy val jsonLiteral: P[Expr] = arrayExpression | objectExpression
-
-  lazy val application: P[Expr] = positioned(
-    identifier ~ ("(" ~> repsep(expression | star, ",") <~ ")") ^^ { case f ~ as => ApplyExpr(f, as) },
-  )
-
-  lazy val column: P[ColumnExpr] = positioned(
-    identifier ~ opt("." ~> identifier) ^^ {
-      case c ~ None    => ColumnExpr(None, c)
-      case t ~ Some(c) => ColumnExpr(Some(t), c)
-    },
-  )
-
-  lazy val variable: P[VariableExpr] = positioned(
-    pos ~ kw("CURRENT_TIMESTAMP") ^^ { case p ~ v => VariableExpr(Ident(v).setPos(p)) },
-  )
-
-  lazy val integer: P[Int] = numericLit ^^ (_.toInt)
-
-  lazy val decimal: P[Double] = decimalLit ^^ (_.toDouble)
-
-  lazy val primary: P[Expr] = positioned(
-    decimal ^^ (n => NumberExpr(n)) |
-      integer ^^ (n => NumberExpr(n)) |
-      parameterLit ^^ (n => ParameterExpr(n)) |
-      stringLit ^^ StringExpr.apply |
-      kw("NULL") ^^^ NullExpr() |
-      kw("ARRAY") ~> "[" ~> repsep(expression, ",") <~ "]" ^^ ArrayExpr.apply |
-      kw("CAST") ~> "(" ~> expression ~ kw("AS") ~ castType <~ ")" ^^ { case e ~ _ ~ t => CastExpr(e, t) } |
-      kw("EXTRACT") ~> "(" ~> extractField ~ kw("FROM") ~ expression <~ ")" ^^ { case field ~ _ ~ source =>
-        ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source))
-      } |
-      kw("OVERLAY") ~> "(" ~> expression ~ kw("PLACING") ~ expression ~ kw("FROM") ~ expression ~ opt(kw("FOR") ~> expression) <~ ")" ^^ {
-        case s ~ _ ~ repl ~ _ ~ start ~ Some(count) => ApplyExpr(Ident("overlay"), Seq(s, repl, start, count))
-        case s ~ _ ~ repl ~ _ ~ start ~ None        => ApplyExpr(Ident("overlay"), Seq(s, repl, start))
-      } |
-      application |
-      column |
-      variable |
-      booleanLiteral |
-      jsonLiteral |
-      caseExpression |
-      "-" ~> primary ^^ (e => UnaryExpr("-", e)) |
-      "~" ~> primary ^^ (e => UnaryExpr("~", e)) |
-      kw("TABLE") ~> "(" ~> query <~ ")" ^^ TableConstructorExpr.apply |
-      "(" ~> query <~ ")" ^^ SubqueryExpr.apply |
-      "(" ~> expression <~ ")",
-  )
-
-  lazy val literal: P[Expr] = positioned(
-    booleanLiteral |
-      jsonLiteral |
-      decimal ^^ (n => NumberExpr(n)) |
-      integer ^^ (n => NumberExpr(n)) |
-      stringLit ^^ StringExpr.apply |
-      kw("NULL") ^^^ NullExpr() |
-      "-" ~> primary ^^ (e => UnaryExpr("-", e)),
-  )
-
-  lazy val caseExpression: P[CaseExpr] =
-    simpleCaseExpression | searchedCaseExpression
-
-  lazy val simpleCaseExpression: P[CaseExpr] =
-    kw("CASE") ~> expression ~ rep1(simpleWhen) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ {
-      case expr ~ whens ~ els =>
-        // Convert to searched CASE internally
-        val searchedWhens = whens.map { case (value, result) =>
-          When(BinaryExpr(expr, "=", value), result)
-        }
-        CaseExpr(searchedWhens, els)
-    }
-
-  lazy val searchedCaseExpression: P[CaseExpr] =
-    kw("CASE") ~> rep1(when) ~ opt(kw("ELSE") ~> expression) <~ kw("END") ^^ {
-      case ws ~ e => CaseExpr(ws, e)
-    }
-
-  lazy val simpleWhen: P[(Expr, Expr)] =
-    kw("WHEN") ~> expression ~ kw("THEN") ~ expression ^^ { case v ~ _ ~ r => (v, r) }
-
-  lazy val when: P[When] =
-    kw("WHEN") ~> booleanExpression ~ kw("THEN") ~ expression ^^ { case l ~ _ ~ e => When(l, e) }
-
-  lazy val row: P[Seq[Expr]] = "(" ~> rep1sep(expression, ",") <~ ")"
-
-  lazy val set: P[UpdateSet] = identifier ~ "=" ~ expression ^^ { case c ~ _ ~ v => UpdateSet(c, v) }
-
-  lazy val onConflictClause: P[OnConflict] =
-    kw("ON") ~> kw("CONFLICT") ~> (
-      kw("DO") ~> kw("NOTHING") ^^^ OnConflictDoNothing
-      | "(" ~> rep1sep(identifier, ",") ~ (")" ~> kw("DO") ~> kw("UPDATE") ~> kw("SET") ~> rep1sep(set, ",")) ^^ {
-          case cols ~ assignments => OnConflictDoUpdate(cols, assignments)
+      | (kw("is") ~ kw("distinct") ~ kw("from") ~ expression).map { right =>
+          (left: Expr) => BinaryExpr(left, "IS DISTINCT FROM", right).setPos(left.pos).asInstanceOf[Expr]
         }
     )
 
-  lazy val insert: P[Command] =
-    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ kw("VALUES") ~ rep1sep(
-      row,
-      ",",
-    ) ~ opt(onConflictClause) ~ opt(
-      kw("RETURNING") ~> identifier,
-    ) ^^ { case t ~ cs ~ _ ~ rs ~ oc ~ ret =>
-      InsertCommand(t, cs, rs, ret, oc)
-    } |
-    kw("INSERT") ~> kw("INTO") ~> identifier ~ opt("(" ~> rep1sep(identifier, ",") <~ ")") ~ query ~ opt(onConflictClause) ~ opt(
-      kw("RETURNING") ~> identifier,
-    ) ^^ { case t ~ cs ~ q ~ oc ~ ret =>
-      InsertSelectCommand(t, cs, q, ret, oc)
+  // comparison ~ expression => (String, Expr)
+  private def comparisonSuffix[p: P]: P[Expr => Expr] =
+    P(comparison ~ expression).map { case (op, right) =>
+      (left: Expr) => BinaryExpr(left, op, right).setPos(left.pos).asInstanceOf[Expr]
     }
 
-  lazy val tableConstraint: P[TableConstraint] =
-    opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
+  private def betweenSuffix[p: P]: P[Expr => Expr] =
+    P(betweenOp ~ expression ~ kw("and") ~ expression).map { case (op, lower, upper) =>
+      (left: Expr) => BetweenExpr(left, op, lower, upper).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  private def betweenOp[p: P]: P[String] =
+    P(
+      (kw("not") ~ kw("between") ~ kw("symmetric")).map(_ => "NOT BETWEEN SYMMETRIC")
+      | (kw("not") ~ kw("between")).map(_ => "NOT BETWEEN")
+      | (kw("between") ~ kw("symmetric")).map(_ => "BETWEEN SYMMETRIC")
+      | kw("between").map(_ => "BETWEEN")
+    )
+
+  private def isNullSuffix[p: P]: P[Expr => Expr] =
+    P(isNull).map { op =>
+      (left: Expr) => UnaryExpr(op, left).setPos(left.pos).asInstanceOf[Expr]
+    }
+
+  private def inSuffix[p: P]: P[Expr => Expr] =
+    P(
+      (in ~ "(" ~ query ~ ")").map { case (op, q) =>
+        (left: Expr) => InQueryExpr(left, op, q).setPos(left.pos).asInstanceOf[Expr]
+      }
+      | (in ~ "(" ~ expressions ~ ")").map { case (op, es) =>
+          (left: Expr) => InSeqExpr(left, op, es).setPos(left.pos).asInstanceOf[Expr]
+        }
+    )
+
+  private def isNull[p: P]: P[String] =
+    P(
+      (kw("is") ~ kw("not") ~ kw("null")).map(_ => "IS NOT NULL")
+      | (kw("is") ~ kw("not") ~ kw("true")).map(_ => "IS NOT TRUE")
+      | (kw("is") ~ kw("not") ~ kw("false")).map(_ => "IS NOT FALSE")
+      | (kw("is") ~ kw("not") ~ kw("unknown")).map(_ => "IS NOT UNKNOWN")
+      | (kw("is") ~ kw("null")).map(_ => "IS NULL")
+      | (kw("is") ~ kw("true")).map(_ => "IS TRUE")
+      | (kw("is") ~ kw("false")).map(_ => "IS FALSE")
+      | (kw("is") ~ kw("unknown")).map(_ => "IS UNKNOWN")
+    )
+
+  private def in[p: P]: P[String] =
+    P(
+      (kw("not") ~ kw("in")).map(_ => "NOT IN")
+      | kw("in").map(_ => "IN")
+    )
+
+  private def comparison[p: P]: P[String] =
+    P(
+      "<=".! | ">=".! | "<>".!.map(_ => "!=") | "!=".! | "<".! | ">".! | "=".!
+      | (kw("not") ~ kw("like")).map(_ => "NOT LIKE")
+      | (kw("not") ~ kw("ilike")).map(_ => "NOT ILIKE")
+      | kw("like").map(_ => "LIKE")
+      | kw("ilike").map(_ => "ILIKE")
+    )
+
+  private def booleanLiteral[p: P]: P[Expr] =
+    P(Index ~ (kw("true").map(_ => true) | kw("false").map(_ => false))).map((idx, b) =>
+      pos(idx, BooleanExpr(b))
+    )
+
+  // ── Star ───────────────────────────────────────────────────────────
+
+  private def star[p: P]: P[Expr] =
+    P(Index ~ "*").map(idx => pos(idx, StarExpr()))
+
+  // ── JSON literals ──────────────────────────────────────────────────
+
+  private def pair[p: P]: P[(Ident, Expr)] =
+    P(identifier ~ ":" ~ (arrayExpression | objectExpression | literal)).map((k, v) => (k, v))
+
+  private def arrayExpression[p: P]: P[Expr] =
+    P(Index ~ "[" ~ (arrayExpression | objectExpression | literal).rep(sep = ",") ~ "]").map((idx, elems) =>
+      pos(idx, ArrayExpr(elems))
+    )
+
+  private def objectExpression[p: P]: P[Expr] =
+    P(Index ~ "{" ~ pair.rep(sep = ",") ~ "}").map((idx, pairs) =>
+      pos(idx, ObjectExpr(pairs))
+    )
+
+  private def jsonLiteral[p: P]: P[Expr] = P(arrayExpression | objectExpression)
+
+  // ── CASE expressions ───────────────────────────────────────────────
+
+  private def caseExpression[p: P]: P[CaseExpr] = P(simpleCaseExpression | searchedCaseExpression)
+
+  // CASE expr WHEN v THEN r ... [ELSE e] END
+  private def simpleCaseExpression[p: P]: P[CaseExpr] =
+    P(kw("case") ~ expression ~ simpleWhen.rep(1) ~ (kw("else") ~ expression).? ~ kw("end")).map { case (expr, whens, els) =>
+      val searchedWhens = whens.map { case (value, result) =>
+        When(BinaryExpr(expr, "=", value), result)
+      }
+      CaseExpr(searchedWhens, els)
+    }
+
+  // CASE WHEN cond THEN r ... [ELSE e] END
+  private def searchedCaseExpression[p: P]: P[CaseExpr] =
+    P(kw("case") ~ when.rep(1) ~ (kw("else") ~ expression).? ~ kw("end")).map { case (ws, e) =>
+      CaseExpr(ws, e)
+    }
+
+  private def simpleWhen[p: P]: P[(Expr, Expr)] =
+    P(kw("when") ~ expression ~ kw("then") ~ expression).map((v, r) => (v, r))
+
+  private def when[p: P]: P[When] =
+    P(kw("when") ~ booleanExpression ~ kw("then") ~ expression).map((cond, e) => When(cond, e))
+
+  // ── SELECT expressions ─────────────────────────────────────────────
+
+  // selectExpression: star | expression [IS [NOT] NULL|TRUE|FALSE|UNKNOWN] [AS alias]
+  private def selectExpression[p: P]: P[Expr] =
+    P(
+      star
+      | (expression ~ isNull.? ~ (kw("as").? ~ identifier).?).map {
+          case (e, Some(n), None) => UnaryExpr(n, e).setPos(e.pos).asInstanceOf[Expr]
+          case (e, Some(n), Some(a)) =>
+            val unary = UnaryExpr(n, e).setPos(e.pos).asInstanceOf[Expr]
+            AliasExpr(unary, a).setPos(e.pos).asInstanceOf[Expr]
+          case (e, None, None) => e
+          case (e, None, Some(a)) => AliasExpr(e, a).setPos(e.pos).asInstanceOf[Expr]
+        }
+    )
+
+  private def selectExpressions[p: P]: P[Seq[Expr]] = P(selectExpression.rep(1, sep = ","))
+
+  private def expressions[p: P]: P[Seq[Expr]] = P(expression.rep(1, sep = ","))
+
+  // ── FROM / WHERE / GROUP BY / HAVING / ORDER BY / LIMIT / OFFSET ──
+
+  private def fromClause[p: P]: P[Option[Seq[Expr]]] = P((kw("from") ~ sources.rep(1, sep = ",")).?)
+
+  private def whereClause[p: P]: P[Option[Expr]] = P((kw("where") ~ booleanExpression).?)
+
+  private def groupByClause[p: P]: P[Option[Seq[Expr]]] = P((kw("group") ~ kw("by") ~ expression.rep(1, sep = ",")).?)
+
+  private def havingClause[p: P]: P[Option[Expr]] = P((kw("having") ~ booleanExpression).?)
+
+  private def orderByClause[p: P]: P[Option[Seq[OrderBy]]] = P((kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?)
+
+  private def count[p: P]: P[Count] =
+    P(Index ~ integer).map((idx, n) => Count(mkPos(idx), n))
+
+  private def offsetClause[p: P]: P[Option[Count]] = P((kw("offset") ~ count).?)
+
+  private def limitClause[p: P]: P[Option[Count]] = P((kw("limit") ~ count).?)
+
+  // expression [ASC|DESC] [NULLS FIRST|LAST]
+  private def orderByItem[p: P]: P[OrderBy] =
+    P(expression ~ (kw("asc").map(_ => "ASC") | kw("desc").map(_ => "DESC")).? ~ (kw("nulls") ~ (kw("first").map(_ => "FIRST") | kw("last").map(_ => "LAST"))).?).map {
+      case (e, dir, nulls) =>
+        val asc = dir match
+          case None | Some("ASC") => true
+          case _ => false
+        val nullsFirst = nulls match
+          case None | Some("FIRST") => true
+          case _ => false
+        OrderBy(e, asc, nullsFirst)
+    }
+
+  // ── JOIN sources ───────────────────────────────────────────────────
+
+  private def joinType[p: P]: P[String] =
+    P(
+      kw("inner").map(_ => "INNER")
+      | (kw("left") ~ kw("outer").?).map(_ => "LEFT")
+      | (kw("right") ~ kw("outer").?).map(_ => "RIGHT")
+      | (kw("full") ~ kw("outer").?).map(_ => "FULL")
+    )
+
+  private sealed trait JoinOp
+  private case class CrossJoin(right: Expr) extends JoinOp
+  private case class CondJoin(jt: Option[String], right: Expr, cond: Expr) extends JoinOp
+
+  private def crossJoinSuffix[p: P]: P[JoinOp] =
+    P(kw("cross") ~ kw("join") ~ source).map(r => CrossJoin(r))
+
+  // joinType.? ~ kw("join") ~ source ~ kw("on") ~ booleanExpression => (Option[String], Expr, Expr)
+  private def condJoinSuffix[p: P]: P[JoinOp] =
+    P(joinType.? ~ kw("join") ~ source ~ kw("on") ~ booleanExpression).map((jt, r, c) => CondJoin(jt, r, c))
+
+  private def joinSuffix[p: P]: P[JoinOp] = P(crossJoinSuffix | condJoinSuffix)
+
+  private def sources[p: P]: P[Expr] =
+    P(source ~ joinSuffix.rep).map { case (first, joins) =>
+      joins.foldLeft(first) {
+        case (left, CrossJoin(right)) => CrossOperator(left, right).setPos(left.pos).asInstanceOf[Expr]
+        case (left, CondJoin(Some("LEFT"), right, cond)) => LeftJoinOperator(left, right, cond).setPos(left.pos).asInstanceOf[Expr]
+        case (left, CondJoin(Some("RIGHT"), right, cond)) => RightJoinOperator(left, right, cond).setPos(left.pos).asInstanceOf[Expr]
+        case (left, CondJoin(Some("FULL"), right, cond)) => FullJoinOperator(left, right, cond).setPos(left.pos).asInstanceOf[Expr]
+        case (left, CondJoin(_, right, cond)) => InnerJoinOperator(left, right, cond).setPos(left.pos).asInstanceOf[Expr]
+      }
+    }
+
+  // [AS] alias [(col1, col2, ...)]
+  private def aliasSuffix[p: P]: P[(Ident, Option[Seq[Ident]])] =
+    P(kw("as").? ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").?)
+
+  private def source[p: P]: P[Expr] = P(lateralSource | baseSource)
+
+  private def lateralSource[p: P]: P[Expr] =
+    P(kw("lateral") ~ "(" ~ query ~ ")" ~ aliasSuffix.?).map {
+      case (q, None) => LateralExpr(q).setPos(q.pos).asInstanceOf[Expr]
+      case (q, Some((a, None))) => AliasOperator(LateralExpr(q).setPos(q.pos).asInstanceOf[Expr], a).setPos(q.pos).asInstanceOf[Expr]
+      case (q, Some((a, Some(cols)))) => ColumnAliasOperator(LateralExpr(q).setPos(q.pos).asInstanceOf[Expr], a, cols).setPos(q.pos).asInstanceOf[Expr]
+    }
+
+  private def baseSource[p: P]: P[Expr] =
+    P(sourceBase ~ aliasSuffix.?).map {
+      case (s, None) => s
+      case (s, Some((a, None))) => AliasOperator(s, a).setPos(s.pos).asInstanceOf[Expr]
+      case (s, Some((a, Some(cols)))) => ColumnAliasOperator(s, a, cols).setPos(s.pos).asInstanceOf[Expr]
+    }
+
+  private def sourceBase[p: P]: P[Expr] =
+    P(application | table | valuesClause | ("(" ~ query ~ ")"))
+
+  private def table[p: P]: P[Expr] =
+    P(Index ~ identifier).map((idx, name) => pos(idx, TableOperator(name)))
+
+  // ── VALUES clause ──────────────────────────────────────────────────
+
+  private def valuesClause[p: P]: P[Expr] =
+    P(kw("values") ~ ("(" ~ expression.rep(1, sep = ",") ~ ")").rep(1, sep = ",")).map(rows => ValuesExpr(rows))
+
+  // ── SELECT core + compound ─────────────────────────────────────────
+
+  // SELECT [DISTINCT] exprs FROM ... WHERE ... GROUP BY ... HAVING ...
+  private def selectCore[p: P]: P[Expr] =
+    P(selectStmt | valuesClause | ("(" ~ compoundSelect ~ ")"))
+
+  // kw("select") ~ kw("distinct").? ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause
+  // Unit dropped for kw, so: Option[Unit] (for distinct), Seq[Expr], Option[Seq[Expr]], Option[Expr], Option[Seq[Expr]], Option[Expr]
+  // Actually kw("distinct").!.? gives Option[String], kw("distinct").? gives Option[Unit]
+  // Let's use .!.? to get Option[String] for distinct
+  private def selectStmt[p: P]: P[Expr] =
+    P(kw("select") ~ kw("distinct").!.? ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause).map {
+      case (d, p, f, w, g, h) =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = d.isDefined)
+    }
+
+  private def intersectSelect[p: P]: P[Expr] =
+    P(selectCore ~ (kw("intersect") ~ selectCore).rep).map { case (first, rest) =>
+      rest.foldLeft(first) { case (l, r) =>
+        SetOperationExpr("INTERSECT", l, r).setPos(l.pos).asInstanceOf[Expr]
+      }
+    }
+
+  private sealed trait SetOp
+  private case class UnionAllOp(right: Expr) extends SetOp
+  private case class UnionOp(right: Expr) extends SetOp
+  private case class ExceptOp(right: Expr) extends SetOp
+
+  private def compoundSuffix[p: P]: P[SetOp] =
+    P(
+      (kw("union") ~ kw("all") ~ intersectSelect).map(r => UnionAllOp(r))
+      | (kw("union") ~ intersectSelect).map(r => UnionOp(r))
+      | (kw("except") ~ intersectSelect).map(r => ExceptOp(r))
+    )
+
+  private def compoundSelect[p: P]: P[Expr] =
+    P(intersectSelect ~ compoundSuffix.rep).map { case (first, rest) =>
+      rest.foldLeft(first) {
+        case (l, UnionAllOp(r)) => SetOperationExpr("UNION ALL", l, r).setPos(l.pos).asInstanceOf[Expr]
+        case (l, UnionOp(r)) => SetOperationExpr("UNION", l, r).setPos(l.pos).asInstanceOf[Expr]
+        case (l, ExceptOp(r)) => SetOperationExpr("EXCEPT", l, r).setPos(l.pos).asInstanceOf[Expr]
+      }
+    }
+
+  // query = compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+  private def query[p: P]: P[Expr] =
+    P(compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
+      case (s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
+      case (s, None, None, None) => s
+      case (s, o, l, of) => CompoundQueryExpr(s, o, of, l)
+    }
+
+  // ── DML: INSERT ────────────────────────────────────────────────────
+
+  private def row[p: P]: P[Seq[Expr]] = P("(" ~ expression.rep(1, sep = ",") ~ ")")
+
+  private def set[p: P]: P[UpdateSet] =
+    P(identifier ~ "=" ~ expression).map((col, v) => UpdateSet(col, v))
+
+  private def onConflictClause[p: P]: P[OnConflict] =
+    P(kw("on") ~ kw("conflict") ~ (doNothing | doUpdate))
+
+  private def doNothing[p: P]: P[OnConflict] =
+    P(kw("do") ~ kw("nothing")).map(_ => OnConflictDoNothing)
+
+  // "(" ~ cols ~ ")" ~ DO UPDATE SET assignments => (Seq[Ident], Seq[UpdateSet])
+  private def doUpdate[p: P]: P[OnConflict] =
+    P("(" ~ identifier.rep(1, sep = ",") ~ ")" ~ kw("do") ~ kw("update") ~ kw("set") ~ set.rep(1, sep = ",")).map {
+      (cols, assignments) => OnConflictDoUpdate(cols, assignments)
+    }
+
+  private def returningClause[p: P]: P[Seq[Expr]] =
+    P(kw("returning") ~ ("*".!.map(_ => Seq(StarExpr(): Expr)) | expression.rep(1, sep = ",")))
+
+  // INSERT INTO table [(cols)] VALUES (row), ... [ON CONFLICT ...] [RETURNING ...]
+  // INSERT INTO table [(cols)] query [ON CONFLICT ...] [RETURNING ...]
+  private def insertValues[p: P]: P[Command] =
+    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("values") ~ row.rep(1, sep = ",") ~ onConflictClause.? ~ (kw("returning") ~ identifier).?).map {
+      case (t, cs, rows, oc, ret) => InsertCommand(t, cs, rows, ret, oc)
+    }
+
+  private def insertSelect[p: P]: P[Command] =
+    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ query ~ onConflictClause.? ~ (kw("returning") ~ identifier).?).map {
+      case (t, cs, q, oc, ret) => InsertSelectCommand(t, cs, q, ret, oc)
+    }
+
+  private def insert[p: P]: P[Command] = P(insertValues | insertSelect)
+
+  // ── DML: UPDATE ────────────────────────────────────────────────────
+
+  private def update[p: P]: P[Command] =
+    P(kw("update") ~ identifier ~ kw("set") ~ set.rep(1, sep = ",") ~
+      (kw("from") ~ sources.rep(1, sep = ",")).? ~
+      (kw("where") ~ booleanExpression).? ~
+      returningClause.?).map { case (t, ss, f, c, ret) =>
+      UpdateCommand(t, ss, f, c, ret)
+    }
+
+  // ── DML: DELETE ────────────────────────────────────────────────────
+
+  private def delete[p: P]: P[Command] =
+    P(kw("delete") ~ kw("from") ~ identifier ~ (kw("where") ~ booleanExpression).? ~ returningClause.?).map {
+      case (t, c, ret) => DeleteCommand(t, c, ret)
+    }
+
+  // ── DML: TRUNCATE ──────────────────────────────────────────────────
+
+  private def truncate[p: P]: P[Command] =
+    P(kw("truncate") ~ kw("table").? ~ identifier).map(TruncateCommand(_))
+
+  // ── DDL: Constraints ───────────────────────────────────────────────
+
+  private def referentialAction[p: P]: P[ReferentialAction] =
+    P(
+      kw("cascade").map(_ => ReferentialAction.Cascade)
+      | kw("restrict").map(_ => ReferentialAction.Restrict)
+      | (kw("set") ~ kw("null")).map(_ => ReferentialAction.SetNull)
+      | (kw("no") ~ kw("action")).map(_ => ReferentialAction.NoAction)
+    )
+
+  private def onDeleteClause[p: P]: P[ReferentialAction] = P(kw("on") ~ kw("delete") ~ referentialAction)
+  private def onUpdateClause[p: P]: P[ReferentialAction] = P(kw("on") ~ kw("update") ~ referentialAction)
+
+  private def uniqueConstraint[p: P]: P[Option[String] => TableConstraint] =
+    P(kw("unique") ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map { cols =>
+      (name: Option[String]) => UniqueConstraint(name, cols)
+    }
+
+  private def pkConstraint[p: P]: P[Option[String] => TableConstraint] =
+    P(kw("primary") ~ kw("key") ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map { cols =>
+      (name: Option[String]) => PrimaryKeyConstraint(name, cols)
+    }
+
+  private def fkConstraint[p: P]: P[Option[String] => TableConstraint] =
+    P(kw("foreign") ~ kw("key") ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ kw("references") ~ identifier ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ onDeleteClause.? ~ onUpdateClause.?).map {
+      case (cols, tbl, refCols, onDel, onUpd) =>
+        (name: Option[String]) => ForeignKeyConstraint(name, cols, tbl, refCols, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
+    }
+
+  private def checkConstraint[p: P]: P[Option[String] => TableConstraint] =
+    P(kw("check") ~ "(" ~ booleanExpression ~ ")").map { expr =>
+      (name: Option[String]) => CheckConstraint(name, expr)
+    }
+
+  private def constraintBody[p: P]: P[Option[String] => TableConstraint] =
+    P(uniqueConstraint | pkConstraint | fkConstraint | checkConstraint)
+
+  private def tableConstraint[p: P]: P[TableConstraint] =
+    P((kw("constraint") ~ identifier).? ~ constraintBody).map { case (name, constraint) =>
       constraint(name.map(_.name))
     }
 
-  lazy val referentialAction: P[ReferentialAction] =
-    kw("CASCADE") ^^^ ReferentialAction.Cascade
-      | kw("RESTRICT") ^^^ ReferentialAction.Restrict
-      | kw("SET") ~ kw("NULL") ^^^ ReferentialAction.SetNull
-      | kw("NO") ~ kw("ACTION") ^^^ ReferentialAction.NoAction
-
-  lazy val onDeleteClause: P[ReferentialAction] = kw("ON") ~> kw("DELETE") ~> referentialAction
-  lazy val onUpdateClause: P[ReferentialAction] = kw("ON") ~> kw("UPDATE") ~> referentialAction
-
-  lazy val constraintBody: P[Option[String] => TableConstraint] =
-    kw("UNIQUE") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => UniqueConstraint(name, cols) }
-      | kw("PRIMARY") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ { cols => (name: Option[String]) => PrimaryKeyConstraint(name, cols) }
-      | kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> rep1sep(identifier, ",") <~ ")") ~ (kw("REFERENCES") ~> identifier) ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause) ^^ {
-          case cols ~ table ~ refCols ~ onDel ~ onUpd => (name: Option[String]) =>
-            ForeignKeyConstraint(name, cols, table, refCols, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
-        }
-      | kw("CHECK") ~> ("(" ~> booleanExpression <~ ")") ^^ { expr =>
-          (name: Option[String]) => CheckConstraint(name, expr)
-        }
-
-  lazy val createTable: P[Command] =
-    kw("CREATE") ~> kw("TABLE") ~> opt(kw("IF") ~> kw("NOT") ~> kw("EXISTS")) ~ identifier ~ ("(" ~> rep1sep(columnDesc | tableConstraint, ",") <~ ")") ^^ {
-      case ine ~ t ~ items =>
-        val columns     = items.collect { case c: ColumnDesc => c }
-        val constraints = items.collect { case c: TableConstraint => c }
-        CreateTableCommand(t, columns, constraints, ine.isDefined)
-    }
-
-  lazy val dropTable: P[Command] =
-    (kw("DROP") ~> kw("TABLE") ~> kw("IF") ~> kw("EXISTS") ~> identifier ^^ { t => 
-      DropTableCommand(t, true, false) 
-    }) |
-    (kw("DROP") ~> kw("TABLE") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
-      case t ~ cascade => DropTableCommand(t, false, cascade.contains("CASCADE"))
-    })
-
-  lazy val createIndex: P[Command] =
-    kw("CREATE") ~> opt(kw("UNIQUE")) ~ kw("INDEX") ~ identifier ~ kw("ON") ~ identifier ~ ("(" ~> rep1sep(identifier, ",") <~ ")") ^^ {
-      case u ~ _ ~ name ~ _ ~ table ~ cols =>
-        CreateIndexCommand(name, table, cols, u.isDefined)
-    }
-
-  lazy val dropIndex: P[Command] =
-    (kw("DROP") ~> kw("INDEX") ~> kw("IF") ~> kw("EXISTS") ~> identifier ^^ { name => 
-      DropIndexCommand(name, true) 
-    }) |
-    (kw("DROP") ~> kw("INDEX") ~> identifier ^^ { name => 
-      DropIndexCommand(name, false) 
-    })
-
-  lazy val dropType: P[Command] =
-    (kw("DROP") ~> kw("TYPE") ~> kw("IF") ~> kw("EXISTS") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
-      case name ~ cascade => DropTypeCommand(name, true, cascade.contains("CASCADE"))
-    }) |
-    (kw("DROP") ~> kw("TYPE") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { 
-      case name ~ cascade => DropTypeCommand(name, false, cascade.contains("CASCADE"))
-    })
-
-  lazy val createEnum: P[Seq[String]] = kw("ENUM") ~> ("(" ~> rep1sep(stringLit, ",") <~ ")")
-
-  lazy val createType: P[Command] =
-    kw("CREATE") ~> kw("TYPE") ~> identifier ~ (kw("AS") ~> createEnum) ^^ { case t ~ ls =>
-      CreateEnumCommand(t, ls)
-    }
-
-  lazy val returningClause: P[Seq[Expr]] =
-    kw("RETURNING") ~> ("*" ^^^ Seq(StarExpr(): Expr) | rep1sep(expression, ","))
-
-  lazy val update: P[Command] =
-    kw("UPDATE") ~> identifier ~ kw("SET") ~ rep1sep(set, ",") ~
-      opt(kw("FROM") ~> rep1sep(sources, ",")) ~
-      opt(kw("WHERE") ~> booleanExpression) ~
-      opt(returningClause) ^^ {
-      case t ~ _ ~ ss ~ f ~ c ~ ret =>
-        UpdateCommand(t, ss, f, c, ret)
-    }
-
-  lazy val delete: P[Command] =
-    kw("DELETE") ~> kw("FROM") ~> identifier ~ opt(kw("WHERE") ~> booleanExpression) ~ opt(returningClause) ^^ {
-      case t ~ c ~ ret =>
-        DeleteCommand(t, c, ret)
-    }
-
-  lazy val truncate: P[Command] =
-    kw("TRUNCATE") ~> opt(kw("TABLE")) ~> identifier ^^ TruncateCommand.apply
-
-  lazy val baseTyp: P[Either[Type, Ident]] =
-    kw("BOOLEAN") ^^^ Left(BooleanType)
-      | kw("SMALLINT") ^^^ Left(SmallintType)
-      | (kw("INT") | kw("INTEGER")) ^^^ Left(IntegerType)
-      | kw("BIGINT") ^^^ Left(BigintType)
-      | kw("SMALLSERIAL") ^^^ Left(SmallSerialType)
-      | kw("SERIAL") ^^^ Left(SerialType)
-      | kw("BIGSERIAL") ^^^ Left(BigSerialType)
-      | (kw("DOUBLE") ~ opt(kw("PRECISION")) | kw("FLOAT") | kw("REAL")) ^^^ Left(DoubleType)
-      | kw("NUMERIC") ~> ("(" ~> integer ~ opt("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s.getOrElse(0))) }
-      | kw("NUMERIC") ^^^ Left(NumericType(0, 0))
-      | kw("DECIMAL") ~> ("(" ~> integer ~ opt("," ~> integer) <~ ")") ^^ { case p ~ s => Left(NumericType(p, s.getOrElse(0))) }
-      | kw("DECIMAL") ^^^ Left(NumericType(0, 0))
-      | kw("CHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(CharType(n)) }
-      | kw("VARCHAR") ~> ("(" ~> integer <~ ")") ^^ { n => Left(VarcharType(n)) }
-      | kw("VARCHAR") ^^^ Left(TextType)
-      | kw("JSONB") ^^^ Left(JSONType)
-      | kw("JSON") ^^^ Left(JSONType)
-      | kw("TIMESTAMP") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimestampTZType)
-      | kw("TIMESTAMP") ~ opt(kw("WITHOUT") ~ kw("TIME") ~ kw("ZONE")) ^^^ Left(TimestampType)
-      | kw("DATE") ^^^ Left(DateType)
-      | kw("TIMETZ") ^^^ Left(TimeTZType)
-      | kw("TIME") ~ kw("WITH") ~ kw("TIME") ~ kw("ZONE") ^^^ Left(TimeTZType)
-      | kw("TIME") ^^^ Left(TimeType)
-      | kw("INTERVAL") ^^^ Left(IntervalType)
-      | kw("BYTEA") ^^^ Left(ByteaType)
-      | kw("TEXT") ^^^ Left(TextType)
-      | kw("UUID") ^^^ Left(UUIDType)
-      | identifier ^^ Right.apply
-
-  lazy val typ: P[Either[Type, Ident]] =
-    baseTyp ~ opt("[" ~ "]") ^^ {
-      case Left(t) ~ Some(_) => Left(ArrayColumnType(t))
-      case other ~ _         => other
-    }
+  // ── DDL: Column constraints ────────────────────────────────────────
 
   private sealed trait ColConstraint
   private case object ColPrimaryKey extends ColConstraint
@@ -670,20 +927,27 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
   private case class ColReferences(table: Ident, column: Ident, onDel: ReferentialAction, onUpd: ReferentialAction) extends ColConstraint
   private case class ColCheck(expr: Expr) extends ColConstraint
 
-  private lazy val colConstraint: P[ColConstraint] =
-    kw("PRIMARY") ~ kw("KEY") ^^^ ColPrimaryKey
-      | kw("NOT") ~ kw("NULL") ^^^ ColNotNull
-      | kw("NULL") ^^^ ColNull
-      | kw("UNIQUE") ^^^ ColUnique
-      | kw("DEFAULT") ~> expression ^^ ColDefault.apply
-      | kw("REFERENCES") ~> identifier ~ ("(" ~> identifier <~ ")") ~ opt(onDeleteClause) ~ opt(onUpdateClause) ^^ {
-          case table ~ column ~ onDel ~ onUpd =>
-            ColReferences(table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
-        }
-      | kw("CHECK") ~> ("(" ~> booleanExpression <~ ")") ^^ ColCheck.apply
+  private def colConstraint[p: P]: P[ColConstraint] =
+    P(
+      (kw("primary") ~ kw("key")).map(_ => ColPrimaryKey)
+      | (kw("not") ~ kw("null")).map(_ => ColNotNull)
+      | kw("null").map(_ => ColNull)
+      | kw("unique").map(_ => ColUnique)
+      | (kw("default") ~ expression).map(ColDefault(_))
+      | colReferences
+      | (kw("check") ~ "(" ~ booleanExpression ~ ")").map(ColCheck(_))
+    )
 
-  lazy val columnDesc: P[ColumnDesc] =
-    identifier ~ typ ~ rep(colConstraint) ^^ { case name ~ t ~ constraints =>
+  // REFERENCES table(column) [ON DELETE ...] [ON UPDATE ...]
+  private def colReferences[p: P]: P[ColConstraint] =
+    P(kw("references") ~ identifier ~ "(" ~ identifier ~ ")" ~ onDeleteClause.? ~ onUpdateClause.?).map {
+      case (table, column, onDel, onUpd) =>
+        ColReferences(table, column, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
+    }
+
+  // identifier ~ typ ~ colConstraint.rep => (Ident, Either[Type,Ident], Seq[ColConstraint])
+  private def columnDesc[p: P]: P[ColumnDesc] =
+    P(identifier ~ typ ~ colConstraint.rep).map { case (name, t, constraints) =>
       var primaryKey = false
       var required = false
       var unique = false
@@ -699,16 +963,16 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
           case ColNotNull =>
             if required then throw SchemaException(name.pos, s"duplicate NOT NULL constraint on column '${name.name}'")
             required = true
-          case ColNull => () // explicit NULL (nullable), the default
+          case ColNull => ()
           case ColUnique =>
             if unique then throw SchemaException(name.pos, s"duplicate UNIQUE constraint on column '${name.name}'")
             unique = true
           case ColDefault(expr) =>
             if default.isDefined then throw SchemaException(name.pos, s"duplicate DEFAULT clause on column '${name.name}'")
             default = Some(expr)
-          case ColReferences(table, column, onDel, onUpd) =>
+          case ColReferences(tbl, col, onDel, onUpd) =>
             if references.isDefined then throw SchemaException(name.pos, s"duplicate REFERENCES constraint on column '${name.name}'")
-            references = Some((table, column, onDel, onUpd))
+            references = Some((tbl, col, onDel, onUpd))
           case ColCheck(expr) =>
             if check.isDefined then throw SchemaException(name.pos, s"duplicate CHECK constraint on column '${name.name}'")
             check = Some(expr)
@@ -716,116 +980,177 @@ object SQLParser extends StandardTokenParsers with PackratParsers:
       ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
     }
 
-  lazy val alterTable: P[Command] =
-    kw("ALTER") ~> kw("TABLE") ~> identifier ~ tableAlteration ^^ { case t ~ a =>
-      AlterTableCommand(t, a)
+  // ── DDL: CREATE TABLE ──────────────────────────────────────────────
+
+  private def tableItem[p: P]: P[ColumnDesc | TableConstraint] =
+    P(columnDesc.map(_.asInstanceOf[ColumnDesc | TableConstraint]) | tableConstraint.map(_.asInstanceOf[ColumnDesc | TableConstraint]))
+
+  private def createTable[p: P]: P[Command] =
+    P(kw("create") ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
+      case (ine, t, items) =>
+        val columns = items.collect { case c: ColumnDesc => c }
+        val constraints = items.collect { case c: TableConstraint => c }
+        CreateTableCommand(t, columns, constraints, ine.isDefined)
     }
 
-  lazy val tableAlteration: P[TableAlteration] =
-    // RENAME TO (for table) - must come before ADD to avoid conflicts
-    kw("RENAME") ~> kw("TO") ~> identifier ^^ { newName =>
-      RenameTableAlteration(newName)
-    }
-    // RENAME COLUMN - must come before ADD to avoid conflicts
-    | kw("RENAME") ~> opt(kw("COLUMN")) ~> identifier ~ kw("TO") ~ identifier ^^ { case oldName ~ _ ~ newName =>
-        RenameColumnTableAlteration(oldName, newName)
-      }
-    // ADD COLUMN
-    | kw("ADD") ~> opt(kw("COLUMN")) ~> columnDesc ^^ { col =>
-        AddColumnTableAlteration(col)
-      }
-    // ADD CONSTRAINT  
-    | kw("ADD") ~> opt(kw("CONSTRAINT") ~> identifier) ~ constraintBody ^^ { case name ~ constraint =>
-        AddConstraintTableAlteration(constraint(name.map(_.name)))
-      }
-    // Legacy - ADD FOREIGN KEY (backward compatibility)
-    | kw("ADD") ~> kw("FOREIGN") ~> kw("KEY") ~> ("(" ~> identifier <~ ")") ~ (kw("REFERENCES") ~> identifier) ^^ {
-        case fk ~ ref =>
-          AddForeignKeyTableAlteration(fk, ref)
-      }
-    // DROP COLUMN
-    | kw("DROP") ~> opt(kw("COLUMN")) ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { case col ~ _ =>
-        DropColumnTableAlteration(col)
-      }
-    // DROP CONSTRAINT
-    | kw("DROP") ~> kw("CONSTRAINT") ~> identifier ~ opt(kw("CASCADE") | kw("RESTRICT")) ^^ { case name ~ _ =>
-        DropConstraintTableAlteration(name)
-      }
-    // ALTER COLUMN
-    | kw("ALTER") ~> opt(kw("COLUMN")) ~> identifier ~ columnModification ^^ { case col ~ mod =>
-        AlterColumnTableAlteration(col, mod)
-      }
+  // ── DDL: DROP TABLE ────────────────────────────────────────────────
 
-  lazy val columnModification: P[ColumnModification] =
-    kw("TYPE") ~> typ ^^ { dataType =>
-      SetDataTypeColumnModification(dataType)
-    }
-    | kw("SET") ~> kw("NOT") ~> kw("NULL") ^^ { _ =>
-        SetNotNullColumnModification()
-      }
-    | kw("DROP") ~> kw("NOT") ~> kw("NULL") ^^ { _ =>
-        DropNotNullColumnModification()
-      }
-    | kw("SET") ~> kw("DEFAULT") ~> expression ^^ { expr =>
-        SetDefaultColumnModification(expr)
-      }
-    | kw("DROP") ~> kw("DEFAULT") ^^ { _ =>
-        DropDefaultColumnModification()
-      }
+  private def dropTable[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ identifier).map(t => DropTableCommand(t, true, false))
+      | (kw("drop") ~ kw("table") ~ identifier ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+          case (t, cascade) => DropTableCommand(t, false, cascade.getOrElse(false))
+        }
+    )
 
-  lazy val prepare: P[Command] =
-    kw("PREPARE") ~> identifier ~ kw("AS") ~ command ^^ { case name ~ _ ~ cmd =>
+  // ── DDL: CREATE/DROP INDEX ─────────────────────────────────────────
+
+  // CREATE [UNIQUE] INDEX name ON table (cols)
+  private def createIndex[p: P]: P[Command] =
+    P(kw("create") ~ kw("unique").!.? ~ kw("index") ~ identifier ~ kw("on") ~ identifier ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map {
+      case (u, name, table, cols) => CreateIndexCommand(name, table, cols, u.isDefined)
+    }
+
+  private def dropIndex[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("index") ~ kw("if") ~ kw("exists") ~ identifier).map(name => DropIndexCommand(name, true))
+      | (kw("drop") ~ kw("index") ~ identifier).map(name => DropIndexCommand(name, false))
+    )
+
+  // ── DDL: CREATE/DROP TYPE ──────────────────────────────────────────
+
+  // CREATE TYPE name AS ENUM ('a', 'b', ...)
+  private def createType[p: P]: P[Command] =
+    P(kw("create") ~ kw("type") ~ identifier ~ kw("as") ~ kw("enum") ~ "(" ~ stringLit.rep(1, sep = ",") ~ ")").map {
+      (t, ls) => CreateEnumCommand(t, ls)
+    }
+
+  private def dropType[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("type") ~ kw("if") ~ kw("exists") ~ identifier ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+        case (name, cascade) => DropTypeCommand(name, true, cascade.getOrElse(false))
+      }
+      | (kw("drop") ~ kw("type") ~ identifier ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+          case (name, cascade) => DropTypeCommand(name, false, cascade.getOrElse(false))
+        }
+    )
+
+  // ── DDL: ALTER TABLE ───────────────────────────────────────────────
+
+  private def alterTable[p: P]: P[Command] =
+    P(kw("alter") ~ kw("table") ~ identifier ~ tableAlteration).map((t, a) => AlterTableCommand(t, a))
+
+  private def tableAlteration[p: P]: P[TableAlteration] =
+    P(
+      renameTableTo
+      | renameColumn
+      | addColumn
+      | addConstraint
+      | addLegacyForeignKey
+      | dropColumn
+      | dropConstraint
+      | alterColumn
+    )
+
+  private def renameTableTo[p: P]: P[TableAlteration] =
+    P(kw("rename") ~ kw("to") ~ identifier).map(RenameTableAlteration(_))
+
+  private def renameColumn[p: P]: P[TableAlteration] =
+    P(kw("rename") ~ kw("column").? ~ identifier ~ kw("to") ~ identifier).map((old, newN) =>
+      RenameColumnTableAlteration(old, newN)
+    )
+
+  private def addColumn[p: P]: P[TableAlteration] =
+    P(kw("add") ~ kw("column").? ~ columnDesc).map(AddColumnTableAlteration(_))
+
+  private def addConstraint[p: P]: P[TableAlteration] =
+    P(kw("add") ~ (kw("constraint") ~ identifier).? ~ constraintBody).map { case (name, constraint) =>
+      AddConstraintTableAlteration(constraint(name.map(_.name)))
+    }
+
+  private def addLegacyForeignKey[p: P]: P[TableAlteration] =
+    P(kw("add") ~ kw("foreign") ~ kw("key") ~ "(" ~ identifier ~ ")" ~ kw("references") ~ identifier).map {
+      (fk, ref) => AddForeignKeyTableAlteration(fk, ref)
+    }
+
+  private def dropColumn[p: P]: P[TableAlteration] =
+    P(kw("drop") ~ kw("column").? ~ !kw("constraint") ~ identifier ~ (kw("cascade") | kw("restrict")).?).map {
+      col => DropColumnTableAlteration(col)
+    }
+
+  private def dropConstraint[p: P]: P[TableAlteration] =
+    P(kw("drop") ~ kw("constraint") ~ identifier ~ (kw("cascade") | kw("restrict")).?).map {
+      name => DropConstraintTableAlteration(name)
+    }
+
+  private def alterColumn[p: P]: P[TableAlteration] =
+    P(kw("alter") ~ kw("column").? ~ identifier ~ columnModification).map((col, mod) =>
+      AlterColumnTableAlteration(col, mod)
+    )
+
+  private def columnModification[p: P]: P[ColumnModification] =
+    P(
+      (kw("type") ~ typ).map(SetDataTypeColumnModification(_))
+      | (kw("set") ~ kw("not") ~ kw("null")).map(_ => SetNotNullColumnModification())
+      | (kw("drop") ~ kw("not") ~ kw("null")).map(_ => DropNotNullColumnModification())
+      | (kw("set") ~ kw("default") ~ expression).map(SetDefaultColumnModification(_))
+      | (kw("drop") ~ kw("default")).map(_ => DropDefaultColumnModification())
+    )
+
+  // ── PREPARE / EXECUTE / DEALLOCATE ─────────────────────────────────
+
+  private def prepare[p: P]: P[Command] =
+    P(kw("prepare") ~ identifier ~ kw("as") ~ command).map((name, cmd) =>
       PrepareCommand(name, Seq(cmd))
-    }
+    )
 
-  lazy val executeCmd: P[Command] =
-    kw("EXECUTE") ~> identifier ~ opt("(" ~> rep1sep(expression, ",") <~ ")") ^^ { case name ~ params =>
+  private def executeCmd[p: P]: P[Command] =
+    P(kw("execute") ~ identifier ~ ("(" ~ expression.rep(1, sep = ",") ~ ")").?).map { case (name, params) =>
       ExecuteCommand(name, params.getOrElse(Nil))
     }
 
-  lazy val deallocate: P[Command] =
-    kw("DEALLOCATE") ~> opt(kw("PREPARE")) ~> identifier ^^ DeallocateCommand.apply
+  private def deallocate[p: P]: P[Command] =
+    P(kw("deallocate") ~ kw("prepare").? ~ identifier).map(DeallocateCommand(_))
 
-  lazy val beginCmd: P[Command] = kw("BEGIN") ~> opt(kw("TRANSACTION")) ^^^ BeginCommand
-  lazy val commitCmd: P[Command] = kw("COMMIT") ~> opt(kw("TRANSACTION")) ^^^ CommitCommand
-  lazy val rollbackCmd: P[Command] = kw("ROLLBACK") ~> opt(kw("TRANSACTION")) ^^^ RollbackCommand
+  // ── Transaction commands ───────────────────────────────────────────
 
-  lazy val explain: P[Command] =
-    kw("EXPLAIN") ~> command ^^ ExplainCommand.apply
+  private def beginCmd[p: P]: P[Command] = P(kw("begin") ~ kw("transaction").?).map(_ => BeginCommand)
+  private def commitCmd[p: P]: P[Command] = P(kw("commit") ~ kw("transaction").?).map(_ => CommitCommand)
+  private def rollbackCmd[p: P]: P[Command] = P(kw("rollback") ~ kw("transaction").?).map(_ => RollbackCommand)
 
-  lazy val command: P[Command] =
-    explain |
-      beginCmd |
-      commitCmd |
-      rollbackCmd |
-      prepare |
-      executeCmd |
-      deallocate |
-      query ^^ QueryCommand.apply |
-      insert |
-      createTable |
-      createIndex |
-      dropTable |
-      dropIndex |
-      dropType |
-      createType |
-      update |
-      delete |
-      truncate |
-      alterTable
+  // ── EXPLAIN ────────────────────────────────────────────────────────
 
-  lazy val commands: P[Seq[Command]] = rep1sep(command, ";") <~ opt(";")
+  private def explain[p: P]: P[Command] = P(kw("explain") ~ command).map(ExplainCommand(_))
 
-  def parse[T](input: String, parser: P[T]): T =
-    val tokens = new PackratReader(new lexical.Scanner(input))
+  // ── Top-level command ──────────────────────────────────────────────
 
-    phrase(parser)(tokens) match
-      case Success(result, _)   => result
-      case Failure(error, rest) => throw ParseException(rest.pos, error)
-      case Error(error, rest)   => throw ParseException(rest.pos, error)
+  private def commandTxn[p: P]: P[Command] =
+    P(explain | beginCmd | commitCmd | rollbackCmd | prepare | executeCmd | deallocate)
 
-  def parseQuery(input: String): Expr = parse(input, query)
+  private def commandDDL[p: P]: P[Command] =
+    P(createTable | createIndex | createType | dropTable | dropIndex | dropType | alterTable)
 
-  def parseCommand(input: String): Command = parse(input, command)
+  private def commandDML[p: P]: P[Command] =
+    P(insert | update | delete | truncate | query.map(QueryCommand(_)))
 
-  def parseCommands(input: String): Seq[Command] = parse(input, commands)
+  private def command[p: P]: P[Command] = P(commandTxn | commandDML | commandDDL)
+
+  private def commands[p: P]: P[Seq[Command]] =
+    P(Pass ~ command.rep(sep = ";") ~ ";".? ~ End)
+
+  // ── Public API ─────────────────────────────────────────────────────
+
+  private def run[T](input: String, parser: P[?] => P[T]): T =
+    currentInput = input
+    fastparse.parse(input, parser) match
+      case Parsed.Success(result, _) => result
+      case f: Parsed.Failure =>
+        throw ParseException(mkPos(f.index), f.trace().longMsg)
+
+  def parseCommands(input: String): Seq[Command] = run(input, { implicit p => commands })
+
+  def parseCommand(input: String): Command = run(input, { implicit p => P(command ~ End) })
+
+  def parseQuery(input: String): Expr = run(input, { implicit p => P(query ~ End) })
+
+  def parseBooleanExpression(input: String): Expr = run(input, { implicit p => P(booleanExpression ~ End) })
