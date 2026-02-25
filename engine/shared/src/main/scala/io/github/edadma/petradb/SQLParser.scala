@@ -7,35 +7,45 @@ import fastparse._
 object SQLParser:
 
   // ── Position bridging ──────────────────────────────────────────────
+  // Input is carried through the parser context (ParserInput) rather
+  // than a mutable var, so concurrent parses are safe.
 
-  private var currentInput: String = ""
-
-  private class IndexPosition(input: String, idx: Int) extends Position:
+  private class IndexPosition(input: ParserInput, idx: Int) extends Position:
     private lazy val computed: (Int, Int, String) =
       var line = 1
       var col = 1
       var lineStart = 0
       var i = 0
       while i < idx && i < input.length do
-        if input.charAt(i) == '\n' then
+        if input(i) == '\n' then
           line += 1
           col = 1
           lineStart = i + 1
         else
           col += 1
         i += 1
-      val lineEnd = input.indexOf('\n', lineStart)
-      val contents = if lineEnd < 0 then input.substring(lineStart) else input.substring(lineStart, lineEnd)
+      var lineEnd = lineStart
+      while lineEnd < input.length && input(lineEnd) != '\n' do lineEnd += 1
+      val contents = input.slice(lineStart, lineEnd)
       (line, col, contents)
 
     def line: Int = computed._1
     def column: Int = computed._2
     protected def lineContents: String = computed._3
 
-  private def mkPos(idx: Int): Position = new IndexPosition(currentInput, idx)
+  // Loc pairs the parser's input with an index — replaces the old mutable currentInput.
+  // Wrapping in a class prevents fastparse's tuple flattening from merging it with ~.
+  private class Loc(val input: ParserInput, val idx: Int)
 
-  private def pos[T <: Positional](idx: Int, t: T): T =
-    t.setPos(mkPos(idx))
+  // Drop-in replacement for Index that also captures the input from the parser context.
+  private def Idx[p: P]: P[Loc] =
+    val input = summon[P[p]].input
+    P(Index).map(i => Loc(input, i))
+
+  private def mkPos(loc: Loc): Position = new IndexPosition(loc.input, loc.idx)
+
+  private def pos[T <: Positional](loc: Loc, t: T): T =
+    t.setPos(mkPos(loc))
     t
 
   // ── Whitespace handler ─────────────────────────────────────────────
@@ -141,7 +151,7 @@ object SQLParser:
 
   // identifier returns P[Ident] with position
   private def identifier[p: P]: P[Ident] =
-    P(Index ~ ident).map((idx, name) => pos(idx, Ident(name)))
+    P(Idx ~ ident).map((loc, name) => pos(loc, Ident(name)))
 
   // ── Literals ───────────────────────────────────────────────────────
 
@@ -359,7 +369,7 @@ object SQLParser:
   private def primary[p: P]: P[Expr] = P(primaryLiterals | primaryKeyword | primaryComplex)
 
   private def decimalPrimary[p: P]: P[Expr] =
-    P(Index ~ decimalLit).map((idx, s) => pos(idx, NumberExpr(s.toDouble)))
+    P(Idx ~ decimalLit).map((loc, s) => pos(loc, NumberExpr(s.toDouble)))
 
   // Parse integer value as Long to handle BIGINT-range literals
   private def longLit[p: P]: P[Long] = {
@@ -368,74 +378,74 @@ object SQLParser:
   }
 
   private def integerPrimary[p: P]: P[Expr] =
-    P(Index ~ longLit).map((idx, n) =>
-      if n >= Int.MinValue && n <= Int.MaxValue then pos(idx, NumberExpr(n.toInt))
-      else pos(idx, NumberExpr(n))
+    P(Idx ~ longLit).map((loc, n) =>
+      if n >= Int.MinValue && n <= Int.MaxValue then pos(loc, NumberExpr(n.toInt))
+      else pos(loc, NumberExpr(n))
     )
 
   private def parameterPrimary[p: P]: P[Expr] =
-    P(Index ~ parameterLit).map((idx, n) => pos(idx, ParameterExpr(n)))
+    P(Idx ~ parameterLit).map((loc, n) => pos(loc, ParameterExpr(n)))
 
   private def stringPrimary[p: P]: P[Expr] =
-    P(Index ~ stringLit).map((idx, s) => pos(idx, StringExpr(s)))
+    P(Idx ~ stringLit).map((loc, s) => pos(loc, StringExpr(s)))
 
   // Index ~ kw("null") => just Int (kw returns Unit, dropped)
   private def nullPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("null")).map(idx => pos(idx, NullExpr()))
+    P(Idx ~ kw("null")).map(loc => pos(loc, NullExpr()))
 
   // Index ~ kw("array") ~ "[" ~ ... ~ "]" => (Int, Seq[Expr])
   private def arrayPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("array") ~ "[" ~ expression.rep(sep = ",") ~ "]").map((idx, elems) =>
-      pos(idx, ArrayExpr(elems))
+    P(Idx ~ kw("array") ~ "[" ~ expression.rep(sep = ",") ~ "]").map((loc, elems) =>
+      pos(loc, ArrayExpr(elems))
     )
 
   // CAST(expr AS type) => (Int, Expr, Type)
   private def castPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("cast") ~ "(" ~ expression ~ kw("as") ~ castType ~ ")").map((idx, e, t) =>
-      pos(idx, CastExpr(e, t))
+    P(Idx ~ kw("cast") ~ "(" ~ expression ~ kw("as") ~ castType ~ ")").map((loc, e, t) =>
+      pos(loc, CastExpr(e, t))
     )
 
   // EXTRACT(field FROM expr) => (Int, String, Expr)
   private def extractPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("extract") ~ "(" ~ extractField ~ kw("from") ~ expression ~ ")").map((idx, field, source) =>
-      pos(idx, ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source)))
+    P(Idx ~ kw("extract") ~ "(" ~ extractField ~ kw("from") ~ expression ~ ")").map((loc, field, source) =>
+      pos(loc, ApplyExpr(Ident("date_part"), Seq(StringExpr(field), source)))
     )
 
   // OVERLAY(s PLACING repl FROM start [FOR count]) => complex
   private def overlayPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("overlay") ~ "(" ~ expression ~ kw("placing") ~ expression ~ kw("from") ~ expression ~ (kw("for") ~ expression).? ~ ")").map {
-      case (idx, s, repl, start, Some(count)) => pos(idx, ApplyExpr(Ident("overlay"), Seq(s, repl, start, count)))
-      case (idx, s, repl, start, None) => pos(idx, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
+    P(Idx ~ kw("overlay") ~ "(" ~ expression ~ kw("placing") ~ expression ~ kw("from") ~ expression ~ (kw("for") ~ expression).? ~ ")").map {
+      case (loc, s, repl, start, Some(count)) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start, count)))
+      case (loc, s, repl, start, None) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
     }
 
   // func(args...) — identifier ~ "(" ~ args ~ ")" => (Int, Ident, Seq[Expr])
   private def application[p: P]: P[Expr] =
-    P(Index ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")").map((idx, f, as) =>
-      pos(idx, ApplyExpr(f, as))
+    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")").map((loc, f, as) =>
+      pos(loc, ApplyExpr(f, as))
     )
 
   // table.column or just column — identifier ~ ("." ~ identifier).? => (Int, Ident, Option[Ident])
   private def column[p: P]: P[ColumnExpr] =
-    P(Index ~ identifier ~ ("." ~ identifier).?).map {
-      case (idx, c, None) => pos(idx, ColumnExpr(None, c))
-      case (idx, t, Some(c)) => pos(idx, ColumnExpr(Some(t), c))
+    P(Idx ~ identifier ~ ("." ~ identifier).?).map {
+      case (loc, c, None) => pos(loc, ColumnExpr(None, c))
+      case (loc, t, Some(c)) => pos(loc, ColumnExpr(Some(t), c))
     }
 
   // CURRENT_TIMESTAMP — Index ~ kw => just Int
   private def variable[p: P]: P[VariableExpr] =
-    P(Index ~ kw("current_timestamp")).map(idx =>
-      pos(idx, VariableExpr(pos(idx, Ident("CURRENT_TIMESTAMP"))))
+    P(Idx ~ kw("current_timestamp")).map(loc =>
+      pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIMESTAMP"))))
     )
 
   private def unaryMinusPrimary[p: P]: P[Expr] =
-    P(Index ~ "-" ~ primary).map((idx, e) => pos(idx, UnaryExpr("-", e)))
+    P(Idx ~ "-" ~ primary).map((loc, e) => pos(loc, UnaryExpr("-", e)))
 
   private def bitwiseNotPrimary[p: P]: P[Expr] =
-    P(Index ~ "~" ~ primary).map((idx, e) => pos(idx, UnaryExpr("~", e)))
+    P(Idx ~ "~" ~ primary).map((loc, e) => pos(loc, UnaryExpr("~", e)))
 
   // TABLE(query)
   private def tableConstructorPrimary[p: P]: P[Expr] =
-    P(Index ~ kw("table") ~ "(" ~ query ~ ")").map((idx, q) => pos(idx, TableConstructorExpr(q)))
+    P(Idx ~ kw("table") ~ "(" ~ query ~ ")").map((loc, q) => pos(loc, TableConstructorExpr(q)))
 
   // (query) as subquery — only when followed by set ops, order, limit, offset, ), ;, or end
   private def subqueryPrimary[p: P]: P[Expr] =
@@ -455,7 +465,7 @@ object SQLParser:
       | integerPrimary
       | stringPrimary
       | nullPrimary
-      | (Index ~ "-" ~ primary).map((idx, e) => pos(idx, UnaryExpr("-", e)))
+      | (Idx ~ "-" ~ primary).map((loc, e) => pos(loc, UnaryExpr("-", e)))
     )
 
   // ── Boolean expression chain ───────────────────────────────────────
@@ -474,7 +484,7 @@ object SQLParser:
 
   private def notExpression[p: P]: P[Expr] =
     P(
-      (Index ~ kw("not") ~ booleanPrimary).map((idx, e) => pos(idx, UnaryExpr("NOT", e)))
+      (Idx ~ kw("not") ~ booleanPrimary).map((loc, e) => pos(loc, UnaryExpr("NOT", e)))
       | booleanPrimary
     )
 
@@ -484,15 +494,15 @@ object SQLParser:
     P(existsExpr | overlapsExpr | booleanLiteral | nullBoolExpr | parenBoolExpr | exprWithSuffix)
 
   private def existsExpr[p: P]: P[Expr] =
-    P(Index ~ kw("exists") ~ "(" ~ query ~ ")").map((idx, q) => pos(idx, ExistsExpr(q)))
+    P(Idx ~ kw("exists") ~ "(" ~ query ~ ")").map((loc, q) => pos(loc, ExistsExpr(q)))
 
   private def overlapsExpr[p: P]: P[Expr] =
-    P(Index ~ "(" ~ expression ~ "," ~ expression ~ ")" ~ kw("overlaps") ~ "(" ~ expression ~ "," ~ expression ~ ")").map {
-      (idx, s1, e1, s2, e2) => pos(idx, OverlapsExpr(s1, e1, s2, e2))
+    P(Idx ~ "(" ~ expression ~ "," ~ expression ~ ")" ~ kw("overlaps") ~ "(" ~ expression ~ "," ~ expression ~ ")").map {
+      (loc, s1, e1, s2, e2) => pos(loc, OverlapsExpr(s1, e1, s2, e2))
     }
 
   private def nullBoolExpr[p: P]: P[Expr] =
-    P(Index ~ kw("null")).map(idx => pos(idx, NullExpr()))
+    P(Idx ~ kw("null")).map(loc => pos(loc, NullExpr()))
 
   private def parenBoolExpr[p: P]: P[Expr] = P("(" ~ booleanExpression ~ ")")
 
@@ -605,14 +615,14 @@ object SQLParser:
     )
 
   private def booleanLiteral[p: P]: P[Expr] =
-    P(Index ~ (kw("true").map(_ => true) | kw("false").map(_ => false))).map((idx, b) =>
-      pos(idx, BooleanExpr(b))
+    P(Idx ~ (kw("true").map(_ => true) | kw("false").map(_ => false))).map((loc, b) =>
+      pos(loc, BooleanExpr(b))
     )
 
   // ── Star ───────────────────────────────────────────────────────────
 
   private def star[p: P]: P[Expr] =
-    P(Index ~ "*").map(idx => pos(idx, StarExpr()))
+    P(Idx ~ "*").map(loc => pos(loc, StarExpr()))
 
   // ── JSON literals ──────────────────────────────────────────────────
 
@@ -620,13 +630,13 @@ object SQLParser:
     P(identifier ~ ":" ~ (arrayExpression | objectExpression | literal)).map((k, v) => (k, v))
 
   private def arrayExpression[p: P]: P[Expr] =
-    P(Index ~ "[" ~ (arrayExpression | objectExpression | literal).rep(sep = ",") ~ "]").map((idx, elems) =>
-      pos(idx, ArrayExpr(elems))
+    P(Idx ~ "[" ~ (arrayExpression | objectExpression | literal).rep(sep = ",") ~ "]").map((loc, elems) =>
+      pos(loc, ArrayExpr(elems))
     )
 
   private def objectExpression[p: P]: P[Expr] =
-    P(Index ~ "{" ~ pair.rep(sep = ",") ~ "}").map((idx, pairs) =>
-      pos(idx, ObjectExpr(pairs))
+    P(Idx ~ "{" ~ pair.rep(sep = ",") ~ "}").map((loc, pairs) =>
+      pos(loc, ObjectExpr(pairs))
     )
 
   private def jsonLiteral[p: P]: P[Expr] = P(arrayExpression | objectExpression)
@@ -689,7 +699,7 @@ object SQLParser:
   private def orderByClause[p: P]: P[Option[Seq[OrderBy]]] = P((kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?)
 
   private def count[p: P]: P[Count] =
-    P(Index ~ integer).map((idx, n) => Count(mkPos(idx), n))
+    P(Idx ~ integer).map((loc, n) => Count(mkPos(loc), n))
 
   private def offsetClause[p: P]: P[Option[Count]] = P((kw("offset") ~ count).?)
 
@@ -766,7 +776,7 @@ object SQLParser:
     P(application | table | valuesClause | ("(" ~ query ~ ")"))
 
   private def table[p: P]: P[Expr] =
-    P(Index ~ identifier).map((idx, name) => pos(idx, TableOperator(name)))
+    P(Idx ~ identifier).map((loc, name) => pos(loc, TableOperator(name)))
 
   // ── VALUES clause ──────────────────────────────────────────────────
 
@@ -1150,11 +1160,11 @@ object SQLParser:
   // ── Public API ─────────────────────────────────────────────────────
 
   private def run[T](input: String, parser: P[?] => P[T]): T =
-    currentInput = input
     fastparse.parse(input, parser) match
       case Parsed.Success(result, _) => result
       case f: Parsed.Failure =>
-        throw ParseException(mkPos(f.index), f.trace().longMsg)
+        val loc = Loc(new IndexedParserInput(input), f.index)
+        throw ParseException(mkPos(loc), f.trace().longMsg)
 
   def parseCommands(input: String): Seq[Command] = run(input, { implicit p => commands })
 
