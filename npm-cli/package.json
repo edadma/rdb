@@ -1,0 +1,32 @@
+{
+  "name": "@petradb/cli",
+  "version": "1.0.0",
+  "description": "PetraDB — a lightweight PostgreSQL-compatible SQL database",
+  "bin": {
+    "petradb": "./bin/petradb"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": [
+    "sql",
+    "database",
+    "postgresql",
+    "cli",
+    "repl"
+  ],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/edadma/petradb/issues"
+  },
+  "homepage": "https://petradb.dev"
+}
