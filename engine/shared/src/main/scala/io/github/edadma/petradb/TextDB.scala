@@ -89,11 +89,20 @@ class TextDB(val path: String) extends MemoryDB:
       case _            => v.string
 
   private def escapeForImporter(s: String): String =
-    s.replace("\\", "\\\\")
-     .replace("\n", "\\n")
-     .replace("\r", "\\r")
-     .replace("\t", "\\t")
-     .replaceAll(" (?= )", "\\\\u0020")
+    val base = s.replace("\\", "\\\\")
+      .replace("\n", "\\n")
+      .replace("\r", "\\r")
+      .replace("\t", "\\t")
+    // Escape consecutive spaces: replace all but the last space in each run with \u0020
+    val sb = new StringBuilder
+    var i = 0
+    while i < base.length do
+      if base(i) == ' ' && i + 1 < base.length && base(i + 1) == ' ' then
+        sb.append("\\u0020")
+      else
+        sb.append(base(i))
+      i += 1
+    sb.toString
 
   private def buildFileContent(): String =
     val sb = new StringBuilder

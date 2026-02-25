@@ -65,7 +65,7 @@ class ServerAuthTests extends AnyFreeSpec with Matchers:
   }
 
   "auth: none from config file — all requests succeed" in {
-    withTempConfig("auth: none") { path =>
+    withTempConfig("""auth = "none"""") { path =>
       val cfg = ServerConfig.fromFile(path)
       cfg.auth shouldBe NoAuth
       withServerAuth(cfg.auth) { port =>
@@ -126,12 +126,15 @@ class ServerAuthTests extends AnyFreeSpec with Matchers:
 
   "basic auth — config loaded from file with users" in {
     withTempConfig(
-      s"""auth: basic
-         |users:
-         |  - username: alice
-         |    password: $aliceHash
-         |  - username: bob
-         |    password: $bobHash
+      s"""auth = "basic"
+         |
+         |[[users]]
+         |username = "alice"
+         |password = "$aliceHash"
+         |
+         |[[users]]
+         |username = "bob"
+         |password = "$bobHash"
          |""".stripMargin
     ) { path =>
       val cfg = ServerConfig.fromFile(path)
