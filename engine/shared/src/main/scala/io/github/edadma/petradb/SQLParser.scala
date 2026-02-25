@@ -1155,7 +1155,8 @@ object SQLParser:
   private def command[p: P]: P[Command] = P(commandTxn | commandDML | commandDDL)
 
   private def commands[p: P]: P[Seq[Command]] =
-    P(Pass ~ command.rep(sep = ";") ~ ";".? ~ End)
+    P(Pass ~ ";".rep ~ (command ~ (";".rep(1) ~ command).rep ~ ";".rep).? ~ End)
+      .map(_.fold(Seq.empty[Command]) { case (first, rest) => first +: rest })
 
   // ── Public API ─────────────────────────────────────────────────────
 

@@ -109,9 +109,26 @@ class FastparseEdgeCaseTests extends AnyFreeSpec with Matchers with Testing:
   }
 
   "semicolons and multi-statement edge cases" in {
+    // basic cases
     SQLParser.parseCommands("SELECT 1 AS a; SELECT 2 AS b;").length shouldBe 2
     SQLParser.parseCommands("SELECT 1 AS a;").length shouldBe 1
     SQLParser.parseCommands("SELECT 1 AS a").length shouldBe 1
+
+    // double semicolons (empty statement slots are ignored)
+    SQLParser.parseCommands("SELECT 1 AS a;; SELECT 2 AS b").length shouldBe 2
+    SQLParser.parseCommands("SELECT 1 AS a;;; SELECT 2 AS b").length shouldBe 2
+
+    // bare semicolons (no commands, returns empty)
+    SQLParser.parseCommands(";") shouldBe empty
+    SQLParser.parseCommands("  ;  ") shouldBe empty
+    SQLParser.parseCommands(";;;") shouldBe empty
+
+    // leading semicolons before a command
+    SQLParser.parseCommands("; SELECT 1 AS a").length shouldBe 1
+    SQLParser.parseCommands(";; SELECT 1 AS a; SELECT 2 AS b").length shouldBe 2
+
+    // trailing semicolons
+    SQLParser.parseCommands("SELECT 1 AS a;;;").length shouldBe 1
   }
 
   "bookstore.sql integration" in {
