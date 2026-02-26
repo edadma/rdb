@@ -99,7 +99,7 @@ object SQLParser:
     "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
     "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
     "cascade", "case", "cast", "char", "check", "column", "commit", "conflict", "constraint",
-    "create", "cross", "current_timestamp",
+    "copy", "create", "cross", "current_timestamp",
     "database", "date", "deallocate", "decimal", "default", "delete", "desc",
     "distinct", "do", "double", "drop",
     "else", "end", "enum", "except", "exec", "execute", "exists", "explain", "extract",
@@ -1144,6 +1144,43 @@ object SQLParser:
   private def deallocate[p: P]: P[Command] =
     P(kw("deallocate") ~ kw("prepare").? ~ identifier).map(DeallocateCommand(_))
 
+  // ── DML: COPY ────────────────────────────────────────────────────
+
+  private def copyOption[p: P]: P[Either[Unit, String]] =
+    P(kw("header").map(_ => Left(())) | (kw("delimiter") ~ stringLit).map(Right(_)))
+
+  private def copyOptions[p: P]: P[(Boolean, Char)] =
+    P(kw("with") ~ "(" ~ copyOption.rep(1, sep = ",") ~ ")").map { opts =>
+      var header = false
+      var delimiter = ','
+      for opt <- opts do
+        opt match
+          case Left(()) => header = true
+          case Right(s) =>
+            if s.length != 1 then sys.error(s"COPY delimiter must be a single character, got '$s'")
+            delimiter = s.charAt(0)
+      (header, delimiter)
+    }
+
+  private def copyFrom[p: P]: P[Command] =
+    P(kw("copy") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("from") ~ stringLit ~ copyOptions.?)
+      .map { case (table, cols, file, opts) =>
+        val (header, delim) = opts.getOrElse((false, ','))
+        CopyFromCommand(table, cols, file, header, delim)
+      }
+
+  private def copyToSource[p: P]: P[Either[Ident, Expr]] =
+    P(("(" ~ query ~ ")").map(Right(_)) | identifier.map(Left(_)))
+
+  private def copyTo[p: P]: P[Command] =
+    P(kw("copy") ~ copyToSource ~ kw("to") ~ stringLit ~ copyOptions.?)
+      .map { case (source, file, opts) =>
+        val (header, delim) = opts.getOrElse((false, ','))
+        CopyToCommand(source, file, header, delim)
+      }
+
+  private def copyCmd[p: P]: P[Command] = P(copyFrom | copyTo)
+
   // ── Transaction commands ───────────────────────────────────────────
 
   private def beginCmd[p: P]: P[Command] = P(kw("begin") ~ kw("transaction").?).map(_ => BeginCommand)
@@ -1163,7 +1200,7 @@ object SQLParser:
     P(createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)
 
   private def commandDML[p: P]: P[Command] =
-    P(insert | update | delete | truncate | query.map(QueryCommand(_)))
+    P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))
 
   private def command[p: P]: P[Command] = P(commandTxn | commandDML | commandDDL)
 

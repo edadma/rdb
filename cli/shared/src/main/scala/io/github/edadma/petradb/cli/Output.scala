@@ -22,6 +22,7 @@ object Output:
       case BeginResult              => println(s"BEGIN")
       case CommitResult             => println(s"COMMIT")
       case RollbackResult           => println(s"ROLLBACK")
+      case CopyResult(n)            => println(s"COPY $n")
       case CreateViewResult(name)   => println(s"CREATE VIEW")
       case DropViewResult(name)     => println(s"DROP VIEW")
 

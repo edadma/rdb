@@ -147,7 +147,7 @@ PostgreSQL provides:
 | Views | **no** | CREATE VIEW, materialized views |
 | Schemas | **no** | CREATE SCHEMA, search_path |
 | UPSERT | **no** | ON CONFLICT DO UPDATE/NOTHING |
-| COPY | **no** | COPY TO/FROM |
+| COPY | yes | — |
 | Permissions | **no** | GRANT, REVOKE, roles |
 | Sequences | **no** (serials built-in) | CREATE SEQUENCE, nextval, currval, setval |
 | Stored procs | **no** | CREATE FUNCTION, PL/pgSQL |

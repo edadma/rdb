@@ -30,9 +30,12 @@ abstract class Repl(val session: Session):
       case MetaCommand.DumpSchema =>
         Dump.dump(session.db)
         true
+      case MetaCommand.Copy(args) =>
+        executeSql(s"COPY $args;")
+        true
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
-        println("Available: \\dt  \\dv  \\d <table>  \\dump  \\i <file>  \\q")
+        println("Available: \\copy <args>  \\d <table>  \\dt  \\dump  \\dv  \\i <file>  \\q")
         true
 
   def collectAndExecute(first: String, readLine: String => Option[String]): Unit =

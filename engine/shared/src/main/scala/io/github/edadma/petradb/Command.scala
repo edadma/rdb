@@ -42,6 +42,19 @@ case class ExecuteCommand(name: Ident, params: Seq[Expr])         extends Comman
 case class DeallocateCommand(name: Ident)                         extends Command
 case class CreateViewCommand(name: Ident, query: Expr, orReplace: Boolean) extends Command
 case class DropViewCommand(name: Ident, ifExists: Boolean)                extends Command
+case class CopyFromCommand(
+    table: Ident,
+    columns: Option[Seq[Ident]],
+    file: String,
+    header: Boolean,
+    delimiter: Char,
+) extends Command
+case class CopyToCommand(
+    source: Either[Ident, Expr],
+    file: String,
+    header: Boolean,
+    delimiter: Char,
+) extends Command
 case object BeginCommand    extends Command
 case object CommitCommand   extends Command
 case object RollbackCommand extends Command

@@ -5,6 +5,8 @@ package io.github.edadma.petradb
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.language.postfixOps
+import io.github.edadma.csv.{CSVRead, CSVWrite}
+import io.github.edadma.cross_platform.{readFile, writeFile}
 
 def executeQuery(query: String)(using session: Session): QueryResult = executeSelect(SQLParser.parseQuery(query))
 
@@ -540,6 +542,56 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         else
           db.dropView(name)
           DropViewResult(name)
+      case CopyFromCommand(id @ Ident(table), columns, file, header, delimiter) =>
+        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
+
+        for (cid @ Ident(c) <- resolvedColumns)
+          if !t.hasColumn(c) then throw UndefinedReferenceException(cid.pos, s"unknown column: $c")
+
+        val fks = db.foreignKeys(t)
+        val fkCheck: Option[IndexedSeq[Value] => Unit] =
+          if fks.isEmpty then None
+          else Some { (row: IndexedSeq[Value]) =>
+            for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
+          }
+
+        var count = 0
+        var isFirst = true
+        val batch = new mutable.ArrayBuffer[Seq[Value]]
+        val content = readFile(file)
+        CSVRead.fromStringStreamed(content, { row =>
+          if isFirst && header then isFirst = false
+          else
+            isFirst = false
+            val values: Seq[Value] = row.map(s => if s.isEmpty then NullValue() else TextValue(s))
+            batch += values
+            if batch.size >= 100 then
+              t.bulkInsert(resolvedColumns.map(_.name), batch.toSeq, None, fkCheck)
+              count += batch.size
+              batch.clear()
+        }, delimiter)
+        if batch.nonEmpty then
+          t.bulkInsert(resolvedColumns.map(_.name), batch.toSeq, None, fkCheck)
+          count += batch.size
+        CopyResult(count)
+
+      case CopyToCommand(source, file, header, delimiter) =>
+        val (columnNames, rows) = source match
+          case Left(id @ Ident(table)) =>
+            val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+            val names = t.columns.map(_.name).toList
+            val data = t.iterator(Nil).map(row => row.data.map(v => if v.isNull then "" else v.toText.s).toList).toList
+            (names, data)
+          case Right(queryExpr) =>
+            val result = eval(rewrite(queryExpr), Nil).asInstanceOf[TableValue]
+            val names = result.meta.columns.map(_.name).toList
+            val data = result.data.map(row => row.data.map(v => if v.isNull then "" else v.toText.s).toList).toList
+            (names, data)
+        val output = if header then columnNames :: rows else rows
+        writeFile(file, CSVWrite.toString(output, delimiter))
+        CopyResult(rows.size)
+
       case _ => sys.error(s"unexpected command")
     }
   }

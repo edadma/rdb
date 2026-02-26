@@ -7,6 +7,7 @@ enum MetaCommand:
   case Quit
   case Include(path: String)
   case DumpSchema
+  case Copy(args: String)
   case Unknown(cmd: String)
 
 object MetaCommand:
@@ -22,4 +23,7 @@ object MetaCommand:
     else if trimmed.startsWith("\\i ") then
       val path = trimmed.drop(3).trim
       if path.nonEmpty then Include(path) else Unknown(trimmed)
+    else if trimmed.startsWith("\\copy ") then
+      val args = trimmed.drop(6).trim
+      if args.nonEmpty then Copy(args) else Unknown(trimmed)
     else Unknown(trimmed)
