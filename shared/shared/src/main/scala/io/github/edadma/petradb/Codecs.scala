@@ -211,6 +211,8 @@ object Codecs:
     case DropTypeResult(n)        => ujson.Obj("cmd" -> ujson.Str("drop type"), "type" -> ujson.Str(n))
     case AlterTableResult()       => ujson.Obj("cmd" -> ujson.Str("alter table"))
     case ExplainResult(plan)      => ujson.Obj("cmd" -> ujson.Str("explain"), "plan" -> ujson.Str(plan))
+    case CreateViewResult(n)      => ujson.Obj("cmd" -> ujson.Str("create view"), "view" -> ujson.Str(n))
+    case DropViewResult(n)        => ujson.Obj("cmd" -> ujson.Str("drop view"), "view" -> ujson.Str(n))
     case PrepareResult(n)         => ujson.Obj("cmd" -> ujson.Str("prepare"), "name" -> ujson.Str(n))
     case DeallocateResult(n)      => ujson.Obj("cmd" -> ujson.Str("deallocate"), "name" -> ujson.Str(n))
     case BeginResult              => ujson.Obj("cmd" -> ujson.Str("begin"))
@@ -235,6 +237,8 @@ object Codecs:
       case "drop type"     => DropTypeResult(obj("type").str)
       case "alter table"   => AlterTableResult()
       case "explain"       => ExplainResult(obj("plan").str)
+      case "create view"   => CreateViewResult(obj("view").str)
+      case "drop view"     => DropViewResult(obj("view").str)
       case "prepare"       => PrepareResult(obj("name").str)
       case "deallocate"    => DeallocateResult(obj("name").str)
       case "begin"         => BeginResult

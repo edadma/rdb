@@ -15,6 +15,7 @@ abstract class DB:
   protected val tables = new mutable.HashMap[String, Table]
   protected[petradb] val types = new mutable.HashMap[String, Type]
   protected[petradb] val indexes = new mutable.HashMap[String, IndexMeta]
+  protected val views = new mutable.HashMap[String, String] // name -> SQL
 
   def tableNames: Iterable[String] = tables.keys
 
@@ -68,6 +69,21 @@ abstract class DB:
   infix def hasType(name: String): Boolean = types contains name
 
   infix def getType(name: String): Option[Type] = types get name
+
+  def createView(name: String, sql: String, orReplace: Boolean): Unit =
+    if !orReplace then require(!views.contains(name), s"view '$name' already exists")
+    views(name) = sql
+    onMutation()
+
+  def dropView(name: String): Unit =
+    views.remove(name)
+    onMutation()
+
+  def hasView(name: String): Boolean = views contains name
+
+  def getView(name: String): Option[String] = views get name
+
+  def viewNames: Iterable[String] = views.keys
 
   def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
 

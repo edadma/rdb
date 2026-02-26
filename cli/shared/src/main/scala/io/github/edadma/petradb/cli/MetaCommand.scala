@@ -2,6 +2,7 @@ package io.github.edadma.petradb.cli
 
 enum MetaCommand:
   case ListTables
+  case ListViews
   case DescribeTable(name: String)
   case Quit
   case Include(path: String)
@@ -12,6 +13,7 @@ object MetaCommand:
   def parse(input: String): MetaCommand =
     val trimmed = input.trim
     if trimmed == "\\dt" then ListTables
+    else if trimmed == "\\dv" then ListViews
     else if trimmed == "\\q" then Quit
     else if trimmed == "\\dump" then DumpSchema
     else if trimmed.startsWith("\\d ") then

@@ -108,6 +108,14 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       case _: RenameTableAlteration => () // renameTable already called persistCatalog
       case _                        => persistCatalog()
 
+  override def createView(name: String, sql: String, orReplace: Boolean): Unit =
+    super.createView(name, sql, orReplace)
+    persistCatalog()
+
+  override def dropView(name: String): Unit =
+    super.dropView(name)
+    persistCatalog()
+
   private def createPersistentIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, batch: WriteBatch): Unit =
     val table = tables(tableName)
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
@@ -173,7 +181,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       CatalogIndexEntry(meta.name, meta.tableName, meta.columns, meta.unique, meta.treeRecordPage, meta.nextRowId)
     }
 
-    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize)
+    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq)
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
@@ -187,10 +195,13 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     // Read catalog chain — we need to figure out the total length
     // Read the catalog data using a page-walking approach
     val catalogBytes = readCatalogChain(metaRoot)
-    val (enums, tableEntries, indexEntries) = deserializeCatalog(catalogBytes, store)
+    val (enums, tableEntries, indexEntries, viewEntries) = deserializeCatalog(catalogBytes, store)
 
     // Restore enum types
     for (eName, eType) <- enums do types(eName) = eType
+
+    // Restore views
+    for (vName, vSql) <- viewEntries do views(vName) = vSql
 
     // Restore tables
     for entry <- tableEntries do

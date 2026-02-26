@@ -18,6 +18,7 @@ object Dump:
   def dump(db: DB): Unit =
     dumpEnums(db)
     dumpTables(db)
+    dumpViews(db)
 
   private def dumpEnums(db: DB): Unit =
     for (name, typ) <- db.types.toSeq.sortBy(_._1) do
@@ -109,5 +110,12 @@ object Dump:
       case EnumValue(_, typ)   => s"'${escapeSql(v.string)}'"
       case ArrayValue(elems)   => s"ARRAY[${elems.map(sqlLiteral).mkString(", ")}]"
       case _                   => v.string
+
+  private def dumpViews(db: DB): Unit =
+    for name <- db.viewNames.toSeq.sorted do
+      db.getView(name).foreach { sql =>
+        println(s"CREATE VIEW $name AS $sql;")
+        println()
+      }
 
   private def escapeSql(s: String): String = s.replace("'", "''")

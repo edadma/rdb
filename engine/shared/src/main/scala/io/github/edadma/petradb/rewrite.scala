@@ -379,7 +379,12 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case TableOperator(id @ Ident(name))  =>
       session.db.getTable(name) match
         case Some(t) => ProcessOperator(t)
-        case None    => throw UndefinedReferenceException(id.pos, s"table '$name' not found")
+        case None =>
+          session.db.getView(name) match
+            case Some(sql) =>
+              val viewQuery = SQLParser.parseQuery(sql)
+              rewrite(viewQuery)
+            case None => throw UndefinedReferenceException(id.pos, s"table '$name' not found")
     case ProjectOperator(rel, projs) =>
       val rewritten_projs = projs map rewrite
       val rewritten_proc  = procRewrite(rel)

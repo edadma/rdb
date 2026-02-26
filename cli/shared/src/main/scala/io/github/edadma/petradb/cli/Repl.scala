@@ -18,6 +18,9 @@ abstract class Repl(val session: Session):
       case MetaCommand.ListTables =>
         Output.listTables(session.db)
         true
+      case MetaCommand.ListViews =>
+        Output.listViews(session.db)
+        true
       case MetaCommand.DescribeTable(name) =>
         Output.describeTable(session.db, name)
         true
@@ -29,7 +32,7 @@ abstract class Repl(val session: Session):
         true
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
-        println("Available: \\dt  \\d <table>  \\dump  \\i <file>  \\q")
+        println("Available: \\dt  \\dv  \\d <table>  \\dump  \\i <file>  \\q")
         true
 
   def collectAndExecute(first: String, readLine: String => Option[String]): Unit =

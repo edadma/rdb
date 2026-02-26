@@ -543,6 +543,7 @@ def serializeCatalog(
     indexEntries: Iterable[CatalogIndexEntry],
     batch: WriteBatch,
     pageSize: Int,
+    viewEntries: Iterable[(String, String)] = Nil,
 ): Array[Byte] =
   val baos = new ByteArrayOutputStream()
   val out  = new DataOutputStream(baos)
@@ -641,6 +642,13 @@ def serializeCatalog(
     out.writeShort(entry.columns.size)
     for col <- entry.columns do writeString(out, col)
 
+  // Views
+  val viewSeq = viewEntries.toSeq
+  out.writeShort(viewSeq.size)
+  for (name, sql) <- viewSeq do
+    writeString(out, name)
+    writeString(out, sql)
+
   out.flush()
   baos.toByteArray
 
@@ -664,7 +672,7 @@ case class CatalogIndexEntry(
 def deserializeCatalog(
     data: Array[Byte],
     store: PageStore,
-): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry]) =
+): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)]) =
   val in = new DataInputStream(new ByteArrayInputStream(data))
 
   // Enum types
@@ -782,7 +790,16 @@ def deserializeCatalog(
       val idxCols = (0 until idxColCount).map(_ => readString(in))
       indexEntries += CatalogIndexEntry(idxName, idxTableName, idxCols, idxUnique, idxTreeRecordPage, idxNextRowId)
 
-  (enums.toSeq, tables.toSeq, indexEntries.toSeq)
+  // Views (may not be present in older catalogs)
+  val viewEntries = new ArrayBuffer[(String, String)]
+  if in.available() > 0 then
+    val viewCount = in.readUnsignedShort()
+    for _ <- 0 until viewCount do
+      val vName = readString(in)
+      val vSql = readString(in)
+      viewEntries += ((vName, vSql))
+
+  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq)
 
 private def writeString(out: DataOutputStream, s: String): Unit =
   val bytes = s.getBytes("UTF-8")

@@ -525,6 +525,21 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         if !db.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
         db.alterTable(table, alter)
         AlterTableResult()
+      case CreateViewCommand(id @ Ident(name), queryExpr, orReplace) =>
+        guardDDL()
+        if db.hasTable(name) then throw SchemaException(id.pos, s"'$name' is already a table")
+        if !orReplace && db.hasView(name) then throw SchemaException(id.pos, s"view '$name' already exists")
+        val sql = exprToSQL(queryExpr)
+        db.createView(name, sql, orReplace)
+        CreateViewResult(name)
+      case DropViewCommand(id @ Ident(name), ifExists) =>
+        guardDDL()
+        if !db.hasView(name) then
+          if !ifExists then throw UndefinedReferenceException(id.pos, s"view '$name' not found")
+          DropViewResult(name)
+        else
+          db.dropView(name)
+          DropViewResult(name)
       case _ => sys.error(s"unexpected command")
     }
   }

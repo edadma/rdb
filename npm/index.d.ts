@@ -50,6 +50,16 @@ export interface AlterTableResult {
     command: 'alter table';
 }
 
+export interface CreateViewResult {
+    command: 'create view';
+    view: string;
+}
+
+export interface DropViewResult {
+    command: 'drop view';
+    view: string;
+}
+
 export interface PrepareResult {
     command: 'prepare';
     name: string;
@@ -104,6 +114,8 @@ export type ExecuteResult =
     | DropIndexResult
     | TruncateTableResult
     | AlterTableResult
+    | CreateViewResult
+    | DropViewResult
     | InsertResult
     | SelectResult
     | UpdateResult

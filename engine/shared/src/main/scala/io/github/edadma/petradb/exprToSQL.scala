@@ -2,6 +2,41 @@ package io.github.edadma.petradb
 
 def exprToSQL(expr: Expr): String = exprToSQLInner(expr)._1
 
+def queryToSQL(expr: Expr): String = exprToSQL(expr)
+
+private def orderByToSQL(ob: OrderBy): String =
+  val e = exprToSQLInner(ob.f)._1
+  val dir = if ob.asc then "" else " DESC"
+  val nulls = if ob.asc && !ob.nullsFirst then "" else if !ob.asc && ob.nullsFirst then "" else if ob.nullsFirst then " NULLS FIRST" else " NULLS LAST"
+  s"$e$dir$nulls"
+
+private def relToSQL(expr: Expr): String =
+  expr match
+    case TableOperator(Ident(name)) => name
+    case AliasOperator(rel, Ident(alias)) =>
+      val inner = relToSQL(rel)
+      rel match
+        case _: SQLSelectExpr | _: CompoundQueryExpr | _: SetOperationExpr | _: ValuesExpr =>
+          s"($inner) AS $alias"
+        case _ => s"$inner AS $alias"
+    case ColumnAliasOperator(rel, Ident(alias), columns) =>
+      val inner = relToSQL(rel)
+      val cols = columns.map(_.name).mkString(", ")
+      s"($inner) AS $alias($cols)"
+    case InnerJoinOperator(rel1, rel2, on) =>
+      s"${relToSQL(rel1)} INNER JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}"
+    case LeftJoinOperator(rel1, rel2, on) =>
+      s"${relToSQL(rel1)} LEFT JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}"
+    case RightJoinOperator(rel1, rel2, on) =>
+      s"${relToSQL(rel1)} RIGHT JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}"
+    case FullJoinOperator(rel1, rel2, on) =>
+      s"${relToSQL(rel1)} FULL JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}"
+    case CrossOperator(rel1, rel2) =>
+      s"${relToSQL(rel1)} CROSS JOIN ${relToSQL(rel2)}"
+    case LateralCrossOperator(rel1, rel2) =>
+      s"${relToSQL(rel1)}, LATERAL ${relToSQL(rel2)}"
+    case _ => exprToSQLInner(expr)._1
+
 private def exprToSQLInner(expr: Expr): (String, Int) =
   expr match
     case NumberExpr(n) =>
@@ -77,6 +112,80 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
     case ArrayExpr(elems) =>
       val es = elems.map(e => exprToSQLInner(e)._1)
       (s"ARRAY[${es.mkString(", ")}]", 99)
+    // ── Query-level nodes ────────────────────────────────────────────
+    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+      val sb = new StringBuilder("SELECT ")
+      if distinct then sb.append("DISTINCT ")
+      sb.append(exprs.map(e => exprToSQLInner(e)._1).mkString(", "))
+      from.foreach { sources =>
+        sb.append(" FROM ")
+        sb.append(sources.map(relToSQL).mkString(", "))
+      }
+      where.foreach(w => sb.append(s" WHERE ${exprToSQLInner(w)._1}"))
+      groupBy.foreach(gb => sb.append(s" GROUP BY ${gb.map(e => exprToSQLInner(e)._1).mkString(", ")}"))
+      having.foreach(h => sb.append(s" HAVING ${exprToSQLInner(h)._1}"))
+      orderBy.foreach(ob => sb.append(s" ORDER BY ${ob.map(orderByToSQL).mkString(", ")}"))
+      limit.foreach(l => sb.append(s" LIMIT ${l.count}"))
+      offset.foreach(o => sb.append(s" OFFSET ${o.count}"))
+      (sb.toString, 99)
+    case CompoundQueryExpr(query, orderBy, offset, limit) =>
+      val sb = new StringBuilder(exprToSQLInner(query)._1)
+      orderBy.foreach(ob => sb.append(s" ORDER BY ${ob.map(orderByToSQL).mkString(", ")}"))
+      limit.foreach(l => sb.append(s" LIMIT ${l.count}"))
+      offset.foreach(o => sb.append(s" OFFSET ${o.count}"))
+      (sb.toString, 99)
+    case SetOperationExpr(op, left, right) =>
+      (s"${exprToSQLInner(left)._1} $op ${exprToSQLInner(right)._1}", 99)
+    // ── Relational nodes (Operators) ─────────────────────────────────
+    case TableOperator(Ident(name)) => (name, 99)
+    case AliasOperator(rel, Ident(alias)) =>
+      val inner = relToSQL(rel)
+      rel match
+        case _: SQLSelectExpr | _: CompoundQueryExpr | _: SetOperationExpr | _: ValuesExpr =>
+          (s"($inner) AS $alias", 99)
+        case _ => (s"$inner AS $alias", 99)
+    case ColumnAliasOperator(rel, Ident(alias), columns) =>
+      val inner = relToSQL(rel)
+      val cols = columns.map(_.name).mkString(", ")
+      (s"($inner) AS $alias($cols)", 99)
+    case InnerJoinOperator(rel1, rel2, on) =>
+      (s"${relToSQL(rel1)} INNER JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}", 99)
+    case LeftJoinOperator(rel1, rel2, on) =>
+      (s"${relToSQL(rel1)} LEFT JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}", 99)
+    case RightJoinOperator(rel1, rel2, on) =>
+      (s"${relToSQL(rel1)} RIGHT JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}", 99)
+    case FullJoinOperator(rel1, rel2, on) =>
+      (s"${relToSQL(rel1)} FULL JOIN ${relToSQL(rel2)} ON ${exprToSQLInner(on)._1}", 99)
+    case CrossOperator(rel1, rel2) =>
+      (s"${relToSQL(rel1)} CROSS JOIN ${relToSQL(rel2)}", 99)
+    case LateralCrossOperator(rel1, rel2) =>
+      (s"${relToSQL(rel1)}, LATERAL ${relToSQL(rel2)}", 99)
+    // ── Missing expression nodes ─────────────────────────────────────
+    case StarExpr()               => ("*", 99)
+    case TableStarExpr(Ident(t))  => (s"$t.*", 99)
+    case AliasExpr(expr, Ident(alias)) =>
+      (s"${exprToSQLInner(expr)._1} AS $alias", 99)
+    case ExistsExpr(subquery) =>
+      (s"EXISTS (${exprToSQLInner(subquery)._1})", 99)
+    case InQueryExpr(value, op, query) =>
+      val (vs, vp) = exprToSQLInner(value)
+      val v = if vp < 4 then s"($vs)" else vs
+      (s"$v $op (${exprToSQLInner(query)._1})", 4)
+    case SubqueryExpr(query) =>
+      (s"(${exprToSQLInner(query)._1})", 99)
+    case TableConstructorExpr(query) =>
+      (s"(${exprToSQLInner(query)._1})", 99)
+    case LateralExpr(query) =>
+      (s"LATERAL (${exprToSQLInner(query)._1})", 99)
+    case ValuesExpr(rows) =>
+      val rs = rows.map(r => s"(${r.map(e => exprToSQLInner(e)._1).mkString(", ")})").mkString(", ")
+      (s"VALUES $rs", 99)
+    case OverlapsExpr(s1, e1, s2, e2) =>
+      (s"(${exprToSQLInner(s1)._1}, ${exprToSQLInner(e1)._1}) OVERLAPS (${exprToSQLInner(s2)._1}, ${exprToSQLInner(e2)._1})", 99)
+    case ObjectExpr(properties) =>
+      val ps = properties.map { case (Ident(k), v) => s"'$k': ${exprToSQLInner(v)._1}" }
+      (s"{${ps.mkString(", ")}}", 99)
+    case ParameterExpr(index) => (s"$$$index", 99)
     case _ => (expr.toString, 99)
 
 private def opPrec(op: String): Int =

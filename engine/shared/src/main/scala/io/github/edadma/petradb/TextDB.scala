@@ -25,6 +25,17 @@ class TextDB(val path: String) extends MemoryDB:
       val labels = e.labels.map(l => s"'${l.replace("'", "''")}'").mkString(", ")
       executeSQL(s"CREATE TYPE ${e.name} AS ENUM ($labels)")
 
+    // Restore views from comment directives
+    for line <- io.github.edadma.cross_platform.readFile(path).linesIterator do
+      val trimmed = line.trim
+      if trimmed.startsWith("-- VIEW ") then
+        val rest = trimmed.drop(8) // "-- VIEW " is 8 chars
+        val asIdx = rest.indexOf(" AS ")
+        if asIdx > 0 then
+          val vName = rest.substring(0, asIdx)
+          val vSql = rest.substring(asIdx + 4)
+          views(vName) = vSql
+
     for t <- imp.tables do
       val colDefs = t.header.map(col => s"${col.name} ${importerTypeToSQL(col.typ)}").mkString(", ")
       executeSQL(s"CREATE TABLE ${t.name} ($colDefs)")
@@ -106,6 +117,9 @@ class TextDB(val path: String) extends MemoryDB:
 
   private def buildFileContent(): String =
     val sb = new StringBuilder
+
+    for (vName, vSql) <- views.toSeq.sortBy(_._1) do
+      sb.append(s"-- VIEW $vName AS $vSql\n")
 
     for (eName, typ) <- types.toSeq.sortBy(_._1) do
       typ match

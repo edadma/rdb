@@ -40,6 +40,8 @@ case class DropTypeCommand(name: Ident, ifExists: Boolean = false, cascade: Bool
 case class PrepareCommand(name: Ident, commands: Seq[Command])    extends Command
 case class ExecuteCommand(name: Ident, params: Seq[Expr])         extends Command
 case class DeallocateCommand(name: Ident)                         extends Command
+case class CreateViewCommand(name: Ident, query: Expr, orReplace: Boolean) extends Command
+case class DropViewCommand(name: Ident, ifExists: Boolean)                extends Command
 case object BeginCommand    extends Command
 case object CommitCommand   extends Command
 case object RollbackCommand extends Command

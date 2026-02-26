@@ -999,6 +999,19 @@ object SQLParser:
       ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
     }
 
+  // ── DDL: CREATE/DROP VIEW ────────────────────────────────────────────
+
+  private def createView[p: P]: P[Command] =
+    P(kw("create") ~ (kw("or") ~ kw("replace")).!.? ~ kw("view") ~ identifier ~ kw("as") ~ query).map {
+      case (orReplace, name, q) => CreateViewCommand(name, q, orReplace.isDefined)
+    }
+
+  private def dropView[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("view") ~ kw("if") ~ kw("exists") ~ identifier).map(name => DropViewCommand(name, true))
+      | (kw("drop") ~ kw("view") ~ identifier).map(name => DropViewCommand(name, false))
+    )
+
   // ── DDL: CREATE TABLE ──────────────────────────────────────────────
 
   private def tableItem[p: P]: P[ColumnDesc | TableConstraint] =
@@ -1147,7 +1160,7 @@ object SQLParser:
     P(explain | beginCmd | commitCmd | rollbackCmd | prepare | executeCmd | deallocate)
 
   private def commandDDL[p: P]: P[Command] =
-    P(createTable | createIndex | createType | dropTable | dropIndex | dropType | alterTable)
+    P(createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)
 
   private def commandDML[p: P]: P[Command] =
     P(insert | update | delete | truncate | query.map(QueryCommand(_)))

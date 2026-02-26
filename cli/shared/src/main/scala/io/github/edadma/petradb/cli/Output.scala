@@ -22,6 +22,8 @@ object Output:
       case BeginResult              => println(s"BEGIN")
       case CommitResult             => println(s"COMMIT")
       case RollbackResult           => println(s"ROLLBACK")
+      case CreateViewResult(name)   => println(s"CREATE VIEW")
+      case DropViewResult(name)     => println(s"DROP VIEW")
 
   def listTables(db: DB): Unit =
     val names = db.tableNames.toSeq.sorted
@@ -32,9 +34,23 @@ object Output:
       for name <- names do t.row(name)
       println(t.toString)
 
+  def listViews(db: DB): Unit =
+    val names = db.viewNames.toSeq.sorted
+    if names.isEmpty then println("No views.")
+    else
+      val t = new TextTable:
+        header("View")
+      for name <- names do t.row(name)
+      println(t.toString)
+
   def describeTable(db: DB, name: String): Unit =
     db.getTable(name) match
-      case None => println(s"Table '$name' not found.")
+      case None =>
+        db.getView(name) match
+          case None => println(s"Table or view '$name' not found.")
+          case Some(sql) =>
+            println(s"View \"$name\"")
+            println(s"  AS $sql")
       case Some(table) =>
         val t = new TextTable:
           headerSeq(Seq("Column", "Type", "Nullable"))
