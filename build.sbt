@@ -178,7 +178,7 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform, NativePlatform)
 
 // ── server: HTTP/JSON API ────────────────────────────────────────────
 
-lazy val server = crossProject(JVMPlatform)
+lazy val server = crossProject(JVMPlatform, JSPlatform)
   .in(file("server"))
   .dependsOn(engine, shared)
   .settings(
@@ -186,10 +186,10 @@ lazy val server = crossProject(JVMPlatform)
     version := "1.1.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "com.indoorvivants" %% "toml"        % "0.3.0",
-      "com.lihaoyi"      %%% "upickle"    % "4.0.2",
-      "com.lihaoyi"      %%% "mainargs"   % "0.7.8",
-      "org.scalatest"    %%% "scalatest"  % "3.2.19" % Test,
+      "com.indoorvivants" %%% "toml"       % "0.3.0",
+      "com.lihaoyi"       %%% "upickle"    % "4.0.2",
+      "com.lihaoyi"       %%% "mainargs"   % "0.7.8",
+      "org.scalatest"     %%% "scalatest"  % "3.2.19" % Test,
     ),
     publish / skip      := true,
     publishLocal / skip := true,
@@ -199,6 +199,11 @@ lazy val server = crossProject(JVMPlatform)
       "io.github.edadma" %% "microserve" % "0.2.0",
       "org.mindrot"       % "jbcrypt"    % "0.4",
     ),
+  )
+  .jsSettings(
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+    scalaJSLinkerConfig ~= { _.withSourceMap(false) },
+    scalaJSUseMainModuleInitializer := true,
   )
 
 // ── jdbc: JDBC driver ───────────────────────────────────────────────
@@ -243,7 +248,7 @@ lazy val root = project
     engine.js, engine.jvm, engine.native,
     client.js, client.jvm, client.native,
     cli.js, cli.jvm, cli.native,
-    server.jvm,
+    server.jvm, server.js,
     integration,
     jdbc,
   )

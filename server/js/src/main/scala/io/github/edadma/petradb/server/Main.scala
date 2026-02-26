@@ -3,7 +3,6 @@ package io.github.edadma.petradb.server
 import mainargs.{main, arg, Flag, ParserForMethods}
 import io.github.edadma.petradb.*
 import io.github.edadma.cross_platform.exists
-import io.github.edadma.microserve.EventLoop
 
 object Main:
   @main
@@ -31,14 +30,11 @@ object Main:
       case None    => ServerConfig.unrestricted
 
     val mode = if path.isDefined then s"persistent (${path.get})" else "in-memory"
-    val loop = new EventLoop
-    val server = new PetraServer(loop, db, host, port, serverConfig.auth)
+    val server = new PetraServer(db, host, port, serverConfig.auth)
 
     server.start { () =>
       println(s"PetraDB server ($mode) listening on http://$host:$port")
     }
-
-    loop.run()
 
   def main(args: Array[String]): Unit =
     ParserForMethods(this).runOrExit(args.toIndexedSeq, allowPositional = true)

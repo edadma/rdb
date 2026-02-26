@@ -4,8 +4,6 @@ import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseExcep
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 
-import scala.util.Try
-
 object RequestHandler:
   case class HandlerResponse(
     status: Int,
@@ -19,18 +17,8 @@ object RequestHandler:
 
   def checkAuth(authHeader: Option[String], auth: AuthConfig): Boolean =
     auth match
-      case NoAuth => true
-      case BasicAuth(users) =>
-        authHeader match
-          case Some(header) if header.startsWith("Basic ") =>
-            Try {
-              val decoded = new String(java.util.Base64.getDecoder.decode(header.drop(6)))
-              decoded.split(":", 2) match
-                case Array(username, password) =>
-                  users.get(username).exists(hash => Passwords.check(password, hash))
-                case _ => false
-            }.getOrElse(false)
-          case _ => false
+      case NoAuth        => true
+      case ba: BasicAuth => authHeader.exists(h => PlatformAuth.checkBasic(h, ba))
 
   def handleUnauthorized(): HandlerResponse =
     HandlerResponse(
