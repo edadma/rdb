@@ -60,9 +60,8 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "org.scala-lang.modules" %%% "scala-parser-combinators"  % "2.4.0",
       "org.scalatest"          %%% "scalatest"                 % "3.2.19" % Test,
     ),
-    publishMavenStyle      := true,
-    publishTo              := sonatypePublishToBundle.value,
-    Test / publishArtifact := false,
+    publish / skip      := true,
+    publishLocal / skip := true,
   )
   .jsSettings(
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
