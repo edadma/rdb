@@ -22,6 +22,7 @@ trait ServerResponse extends js.Object:
 trait NodeHttpServer extends js.Object:
   def listen(port: Int, host: String, callback: js.Function0[Unit]): Unit = js.native
   def close(callback: js.Function0[Unit]): Unit = js.native
+  def address(): js.Dynamic = js.native
 
 @js.native
 @JSImport("http", JSImport.Namespace)

@@ -30,7 +30,7 @@ class PetraServer(
 
         val result = RequestHandler.dispatch(
           method = req.method,
-          path = req.url,
+          path = { val idx = req.url.indexOf('?'); if idx < 0 then req.url else req.url.substring(0, idx) },
           body = body,
           authHeader = req.headers.get("authorization").map(_.toString),
           sessionId = req.headers.get("x-session-id").map(_.toString),
@@ -49,6 +49,8 @@ class PetraServer(
     }
 
     server.listen(port, host, () => onListening())
+
+  def actualPort: Int = server.address().port.asInstanceOf[Int]
 
   def stop(onDrain: () => Unit = () => ()): Unit =
     sessionMgr.closeAll()
