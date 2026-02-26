@@ -6,6 +6,7 @@ import io.github.edadma.cross_platform.readFile
 abstract class Repl(val session: Session):
   val prompt     = "petra> "
   val contPrompt = "  -> "
+  var timing     = false
 
   def run(): Unit
 
@@ -33,9 +34,13 @@ abstract class Repl(val session: Session):
       case MetaCommand.Copy(args) =>
         executeSql(s"COPY $args;")
         true
+      case MetaCommand.Timing =>
+        timing = !timing
+        println(s"Timing is ${if timing then "on" else "off"}.")
+        true
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
-        println("Available: \\copy <args>  \\d <table>  \\dt  \\dump  \\dv  \\i <file>  \\q")
+        println("Available: \\copy <args>  \\d <table>  \\dt  \\dump  \\dv  \\i <file>  \\q  \\timing")
         true
 
   def collectAndExecute(first: String, readLine: String => Option[String]): Unit =
@@ -52,6 +57,7 @@ abstract class Repl(val session: Session):
 
   def executeSql(sql: String): Unit =
     given Session = session
+    val start = if timing then System.currentTimeMillis() else 0L
     try
       val results = executeSQL(sql)
       results.foreach(Output.printResult)
@@ -65,6 +71,10 @@ abstract class Repl(val session: Session):
         else
           Console.err.println(s"${pos.line}: ${e.getMessage}\n${pos.longString}")
       case e: Exception => Console.err.println(s"Error: ${e.getMessage}")
+    finally
+      if timing then
+        val elapsed = System.currentTimeMillis() - start
+        println(s"Time: ${elapsed / 1000.0} s")
 
   def executeFile(path: String): Unit =
     try

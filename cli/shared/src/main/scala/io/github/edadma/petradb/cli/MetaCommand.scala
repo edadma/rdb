@@ -8,6 +8,7 @@ enum MetaCommand:
   case Include(path: String)
   case DumpSchema
   case Copy(args: String)
+  case Timing
   case Unknown(cmd: String)
 
 object MetaCommand:
@@ -26,4 +27,5 @@ object MetaCommand:
     else if trimmed.startsWith("\\copy ") then
       val args = trimmed.drop(6).trim
       if args.nonEmpty then Copy(args) else Unknown(trimmed)
+    else if trimmed == "\\timing" then Timing
     else Unknown(trimmed)
