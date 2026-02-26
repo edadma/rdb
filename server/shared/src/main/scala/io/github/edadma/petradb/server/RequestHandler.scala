@@ -63,3 +63,22 @@ object RequestHandler:
 
   def handleHealth(): HandlerResponse =
     HandlerResponse(200, """{"status":"ok"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")
+
+  def dispatch(
+    method: String,
+    path: String,
+    body: String,
+    authHeader: Option[String],
+    sessionId: Option[String],
+    sessionMgr: SessionManager,
+    auth: AuthConfig,
+  ): HandlerResponse =
+    if path != "/health" && !checkAuth(authHeader, auth) then handleUnauthorized()
+    else (method, path) match
+      case ("POST", "/sql")     => handleSql(sessionMgr, sessionId, body)
+      case ("POST", "/session") => handleCreateSession(sessionMgr)
+      case ("DELETE", p) if p.startsWith("/session/") =>
+        handleCloseSession(sessionMgr, p.stripPrefix("/session/"))
+      case ("GET", "/health") => handleHealth()
+      case _ =>
+        HandlerResponse(404, """{"error":"Not found"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")

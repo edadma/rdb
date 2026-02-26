@@ -6,7 +6,7 @@ import io.github.edadma.cross_platform.{exists, readFile}
 
 sealed trait AuthConfig
 case object NoAuth                               extends AuthConfig
-case class BasicAuth(users: Map[String, String]) extends AuthConfig // username -> bcrypt hash
+case class BasicAuth(users: Map[String, String]) extends AuthConfig
 
 case class ServerConfig(auth: AuthConfig)
 

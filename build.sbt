@@ -195,15 +195,15 @@ lazy val server = crossProject(JVMPlatform, JSPlatform)
     publishLocal / skip := true,
   )
   .jvmSettings(
-    libraryDependencies ++= Seq(
-      "io.github.edadma" %% "microserve" % "0.2.0",
-      "org.mindrot"       % "jbcrypt"    % "0.4",
-    ),
+    libraryDependencies += "io.github.edadma" %% "microserve" % "0.2.0",
   )
   .jsSettings(
+    jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
     scalaJSLinkerConfig ~= { _.withSourceMap(false) },
     scalaJSUseMainModuleInitializer := true,
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
   )
 
 // ── jdbc: JDBC driver ───────────────────────────────────────────────

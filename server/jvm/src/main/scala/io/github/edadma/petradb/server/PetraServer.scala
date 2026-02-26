@@ -15,26 +15,15 @@ class PetraServer(
 
   def start(onListening: () => Unit = () => ()): Unit =
     server = createServer(loop) { (req, res) =>
-      val result =
-        if req.path != "/health" && !RequestHandler.checkAuth(req.get("Authorization"), auth) then
-          RequestHandler.handleUnauthorized()
-        else (req.method, req.path) match
-          case ("POST", "/sql") =>
-            val sessionId = req.get("X-Session-Id")
-            RequestHandler.handleSql(sessionMgr, sessionId, req.bodyString)
-
-          case ("POST", "/session") =>
-            RequestHandler.handleCreateSession(sessionMgr)
-
-          case ("DELETE", path) if path.startsWith("/session/") =>
-            val id = path.stripPrefix("/session/")
-            RequestHandler.handleCloseSession(sessionMgr, id)
-
-          case ("GET", "/health") =>
-            RequestHandler.handleHealth()
-
-          case _ =>
-            RequestHandler.HandlerResponse(404, """{"error":"Not found"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")
+      val result = RequestHandler.dispatch(
+        method = req.method,
+        path = req.path,
+        body = req.bodyString,
+        authHeader = req.get("Authorization"),
+        sessionId = req.get("X-Session-Id"),
+        sessionMgr = sessionMgr,
+        auth = auth,
+      )
 
       val r = result.extraHeaders.foldLeft(
         res.status(result.status).set("Content-Type", result.contentType)
