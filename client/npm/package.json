@@ -28,5 +28,9 @@
     "typescript"
   ],
   "author": "Edward A. Maxedon, Sr.",
-  "license": "ISC"
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/edadma/petradb/issues"
+  },
+  "homepage": "https://petradb.dev"
 }
