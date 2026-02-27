@@ -225,8 +225,9 @@ lazy val jdbc = project
       case PathList("META-INF", _*)             => MergeStrategy.discard
       case _                                    => MergeStrategy.first
     },
-    publish / skip      := true,
-    publishLocal / skip := true,
+    publishMavenStyle      := true,
+    publishTo              := sonatypePublishToBundle.value,
+    Test / publishArtifact := false,
   )
 
 // ── integration: end-to-end client + server tests ───────────────────
