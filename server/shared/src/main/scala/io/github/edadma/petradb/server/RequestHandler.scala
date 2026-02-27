@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseException, TypeException, UndefinedReferenceException, SchemaException, ConstraintException}
+import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseException, TypeException, UndefinedReferenceException, SchemaException, ConstraintException, ExecutionException}
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 
@@ -50,26 +50,28 @@ object RequestHandler:
     requestBody: String,
   ): HandlerResponse =
     val session = sessionId match
-      case Some(id) => sessionMgr.getSession(id)
-      case None     => sessionMgr.transientSession()
+      case Some(id) =>
+        sessionMgr.getSession(id) match
+          case Some(s) => s
+          case None    => return errorResponse(503, "Too many sessions")
+      case None => sessionMgr.transientSession()
 
     val results =
       try executeSQL(requestBody)(using session)
       catch
-        case e: (ParseException | TypeException | UndefinedReferenceException) =>
+        case e: (ParseException | TypeException | UndefinedReferenceException | ExecutionException) =>
           return errorResponse(400, e.getMessage)
         case e: (SchemaException | ConstraintException) =>
           return errorResponse(409, e.getMessage)
-        case e: PetraException =>
-          return errorResponse(500, e.getMessage)
         case e: Exception =>
           return errorResponse(500, e.getMessage)
 
     HandlerResponse(200, writeBinary(results.toSeq))
 
   def handleCreateSession(sessionMgr: SessionManager): HandlerResponse =
-    val (id, _) = sessionMgr.createSession()
-    HandlerResponse(200, writeBinary(Map("sessionId" -> id)))
+    sessionMgr.createSession() match
+      case Some((id, _)) => HandlerResponse(200, writeBinary(Map("sessionId" -> id)))
+      case None          => errorResponse(503, "Too many sessions")
 
   def handleCloseSession(sessionMgr: SessionManager, sessionId: String): HandlerResponse =
     if sessionMgr.closeSession(sessionId) then

@@ -32,7 +32,7 @@ object Main:
 
     val mode = if path.isDefined then s"persistent (${path.get})" else "in-memory"
     val loop = new EventLoop
-    val server = new PetraServer(loop, db, host, port, serverConfig.auth, serverConfig.cors)
+    val server = new PetraServer(loop, db, host, port, serverConfig.auth, serverConfig.cors, serverConfig.maxSessions)
 
     server.start { () =>
       println(s"PetraDB server ($mode) listening on http://$host:$port")

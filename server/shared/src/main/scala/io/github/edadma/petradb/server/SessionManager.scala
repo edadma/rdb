@@ -4,17 +4,28 @@ import io.github.edadma.petradb.{DB, Session, Platform}
 
 import scala.collection.mutable
 
-class SessionManager(val db: DB):
+class SessionManager(val db: DB, maxSessions: Int = 0):
   private val sessions = mutable.Map[String, Session]()
 
-  def getSession(id: String): Session =
-    sessions.getOrElseUpdate(id, db.connect())
+  def isFull: Boolean = maxSessions > 0 && sessions.size >= maxSessions
 
-  def createSession(): (String, Session) =
-    val id = Platform.randomUUID
-    val session = db.connect()
-    sessions(id) = session
-    (id, session)
+  def getSession(id: String): Option[Session] =
+    sessions.get(id) match
+      case some @ Some(_) => some
+      case None =>
+        if isFull then None
+        else
+          val s = db.connect()
+          sessions(id) = s
+          Some(s)
+
+  def createSession(): Option[(String, Session)] =
+    if isFull then None
+    else
+      val id = Platform.randomUUID
+      val session = db.connect()
+      sessions(id) = session
+      Some((id, session))
 
   def closeSession(id: String): Boolean =
     sessions.remove(id).isDefined

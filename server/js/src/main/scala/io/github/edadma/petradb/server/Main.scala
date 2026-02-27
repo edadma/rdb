@@ -30,7 +30,7 @@ object Main:
       case None    => ServerConfig.unrestricted
 
     val mode = if path.isDefined then s"persistent (${path.get})" else "in-memory"
-    val server = new PetraServer(db, host, port, serverConfig.auth, serverConfig.cors)
+    val server = new PetraServer(db, host, port, serverConfig.auth, serverConfig.cors, serverConfig.maxSessions)
 
     server.start { () =>
       println(s"PetraDB server ($mode) listening on http://$host:$port")

@@ -11,8 +11,9 @@ class PetraServer(
   port: Int = DefaultPort,
   auth: AuthConfig = NoAuth,
   cors: CorsConfig = CorsAllowAll,
+  maxSessions: Int = 0,
 ):
-  private val sessionMgr = new SessionManager(db)
+  private val sessionMgr = new SessionManager(db, maxSessions)
   private var server: NodeHttpServer = uninitialized
 
   private def toBuffer(bytes: Array[Byte]): Uint8Array =

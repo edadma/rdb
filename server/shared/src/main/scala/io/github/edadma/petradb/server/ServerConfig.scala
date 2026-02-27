@@ -13,17 +13,19 @@ case object CorsAllowAll                  extends CorsConfig
 case class CorsAllowOrigin(origin: String) extends CorsConfig
 case object NoCors                        extends CorsConfig
 
-case class ServerConfig(auth: AuthConfig, cors: CorsConfig = CorsAllowAll)
+case class ServerConfig(auth: AuthConfig, cors: CorsConfig = CorsAllowAll, maxSessions: Int = 0)
 
 object ServerConfig:
-  val unrestricted: ServerConfig = ServerConfig(NoAuth, CorsAllowAll)
+  val unrestricted: ServerConfig = ServerConfig(NoAuth, CorsAllowAll, maxSessions = 0)
 
   private case class UserEntry(username: String, password: String)
   private case class CorsSection(origin: Option[String] = None)
+  private case class SessionsSection(max_sessions: Option[Int] = None)
   private case class TomlConfig(
     auth: Option[String] = None,
     users: Option[List[UserEntry]] = None,
     cors: Option[CorsSection] = None,
+    sessions: Option[SessionsSection] = None,
   )
 
   def fromFile(path: String): ServerConfig =
@@ -46,4 +48,6 @@ object ServerConfig:
               case "none" => NoCors
               case o      => CorsAllowOrigin(o)
 
-        ServerConfig(authConfig, corsConfig)
+        val maxSessions = cfg.sessions.flatMap(_.max_sessions).getOrElse(0)
+
+        ServerConfig(authConfig, corsConfig, maxSessions)
