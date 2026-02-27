@@ -144,3 +144,15 @@ class TempTableTests extends AnyFreeSpec with Matchers:
     )
     t.data.length shouldBe 2
   }
+
+  "CREATE TEMP TABLE allowed inside transaction" in {
+    val t = query(
+      """BEGIN;
+        |CREATE TEMP TABLE t (id INT, name TEXT);
+        |INSERT INTO t VALUES (1, 'inside txn');
+        |COMMIT;
+        |SELECT * FROM t""".stripMargin
+    )
+    t.data.length shouldBe 1
+    t.data.head.data(1) shouldBe TextValue("inside txn")
+  }
