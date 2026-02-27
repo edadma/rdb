@@ -15,6 +15,22 @@ object RequestHandler:
   private def errorResponse(status: Int, message: String): HandlerResponse =
     HandlerResponse(status, message.getBytes("UTF-8"), "text/plain; charset=UTF-8")
 
+  private def corsHeaders(cors: CorsConfig): Map[String, String] =
+    cors match
+      case NoCors => Map.empty
+      case CorsAllowAll =>
+        Map(
+          "Access-Control-Allow-Origin"  -> "*",
+          "Access-Control-Allow-Methods" -> "GET, POST, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers" -> "Content-Type, Authorization, X-Session-Id",
+        )
+      case CorsAllowOrigin(origin) =>
+        Map(
+          "Access-Control-Allow-Origin"  -> origin,
+          "Access-Control-Allow-Methods" -> "GET, POST, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers" -> "Content-Type, Authorization, X-Session-Id",
+        )
+
   def checkAuth(authHeader: Option[String], auth: AuthConfig): Boolean =
     auth match
       case NoAuth        => true
@@ -72,13 +88,22 @@ object RequestHandler:
     sessionId: Option[String],
     sessionMgr: SessionManager,
     auth: AuthConfig,
+    cors: CorsConfig = CorsAllowAll,
   ): HandlerResponse =
-    if path != "/health" && !checkAuth(authHeader, auth) then handleUnauthorized()
-    else (method, path) match
-      case ("POST", "/sql")     => handleSql(sessionMgr, sessionId, body)
-      case ("POST", "/session") => handleCreateSession(sessionMgr)
-      case ("DELETE", p) if p.startsWith("/session/") =>
-        handleCloseSession(sessionMgr, p.stripPrefix("/session/"))
-      case ("GET", "/health") => handleHealth()
-      case _ =>
-        HandlerResponse(404, """{"error":"Not found"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")
+    val ch = corsHeaders(cors)
+
+    if method == "OPTIONS" then
+      return HandlerResponse(204, Array.emptyByteArray, extraHeaders = ch)
+
+    val response =
+      if path != "/health" && !checkAuth(authHeader, auth) then handleUnauthorized()
+      else (method, path) match
+        case ("POST", "/sql")     => handleSql(sessionMgr, sessionId, body)
+        case ("POST", "/session") => handleCreateSession(sessionMgr)
+        case ("DELETE", p) if p.startsWith("/session/") =>
+          handleCloseSession(sessionMgr, p.stripPrefix("/session/"))
+        case ("GET", "/health") => handleHealth()
+        case _ =>
+          HandlerResponse(404, """{"error":"Not found"}""".getBytes("UTF-8"), "application/json; charset=UTF-8")
+
+    response.copy(extraHeaders = ch ++ response.extraHeaders)

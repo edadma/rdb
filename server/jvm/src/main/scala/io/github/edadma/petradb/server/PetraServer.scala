@@ -9,6 +9,7 @@ class PetraServer(
   host: String = "127.0.0.1",
   port: Int = DefaultPort,
   auth: AuthConfig = NoAuth,
+  cors: CorsConfig = CorsAllowAll,
 ):
   private val sessionMgr = new SessionManager(db)
   private var server: Server = null
@@ -23,6 +24,7 @@ class PetraServer(
         sessionId = req.get("X-Session-Id"),
         sessionMgr = sessionMgr,
         auth = auth,
+        cors = cors,
       )
 
       val r = result.extraHeaders.foldLeft(
