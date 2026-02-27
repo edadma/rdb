@@ -10,7 +10,7 @@ object Main:
     @arg(short = 'm', doc = "Use in-memory database")
     memory: Flag = Flag(false),
     @arg(short = 'p', doc = "Port number")
-    port: Int = 5432,
+    port: Int = DefaultPort,
     @arg(short = 'h', doc = "Host address")
     host: String = "127.0.0.1",
     @arg(short = 'c', doc = "Path to config file")

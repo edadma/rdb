@@ -1,5 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
+import io.github.edadma.petradb.DefaultPort
 import java.util.Properties
 import java.util.logging.Logger
 
@@ -19,7 +20,7 @@ class PetraDriver extends java.sql.Driver:
       val colon = hostPort.lastIndexOf(':')
       val (host, port) =
         if colon >= 0 then (hostPort.substring(0, colon), hostPort.substring(colon + 1).toInt)
-        else (hostPort, 5432)
+        else (hostPort, DefaultPort)
       val username = Option(props.getProperty("user")).getOrElse("")
       val password = Option(props.getProperty("password")).getOrElse("")
       new PetraServerConnection(host, port, username, password)

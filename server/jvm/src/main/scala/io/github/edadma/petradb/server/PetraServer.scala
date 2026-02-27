@@ -1,13 +1,13 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.DB
+import io.github.edadma.petradb.{DB, DefaultPort}
 import io.github.edadma.microserve.*
 
 class PetraServer(
   val loop: EventLoop,
   db: DB,
   host: String = "127.0.0.1",
-  port: Int = 5432,
+  port: Int = DefaultPort,
   auth: AuthConfig = NoAuth,
 ):
   private val sessionMgr = new SessionManager(db)

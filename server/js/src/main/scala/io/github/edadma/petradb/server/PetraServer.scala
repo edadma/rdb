@@ -3,12 +3,12 @@ package io.github.edadma.petradb.server
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.compiletime.uninitialized
-import io.github.edadma.petradb.DB
+import io.github.edadma.petradb.{DB, DefaultPort}
 
 class PetraServer(
   db: DB,
   host: String = "127.0.0.1",
-  port: Int = 5432,
+  port: Int = DefaultPort,
   auth: AuthConfig = NoAuth,
 ):
   private val sessionMgr = new SessionManager(db)

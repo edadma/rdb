@@ -16,3 +16,5 @@ val ZERO: NumberValue = NumberValue(0)
 val ONE: NumberValue = NumberValue(1)
 
 val NULL = NullValue()
+
+val DefaultPort = 5480

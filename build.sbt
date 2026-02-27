@@ -211,7 +211,7 @@ lazy val server = crossProject(JVMPlatform, JSPlatform)
 
 lazy val jdbc = project
   .in(file("jdbc"))
-  .dependsOn(client.jvm, engine.jvm, server.jvm)
+  .dependsOn(client.jvm, engine.jvm, server.jvm % Test)
   .settings(
     name    := "petradb-jdbc",
     version := "1.1.1",
