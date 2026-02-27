@@ -65,7 +65,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         case _ => ExplainResult("(non-query command)")
     case cmd             => guardTransaction { cmd match
       case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
-        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
 
@@ -157,7 +157,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                             case None =>
                 buildInsertResult(lastResult)
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
-        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
@@ -249,11 +249,12 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                         case None =>
             buildSelectInsertResult(lastResult)
       case QueryCommand(query)                                         => executeSelect(query)
-      case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists) =>
-        guardDDL()
-        if (db hasTable table) && ifNotExists then CreateTableResult(table)
+      case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists, temporary) =>
+        if !temporary then guardDDL()
+        val alreadyExists = if temporary then session.hasTempTable(table) else session.hasTable(table)
+        if alreadyExists && ifNotExists then CreateTableResult(table)
         else
-          if db hasTable table then throw SchemaException(id.pos, s"duplicate table: $table")
+          if alreadyExists then throw SchemaException(id.pos, s"duplicate table: $table")
 
           val names = new mutable.HashSet[String]
 
@@ -308,12 +309,12 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
               CheckSpec(exprToSQL(expr), expr, None)
           }
 
-          // Validate FK references
+          // Validate FK references (look up via session to include temp tables)
           for spec <- columnSpecs do
             spec match
               case cs: ColumnSpec if cs.fk.isDefined =>
                 val (refTableName, refColName, _, _) = cs.fk.get
-                val refTable = db.getTable(refTableName).getOrElse(
+                val refTable = session.getTable(refTableName).getOrElse(
                   throw UndefinedReferenceException(id.pos, s"referenced table '$refTableName' does not exist"))
                 if !refTable.hasColumn(refColName) then
                   throw UndefinedReferenceException(id.pos, s"referenced column '$refColName' not found in table '$refTableName'")
@@ -321,7 +322,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
           for spec <- constraintSpecs do
             spec match
               case fk: ForeignKeySpec =>
-                val refTable = db.getTable(fk.referencedTable).getOrElse(
+                val refTable = session.getTable(fk.referencedTable).getOrElse(
                   throw UndefinedReferenceException(id.pos, s"referenced table '${fk.referencedTable}' does not exist"))
                 for col <- fk.referencedColumns do
                   if !refTable.hasColumn(col) then
@@ -329,22 +330,31 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
               case _ =>
 
           val allSpecs = columnSpecs ++ constraintSpecs ++ columnPKSpecs ++ columnCheckSpecs
-          db.createTable(table, allSpecs)
+          if temporary then
+            val t = session.tempDB.createTable(table, allSpecs)
+            session.tempTables(table) = t
+          else
+            db.createTable(table, allSpecs)
           CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
-        guardDDL()
-        if (!db.hasTable(table)) {
-          if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown table: $table")
-          else DropTableResult(table) // IF EXISTS allows missing table
-        } else {
-          if !cascade then
-            val refs = db.childForeignKeys(table)
-            if refs.nonEmpty then
-              val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
-              throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
-          db.dropTable(table)
+        if session.hasTempTable(table) then
+          session.tempTables.remove(table)
+          session.tempDB.dropTable(table)
           DropTableResult(table)
-        }
+        else
+          guardDDL()
+          if (!db.hasTable(table)) {
+            if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown table: $table")
+            else DropTableResult(table) // IF EXISTS allows missing table
+          } else {
+            if !cascade then
+              val refs = db.childForeignKeys(table)
+              if refs.nonEmpty then
+                val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
+                throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
+            db.dropTable(table)
+            DropTableResult(table)
+          }
       case CreateEnumCommand(id @ Ident(name), labels) =>
         guardDDL()
         if db hasType name then throw SchemaException(id.pos, s"duplicate type '$name'")
@@ -352,7 +362,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         db.createEnum(name, labels)
         CreateTypeResult(name)
       case UpdateCommand(id @ Ident(table), sets, from, cond, returning) =>
-        val t             = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t             = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
             if !t.hasColumn(col) then throw UndefinedReferenceException(id.pos, s"table $table doesn't has column '$col'")
@@ -446,7 +456,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
           case None =>
             UpdateResult(count)
       case DeleteCommand(id @ Ident(table), cond, returning) =>
-        val t    = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t    = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val rows =
           cond match
             case Some(value) => SeqScanProcess(t, rewrite(value))
@@ -486,7 +496,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
           case None =>
             DeleteResult(count)
       case TruncateCommand(id @ Ident(table)) =>
-        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         // Enforce FK constraints: fail if any child table has rows referencing this table
         val childFKs = db.childForeignKeys(table)
         for (childTable, fk) <- childFKs do
@@ -498,7 +508,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         TruncateResult(table)
       case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
         guardDDL()
-        if !db.hasTable(tableName) then throw UndefinedReferenceException(tid.pos, s"unknown table: $tableName")
+        if !session.hasTable(tableName) then throw UndefinedReferenceException(tid.pos, s"unknown table: $tableName")
         if db.hasIndex(indexName) then throw SchemaException(id.pos, s"index '$indexName' already exists")
         val t = db.getTable(tableName).get
         for col @ Ident(colName) <- columns do
@@ -524,12 +534,12 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         }
       case AlterTableCommand(id @ Ident(table), alter) =>
         guardDDL()
-        if !db.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
+        if !session.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
         db.alterTable(table, alter)
         AlterTableResult()
       case CreateViewCommand(id @ Ident(name), queryExpr, orReplace) =>
         guardDDL()
-        if db.hasTable(name) then throw SchemaException(id.pos, s"'$name' is already a table")
+        if session.hasTable(name) then throw SchemaException(id.pos, s"'$name' is already a table")
         if !orReplace && db.hasView(name) then throw SchemaException(id.pos, s"view '$name' already exists")
         val sql = exprToSQL(queryExpr)
         db.createView(name, sql, orReplace)
@@ -543,7 +553,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
           db.dropView(name)
           DropViewResult(name)
       case CopyFromCommand(id @ Ident(table), columns, file, header, delimiter) =>
-        val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
 
         for (cid @ Ident(c) <- resolvedColumns)
@@ -579,7 +589,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
       case CopyToCommand(source, file, header, delimiter) =>
         val (columnNames, rows) = source match
           case Left(id @ Ident(table)) =>
-            val t = db.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+            val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
             val names = t.columns.map(_.name).toList
             val data = t.iterator(Nil).map(row => row.data.map(v => if v.isNull then "" else v.toText.s).toList).toList
             (names, data)

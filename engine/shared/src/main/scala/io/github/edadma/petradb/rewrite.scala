@@ -377,7 +377,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case ColumnAliasOperator(rel, Ident(alias), columns) =>
       ProcessOperator(ColumnAliasProcess(procRewrite(rel), alias, columns.map(_.name)))
     case TableOperator(id @ Ident(name))  =>
-      session.db.getTable(name) match
+      session.getTable(name) match
         case Some(t) => ProcessOperator(t)
         case None =>
           session.db.getView(name) match

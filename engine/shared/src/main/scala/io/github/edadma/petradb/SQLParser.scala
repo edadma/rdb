@@ -1018,11 +1018,11 @@ object SQLParser:
     P(columnDesc.map(_.asInstanceOf[ColumnDesc | TableConstraint]) | tableConstraint.map(_.asInstanceOf[ColumnDesc | TableConstraint]))
 
   private def createTable[p: P]: P[Command] =
-    P(kw("create") ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
-      case (ine, t, items) =>
+    P(kw("create") ~ (kw("temp") | kw("temporary")).!.? ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
+      case (temp, ine, t, items) =>
         val columns = items.collect { case c: ColumnDesc => c }
         val constraints = items.collect { case c: TableConstraint => c }
-        CreateTableCommand(t, columns, constraints, ine.isDefined)
+        CreateTableCommand(t, columns, constraints, ine.isDefined, temp.isDefined)
     }
 
   // ── DDL: DROP TABLE ────────────────────────────────────────────────

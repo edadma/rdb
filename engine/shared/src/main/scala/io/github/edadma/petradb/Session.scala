@@ -8,6 +8,18 @@ class Session(val db: DB):
   private var txnHandle: Option[TransactionHandle] = None
   val preparedStatements: mutable.Map[String, PreparedStatement] = mutable.Map.empty
 
+  // Temp table support — session-scoped, always in-memory
+  private[petradb] val tempTables = new mutable.HashMap[String, Table]
+  private[petradb] lazy val tempDB = new MemoryDB
+
+  def getTable(name: String): Option[Table] =
+    tempTables.get(name).orElse(db.getTable(name))
+
+  def hasTable(name: String): Boolean =
+    tempTables.contains(name) || db.hasTable(name)
+
+  def hasTempTable(name: String): Boolean = tempTables.contains(name)
+
   def inTransaction: Boolean = _inTransaction
   def isTransactionAborted: Boolean = _aborted
   def markTransactionAborted(): Unit = _aborted = true
