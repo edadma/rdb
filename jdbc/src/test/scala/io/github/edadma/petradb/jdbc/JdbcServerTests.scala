@@ -272,3 +272,44 @@ class JdbcServerTests extends AnyFreeSpec with Matchers:
       rs.next() shouldBe false
     finally conn.close()
   }
+
+  "getGeneratedKeys after Statement INSERT" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      st.executeUpdate("INSERT INTO t (name) VALUES ('Alice')")
+      val rs = st.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getGeneratedKeys after PreparedStatement INSERT" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      val ps = conn.prepareStatement("INSERT INTO t (name) VALUES (?)")
+      ps.setString(1, "Bob")
+      ps.executeUpdate()
+      val rs = ps.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getGeneratedKeys via execute()" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      st.execute("INSERT INTO t (name) VALUES ('Carol')")
+      val rs = st.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+  }

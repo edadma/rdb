@@ -45,13 +45,16 @@ class PetraPreparedStatement(conn: AbstractConnection, sql: String)
       case _ => throw java.sql.SQLException("query did not return a result set")
 
   override def executeUpdate(): Int =
+    _generatedKeys = emptyRS
     val results = conn.execute(buildSql())
     if results.isEmpty then 0
     else results.head match
-      case UpdateResult(n)    => n
-      case DeleteResult(n)    => n
-      case InsertResult(_, _) => 1
-      case _                  => 0
+      case UpdateResult(n)       => n
+      case DeleteResult(n)       => n
+      case InsertResult(_, table) =>
+        _generatedKeys = new PetraResultSet(table)
+        1
+      case _ => 0
 
   // ── Parameter setters ───────────────────────────────────────────────
   override def clearParameters(): Unit = params.clear()

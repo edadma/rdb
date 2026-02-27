@@ -387,6 +387,56 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       conn1.close()
       conn2.close()
 
+  "in-memory: getGeneratedKeys after Statement INSERT" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      st.executeUpdate("INSERT INTO t (name) VALUES ('Alice')")
+      val rs = st.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getGeneratedKeys after PreparedStatement INSERT" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      val ps = conn.prepareStatement("INSERT INTO t (name) VALUES (?)")
+      ps.setString(1, "Bob")
+      ps.executeUpdate()
+      val rs = ps.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getGeneratedKeys via execute()" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      st.execute("INSERT INTO t (name) VALUES ('Carol')")
+      val rs = st.getGeneratedKeys
+      rs.next() shouldBe true
+      rs.getInt("id") should be > 0
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getGeneratedKeys empty after non-INSERT" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)")
+      st.executeUpdate("INSERT INTO t (name) VALUES ('Alice')")
+      // Now do a non-INSERT; generated keys should reset to empty
+      st.executeUpdate("UPDATE t SET name = 'Updated' WHERE id = 1")
+      val rs = st.getGeneratedKeys
+      rs.next() shouldBe false
+    finally conn.close()
+
   "shared DB: memory connections are independent" in:
     val conn1 = memConn()
     val conn2 = memConn()
