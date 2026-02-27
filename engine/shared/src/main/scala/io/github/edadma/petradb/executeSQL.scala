@@ -41,6 +41,60 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
     case BeginCommand    => session.beginTransaction(); BeginResult
     case CommitCommand   => session.commitTransaction(); CommitResult
     case RollbackCommand => session.rollbackTransaction(); RollbackResult
+    case ShowTablesCommand =>
+      val names = db.tableNames.toSeq.sorted
+      val meta = Metadata(IndexedSeq(ColumnMetadata(None, "table_name", TextType)))
+      val rows = names.map { n =>
+        Row(IndexedSeq(TextValue(n)), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
+    case ShowColumnsCommand(Ident(table)) =>
+      val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "name", TextType),
+        ColumnMetadata(None, "type", TextType),
+        ColumnMetadata(None, "required", BooleanType),
+        ColumnMetadata(None, "indexed", BooleanType),
+        ColumnMetadata(None, "unique", BooleanType),
+        ColumnMetadata(None, "fk_table", TextType),
+        ColumnMetadata(None, "fk_column", TextType),
+        ColumnMetadata(None, "fk_on_delete", TextType),
+        ColumnMetadata(None, "fk_on_update", TextType),
+        ColumnMetadata(None, "default_value", TextType),
+      ))
+      val rows = t.columns.map { cs =>
+        val fkTable    = cs.fk.map(_._1).getOrElse("")
+        val fkColumn   = cs.fk.map(_._2).getOrElse("")
+        val fkOnDelete = cs.fk.map(_._3.toString).getOrElse("")
+        val fkOnUpdate = cs.fk.map(_._4.toString).getOrElse("")
+        val defaultVal = cs.default.map(_.toString).getOrElse("")
+        Row(IndexedSeq(
+          TextValue(cs.name),
+          TextValue(Codecs.typeTag(cs.typ)),
+          BooleanValue(cs.required),
+          BooleanValue(cs.indexed),
+          BooleanValue(cs.unique),
+          TextValue(fkTable),
+          TextValue(fkColumn),
+          TextValue(fkOnDelete),
+          TextValue(fkOnUpdate),
+          TextValue(defaultVal),
+        ), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
+    case ShowPrimaryKeyCommand(Ident(table)) =>
+      val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "column_name", TextType),
+        ColumnMetadata(None, "pk_name", TextType),
+      ))
+      val rows = t.primaryKey match
+        case Some(pk) =>
+          pk.columns.map { col =>
+            Row(IndexedSeq(TextValue(col), TextValue(pk.name.getOrElse(""))), meta, None, None)
+          }.toVector
+        case None => Vector.empty
+      QueryResult(TableValue(rows, meta))
     case PrepareCommand(id @ Ident(name), cmds) =>
       if session.preparedStatements.contains(name) then
         throw SchemaException(id.pos, s"prepared statement '$name' already exists")

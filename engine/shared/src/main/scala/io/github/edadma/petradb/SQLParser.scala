@@ -115,7 +115,8 @@ object SQLParser:
     "offset", "on", "or", "order", "outer", "overlay", "overlaps",
     "placing", "precision", "prepare", "primary", "procedure",
     "real", "references", "rename", "restrict", "returning", "right", "rollback",
-    "select", "serial", "set", "smallint", "smallserial", "some", "symmetric",
+    "select", "serial", "set", "show", "smallint", "smallserial", "some", "symmetric",
+    "columns",
     "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
     "true", "truncate", "type",
     "union", "unique", "unknown", "update", "uuid",
@@ -1191,10 +1192,20 @@ object SQLParser:
 
   private def explain[p: P]: P[Command] = P(kw("explain") ~ command).map(ExplainCommand(_))
 
+  // ── SHOW commands ─────────────────────────────────────────────────
+
+  private def showTables[p: P]: P[Command] =
+    P(kw("show") ~ kw("tables")).map(_ => ShowTablesCommand)
+  private def showColumns[p: P]: P[Command] =
+    P(kw("show") ~ kw("columns") ~ identifier).map(ShowColumnsCommand(_))
+  private def showPrimaryKey[p: P]: P[Command] =
+    P(kw("show") ~ kw("primary") ~ kw("key") ~ identifier).map(ShowPrimaryKeyCommand(_))
+  private def showCmd[p: P]: P[Command] = P(showTables | showPrimaryKey | showColumns)
+
   // ── Top-level command ──────────────────────────────────────────────
 
   private def commandTxn[p: P]: P[Command] =
-    P(explain | beginCmd | commitCmd | rollbackCmd | prepare | executeCmd | deallocate)
+    P(explain | showCmd | beginCmd | commitCmd | rollbackCmd | prepare | executeCmd | deallocate)
 
   private def commandDDL[p: P]: P[Command] =
     P(createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)

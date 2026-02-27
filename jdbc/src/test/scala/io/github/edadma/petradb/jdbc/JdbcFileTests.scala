@@ -15,9 +15,9 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
     Files.deleteIfExists(Paths.get(tmpPetra))
     Files.deleteIfExists(Paths.get(tmpPtxt))
 
-  private def memConn()    = new PetraFileConnection(":memory:")
-  private def petraConn()  = new PetraFileConnection(tmpPetra)
-  private def ptxtConn()   = new PetraFileConnection(tmpPtxt)
+  private def memConn()    = new PetraFileConnection(s"memory:${java.util.UUID.randomUUID()}", ":memory:")
+  private def petraConn()  = new PetraFileConnection(new java.io.File(tmpPetra).getCanonicalPath, tmpPetra)
+  private def ptxtConn()   = new PetraFileConnection(new java.io.File(tmpPtxt).getCanonicalPath, tmpPtxt)
 
   "in-memory: connect and close" in:
     val conn = memConn()
@@ -371,3 +371,30 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       tablesRs.next() shouldBe true
       tablesRs.getString("TABLE_SCHEM") shouldBe schemaName
     finally conn.close()
+
+  "shared DB: concurrent connections see each other's changes" in:
+    val conn1 = petraConn()
+    val conn2 = petraConn()
+    try
+      conn1.createStatement().executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      conn1.createStatement().executeUpdate("INSERT INTO t VALUES (1, 'shared')")
+      val rs = conn2.createStatement().executeQuery("SELECT * FROM t")
+      rs.next() shouldBe true
+      rs.getInt("id") shouldBe 1
+      rs.getString("name") shouldBe "shared"
+      rs.next() shouldBe false
+    finally
+      conn1.close()
+      conn2.close()
+
+  "shared DB: memory connections are independent" in:
+    val conn1 = memConn()
+    val conn2 = memConn()
+    try
+      conn1.createStatement().executeUpdate("CREATE TABLE t (id INT)")
+      conn1.createStatement().executeUpdate("INSERT INTO t VALUES (1)")
+      assertThrows[Exception]:
+        conn2.createStatement().executeQuery("SELECT * FROM t")
+    finally
+      conn1.close()
+      conn2.close()

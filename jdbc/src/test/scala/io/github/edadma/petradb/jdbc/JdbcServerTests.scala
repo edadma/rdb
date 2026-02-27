@@ -166,3 +166,109 @@ class JdbcServerTests extends AnyFreeSpec with Matchers:
       rs.getInt("x") shouldBe 1
     finally conn.close()
   }
+
+  "getTables returns all tables" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE authors (id SERIAL, name TEXT)")
+      st.execute("CREATE TABLE books (id SERIAL, title TEXT, author_id INT)")
+      val rs = conn.getMetaData.getTables(null, null, null, null)
+      val names = collection.mutable.Set[String]()
+      while rs.next() do names += rs.getString("TABLE_NAME")
+      names shouldBe Set("authors", "books")
+    finally conn.close()
+  }
+
+  "getTables on empty database returns no rows" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val rs = conn.getMetaData.getTables(null, null, null, null)
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getTables filters by table name" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE authors (id SERIAL, name TEXT)")
+      st.execute("CREATE TABLE books (id SERIAL, title TEXT)")
+      val rs = conn.getMetaData.getTables(null, null, "authors", null)
+      rs.next() shouldBe true
+      rs.getString("TABLE_NAME") shouldBe "authors"
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getColumns returns all columns for a table" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      conn.createStatement().execute(
+        "CREATE TABLE books (id SERIAL, title TEXT, price NUMERIC(8,2))"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "books", null)
+      val cols = collection.mutable.ListBuffer[String]()
+      while rs.next() do cols += rs.getString("COLUMN_NAME")
+      cols.toSeq shouldBe Seq("id", "title", "price")
+    finally conn.close()
+  }
+
+  "getColumns NOT NULL is populated" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      conn.createStatement().execute(
+        "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT NOT NULL, bio TEXT)"
+      )
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val cols = collection.mutable.Map[String, String]()
+      while rs.next() do cols(rs.getString("COLUMN_NAME")) = rs.getString("IS_NULLABLE")
+      cols("id")   shouldBe "NO"
+      cols("name") shouldBe "NO"
+      cols("bio")  shouldBe "YES"
+    finally conn.close()
+  }
+
+  "getColumns on unknown table returns no rows" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val rs = conn.getMetaData.getColumns(null, null, "nonexistent", null)
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getPrimaryKeys returns pk columns" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      conn.createStatement().execute(
+        "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT)"
+      )
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      rs.next() shouldBe true
+      rs.getString("COLUMN_NAME") shouldBe "id"
+      rs.getInt("KEY_SEQ")        shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getPrimaryKeys composite key" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      conn.createStatement().execute(
+        "CREATE TABLE t (a INT, b INT, c TEXT, PRIMARY KEY (a, b))"
+      )
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      val pks = collection.mutable.ListBuffer[(String, Int)]()
+      while rs.next() do pks += ((rs.getString("COLUMN_NAME"), rs.getInt("KEY_SEQ")))
+      pks.toSeq shouldBe Seq(("a", 1), ("b", 2))
+    finally conn.close()
+  }
+
+  "getPrimaryKeys no pk returns empty" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      conn.createStatement().execute("CREATE TABLE t (id INT, name TEXT)")
+      val rs = conn.getMetaData.getPrimaryKeys(null, null, "t")
+      rs.next() shouldBe false
+    finally conn.close()
+  }

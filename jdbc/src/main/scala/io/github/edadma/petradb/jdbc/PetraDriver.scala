@@ -26,7 +26,10 @@ class PetraDriver extends java.sql.Driver:
       new PetraServerConnection(host, port, username, password)
     else
       val path = url.stripPrefix("jdbc:petradb:file:")
-      new PetraFileConnection(path)
+      val key =
+        if path == ":memory:" then s"memory:${java.util.UUID.randomUUID()}"
+        else new java.io.File(path).getCanonicalPath
+      new PetraFileConnection(key, path)
 
   def getPropertyInfo(url: String, info: Properties): Array[java.sql.DriverPropertyInfo] = Array.empty
 
