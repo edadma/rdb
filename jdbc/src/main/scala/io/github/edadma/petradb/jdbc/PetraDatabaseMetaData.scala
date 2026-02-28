@@ -5,13 +5,13 @@ import io.github.edadma.petradb.*
 class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMetaData:
 
   override def getDatabaseProductName(): String    = "PetraDB"
-  override def getDatabaseProductVersion(): String = "1.1.1"
+  override def getDatabaseProductVersion(): String = "1.2.0"
   override def getDriverName(): String             = "PetraDB JDBC Driver"
-  override def getDriverVersion(): String          = "1.1.1"
+  override def getDriverVersion(): String          = "1.2.0"
   override def getDriverMajorVersion(): Int        = 1
-  override def getDriverMinorVersion(): Int        = 0
+  override def getDriverMinorVersion(): Int        = 2
   override def getDatabaseMajorVersion(): Int      = 1
-  override def getDatabaseMinorVersion(): Int      = 1
+  override def getDatabaseMinorVersion(): Int      = 2
 
   override def getURL(): String      = conn.url
   override def getUserName(): String = conn.username

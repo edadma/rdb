@@ -8,7 +8,7 @@
 ![Scala.js Version](https://img.shields.io/badge/Scala.js-1.20.2-blue.svg)
 ![Scala Native Version](https://img.shields.io/badge/Scala_Native-0.5.10-blue.svg)
 
-A lightweight, embeddable SQL database engine for JavaScript, TypeScript, and Scala. Compiles to JVM, Node.js, and Native. No external dependencies, no server required.
+A lightweight, embeddable SQL database engine for JavaScript, TypeScript, and Scala. Compiles to JVM, Node.js, and Native. Includes a JDBC driver with full metadata support (tables, columns, primary keys, foreign keys, indexes, batch updates). No external dependencies, no server required.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.1.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.0"
 ```
 
 ```scala
