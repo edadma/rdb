@@ -33,7 +33,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / homepage    := Some(url("https://github.com/edadma/petradb"))
-ThisBuild / description := "Project description here"
+ThisBuild / description := "An embeddable cross-platform SQL database engine for Scala (JVM, JS, Native)"
 
 lazy val commonScalacOptions = Seq(
   "-deprecation",
@@ -84,7 +84,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-engine",
-    version := "1.2.0",
+    version := "1.2.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dllist"         % "0.0.6",
@@ -128,7 +128,7 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-client",
-    version := "1.2.0",
+    version := "1.2.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "fetch"     % "0.0.1",
@@ -216,7 +216,7 @@ lazy val jdbc = project
   .dependsOn(client.jvm, engine.jvm, server.jvm % Test)
   .settings(
     name    := "petradb-jdbc",
-    version := "1.2.0",
+    version := "1.2.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     assembly / assemblyJarName := "petradb-jdbc.jar",
