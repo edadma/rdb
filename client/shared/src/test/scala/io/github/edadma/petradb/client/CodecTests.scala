@@ -98,7 +98,7 @@ class CodecTests extends AnyFreeSpec with Matchers:
       val row   = Row(IndexedSeq(NumberValue(DIntType, 1), TextValue("Alice")), meta, None, None)
       val table = TableValue(IndexedSeq(row), meta)
       val decoded = rt[Seq[Result]](Seq(QueryResult(table)))
-      val QueryResult(t) = decoded.head
+      val QueryResult(t) = decoded.head: @unchecked
       t.data.length shouldBe 1
       t.data(0)("id")   shouldBe NumberValue(DIntType, 1)
       t.data(0)("name") shouldBe TextValue("Alice")
@@ -108,7 +108,7 @@ class CodecTests extends AnyFreeSpec with Matchers:
       val meta  = Metadata(IndexedSeq(ColumnMetadata(Some("t"), "x", TextType)))
       val row   = Row(IndexedSeq(NullValue()), meta, None, None)
       val table = TableValue(IndexedSeq(row), meta)
-      val QueryResult(t) = rt[Seq[Result]](Seq(QueryResult(table))).head
+      val QueryResult(t) = rt[Seq[Result]](Seq(QueryResult(table))).head: @unchecked
       t.data(0)("x") shouldBe NullValue()
     }
 
@@ -116,7 +116,7 @@ class CodecTests extends AnyFreeSpec with Matchers:
       val meta  = Metadata(IndexedSeq(ColumnMetadata(Some("t"), "n", IntegerType)))
       val rows  = (1 to 5).map(i => Row(IndexedSeq(NumberValue(DIntType, i)), meta, None, None))
       val table = TableValue(rows.toIndexedSeq, meta)
-      val QueryResult(t) = rt[Seq[Result]](Seq(QueryResult(table))).head
+      val QueryResult(t) = rt[Seq[Result]](Seq(QueryResult(table))).head: @unchecked
       t.data.length shouldBe 5
       t.data(4)("n") shouldBe NumberValue(DIntType, 5)
     }
@@ -126,7 +126,7 @@ class CodecTests extends AnyFreeSpec with Matchers:
       val row   = Row(IndexedSeq(NumberValue(DIntType, 1)), meta, None, None)
       val table = TableValue(IndexedSeq(row), meta)
       val obj   = Map("id" -> NumberValue(DIntType, 1))
-      val InsertResult(decodedObj, decodedTable) = rt[Seq[Result]](Seq(InsertResult(obj, table))).head
+      val InsertResult(decodedObj, decodedTable) = rt[Seq[Result]](Seq(InsertResult(obj, table))).head: @unchecked
       decodedObj("id") shouldBe NumberValue(DIntType, 1)
       decodedTable.data.length shouldBe 1
     }
