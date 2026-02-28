@@ -1,7 +1,7 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
-const { Session } = await import("../engine/js/target/scala-3.8.1/petradb-engine-opt/main.js");
+const { Session } = await import("../npm/main.js");
 
 describe("Session", () => {
   let db: any;
