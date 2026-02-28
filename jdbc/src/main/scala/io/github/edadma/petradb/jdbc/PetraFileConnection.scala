@@ -20,3 +20,7 @@ class PetraFileConnection(key: String, displayPath: String) extends AbstractConn
     db.getTable(tableName).map(_.columns.toSeq).getOrElse(Seq.empty)
   def tablePrimaryKey(tableName: String): Option[PrimaryKeySpec] =
     db.getTable(tableName).flatMap(_.primaryKey)
+  def tableForeignKeys(tableName: String): Seq[ForeignKeySpec] =
+    db.getTable(tableName).map(db.foreignKeys).getOrElse(Seq.empty)
+  def tableIndexes(tableName: String): Seq[IndexMeta] =
+    db.getTable(tableName).map(_.tableIndexes.values.map(_.meta).toSeq).getOrElse(Seq.empty)

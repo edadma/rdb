@@ -2,12 +2,16 @@ package io.github.edadma.petradb.jdbc
 
 import io.github.edadma.petradb.*
 
+import java.sql.Statement.SUCCESS_NO_INFO
+import scala.collection.mutable
+
 class PetraStatement(val conn: AbstractConnection) extends AbstractStatement:
 
   private var _closed       = false
   private var _resultSet: java.sql.ResultSet = null
   private var _updateCount  = -1
   protected var _generatedKeys: java.sql.ResultSet = emptyRS
+  private val _batch = new mutable.ArrayBuffer[String]()
 
   override def getConnection(): java.sql.Connection = conn
   override def isClosed(): Boolean = _closed
@@ -37,6 +41,24 @@ class PetraStatement(val conn: AbstractConnection) extends AbstractStatement:
   override def getResultSet(): java.sql.ResultSet = _resultSet
   override def getUpdateCount(): Int = _updateCount
   override def getGeneratedKeys(): java.sql.ResultSet = _generatedKeys
+
+  override def addBatch(sql: String): Unit = _batch += sql
+
+  override def clearBatch(): Unit = _batch.clear()
+
+  override def executeBatch(): Array[Int] =
+    if _batch.isEmpty then
+      return Array.empty[Int]
+    val combined = _batch.mkString(";\n")
+    val results  = conn.execute(combined)
+    _batch.clear()
+    results.map(resultToUpdateCount).toArray
+
+  protected def resultToUpdateCount(r: Result): Int = r match
+    case InsertResult(_, _) => 1
+    case UpdateResult(n)    => n
+    case DeleteResult(n)    => n
+    case _                  => SUCCESS_NO_INFO
 
   protected def processResults(results: Seq[Result]): Boolean =
     _generatedKeys = emptyRS

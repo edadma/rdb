@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, ColumnSpec, PrimaryKeySpec, TextValue, BooleanValue, Codecs, ReferentialAction}
+import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta, TextValue, BooleanValue, NumberValue, Codecs, ReferentialAction}
 import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.{Session => ClientSession, SessionOptions}
 
@@ -84,3 +84,36 @@ class PetraServerConnection(
         val pkName  = tv.data.head.data(1).asInstanceOf[TextValue].s
         Some(PrimaryKeySpec(columns, if pkName.nonEmpty then Some(pkName) else None))
       case _ => None
+
+  def tableForeignKeys(tableName: String): Seq[ForeignKeySpec] =
+    execute(s"SHOW FOREIGN KEYS ${quoted(tableName)}").headOption match
+      case Some(QueryResult(tv)) if tv.data.nonEmpty =>
+        // Group rows by fk_name (or by (ref_table) for unnamed FKs)
+        val grouped = tv.data.groupBy { row =>
+          val fkName   = row.data(0).asInstanceOf[TextValue].s
+          val refTable = row.data(2).asInstanceOf[TextValue].s
+          if fkName.nonEmpty then fkName else s"__anon__$refTable"
+        }
+        grouped.values.map { rows =>
+          val sorted     = rows.sortBy(_.data(6).asInstanceOf[NumberValue].value.intValue)
+          val fkName     = sorted.head.data(0).asInstanceOf[TextValue].s
+          val cols       = sorted.map(_.data(1).asInstanceOf[TextValue].s).toSeq
+          val refTable   = sorted.head.data(2).asInstanceOf[TextValue].s
+          val refCols    = sorted.map(_.data(3).asInstanceOf[TextValue].s).toSeq
+          val onDelete   = ReferentialAction.valueOf(sorted.head.data(4).asInstanceOf[TextValue].s)
+          val onUpdate   = ReferentialAction.valueOf(sorted.head.data(5).asInstanceOf[TextValue].s)
+          ForeignKeySpec(cols, refTable, refCols, if fkName.nonEmpty then Some(fkName) else None, onDelete, onUpdate)
+        }.toSeq
+      case _ => Seq.empty
+
+  def tableIndexes(tableName: String): Seq[IndexMeta] =
+    execute(s"SHOW INDEXES ${quoted(tableName)}").headOption match
+      case Some(QueryResult(tv)) if tv.data.nonEmpty =>
+        val grouped = tv.data.groupBy(_.data(0).asInstanceOf[TextValue].s)
+        grouped.map { case (idxName, rows) =>
+          val sorted  = rows.sortBy(_.data(3).asInstanceOf[NumberValue].value.intValue)
+          val cols    = sorted.map(_.data(1).asInstanceOf[TextValue].s).toSeq
+          val unique  = sorted.head.data(2).asInstanceOf[BooleanValue].b
+          IndexMeta(idxName, tableName, cols, unique)
+        }.toSeq
+      case _ => Seq.empty

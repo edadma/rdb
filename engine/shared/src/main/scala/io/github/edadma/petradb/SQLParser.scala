@@ -107,9 +107,9 @@ object SQLParser:
     "group",
     "having",
     "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
-    "intersect", "interval", "into", "is",
+    "indexes", "intersect", "interval", "into", "is",
     "join", "json", "jsonb",
-    "key",
+    "key", "keys",
     "last", "lateral", "left", "like", "limit",
     "no", "not", "nothing", "null", "nulls", "numeric",
     "offset", "on", "or", "order", "outer", "overlay", "overlaps",
@@ -1200,7 +1200,11 @@ object SQLParser:
     P(kw("show") ~ kw("columns") ~ identifier).map(ShowColumnsCommand(_))
   private def showPrimaryKey[p: P]: P[Command] =
     P(kw("show") ~ kw("primary") ~ kw("key") ~ identifier).map(ShowPrimaryKeyCommand(_))
-  private def showCmd[p: P]: P[Command] = P(showTables | showPrimaryKey | showColumns)
+  private def showForeignKeys[p: P]: P[Command] =
+    P(kw("show") ~ kw("foreign") ~ kw("keys") ~ identifier).map(ShowForeignKeysCommand(_))
+  private def showIndexes[p: P]: P[Command] =
+    P(kw("show") ~ kw("indexes") ~ identifier).map(ShowIndexesCommand(_))
+  private def showCmd[p: P]: P[Command] = P(showTables | showPrimaryKey | showForeignKeys | showIndexes | showColumns)
 
   // ── Top-level command ──────────────────────────────────────────────
 

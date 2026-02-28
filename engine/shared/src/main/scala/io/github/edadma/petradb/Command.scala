@@ -61,6 +61,8 @@ case object RollbackCommand extends Command
 case object ShowTablesCommand                    extends Command
 case class ShowColumnsCommand(table: Ident)      extends Command
 case class ShowPrimaryKeyCommand(table: Ident)   extends Command
+case class ShowForeignKeysCommand(table: Ident)  extends Command
+case class ShowIndexesCommand(table: Ident)      extends Command
 
 case class UpdateSet(col: Ident, value: Expr)
 case class ColumnDesc(

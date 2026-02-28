@@ -114,7 +114,7 @@ abstract class AbstractDatabaseMetaData extends java.sql.DatabaseMetaData:
   def updatesAreDetected(`type`: Int): Boolean     = false
   def deletesAreDetected(`type`: Int): Boolean     = false
   def insertsAreDetected(`type`: Int): Boolean     = false
-  def supportsBatchUpdates(): Boolean              = false
+  def supportsBatchUpdates(): Boolean              = true
   def supportsSavepoints(): Boolean                = false
   def supportsNamedParameters(): Boolean           = false
   def supportsMultipleOpenResults(): Boolean       = false

@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, ColumnMetadata, ColumnSpec, PrimaryKeySpec}
+import io.github.edadma.petradb.{Result, ColumnMetadata, ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta}
 
 import java.sql.{SQLFeatureNotSupportedException, SQLWarning, Savepoint}
 import java.util.Properties
@@ -16,6 +16,8 @@ abstract class AbstractConnection extends java.sql.Connection:
   def tableColumns(tableName: String): Seq[ColumnMetadata]
   def tableColumnSpecs(tableName: String): Seq[ColumnSpec]
   def tablePrimaryKey(tableName: String): Option[PrimaryKeySpec]
+  def tableForeignKeys(tableName: String): Seq[ForeignKeySpec]
+  def tableIndexes(tableName: String): Seq[IndexMeta]
 
   private var _closed         = false
   private var _autoCommit     = true

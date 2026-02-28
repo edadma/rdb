@@ -437,6 +437,190 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
       rs.next() shouldBe false
     finally conn.close()
 
+  "in-memory: Statement batch INSERT" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      st.addBatch("INSERT INTO t VALUES (1, 'Alice')")
+      st.addBatch("INSERT INTO t VALUES (2, 'Bob')")
+      st.addBatch("INSERT INTO t VALUES (3, 'Carol')")
+      val counts = st.executeBatch()
+      counts shouldBe Array(1, 1, 1)
+      val rs = st.executeQuery("SELECT * FROM t ORDER BY id")
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 1; rs.getString("name") shouldBe "Alice"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 2; rs.getString("name") shouldBe "Bob"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 3; rs.getString("name") shouldBe "Carol"
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: PreparedStatement batch INSERT" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      val ps = conn.prepareStatement("INSERT INTO t VALUES (?, ?)")
+      ps.setInt(1, 1); ps.setString(2, "Alice"); ps.addBatch()
+      ps.setInt(1, 2); ps.setString(2, "Bob");   ps.addBatch()
+      ps.setInt(1, 3); ps.setString(2, "Carol"); ps.addBatch()
+      val counts = ps.executeBatch()
+      counts shouldBe Array(1, 1, 1)
+      val rs = st.executeQuery("SELECT * FROM t ORDER BY id")
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 1; rs.getString("name") shouldBe "Alice"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 2; rs.getString("name") shouldBe "Bob"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 3; rs.getString("name") shouldBe "Carol"
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: clearBatch discards pending" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT)")
+      st.addBatch("INSERT INTO t VALUES (1)")
+      st.addBatch("INSERT INTO t VALUES (2)")
+      st.clearBatch()
+      val counts = st.executeBatch()
+      counts shouldBe Array.empty[Int]
+      val rs = st.executeQuery("SELECT COUNT(*) AS c FROM t")
+      rs.next() shouldBe true
+      rs.getInt("c") shouldBe 0
+    finally conn.close()
+
+  "in-memory: Statement batch UPDATE" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, v INT)")
+      st.executeUpdate("INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)")
+      st.addBatch("UPDATE t SET v = 0 WHERE id < 3")
+      st.addBatch("UPDATE t SET v = 99 WHERE id = 3")
+      val counts = st.executeBatch()
+      counts shouldBe Array(2, 1)
+    finally conn.close()
+
+  "in-memory: getImportedKeys returns FK columns" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE authors (id SERIAL PRIMARY KEY, name TEXT)")
+      st.executeUpdate("CREATE TABLE books (id SERIAL PRIMARY KEY, author_id INT REFERENCES authors(id))")
+      val rs = conn.getMetaData.getImportedKeys(null, null, "books")
+      rs.next() shouldBe true
+      rs.getString("PKTABLE_NAME")  shouldBe "authors"
+      rs.getString("PKCOLUMN_NAME") shouldBe "id"
+      rs.getString("FKTABLE_NAME")  shouldBe "books"
+      rs.getString("FKCOLUMN_NAME") shouldBe "author_id"
+      rs.getInt("KEY_SEQ")          shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getImportedKeys empty when no FKs" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      val rs = conn.getMetaData.getImportedKeys(null, null, "t")
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getExportedKeys returns child FKs" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE authors (id SERIAL PRIMARY KEY, name TEXT)")
+      st.executeUpdate("CREATE TABLE books (id SERIAL PRIMARY KEY, author_id INT REFERENCES authors(id))")
+      val rs = conn.getMetaData.getExportedKeys(null, null, "authors")
+      rs.next() shouldBe true
+      rs.getString("PKTABLE_NAME")  shouldBe "authors"
+      rs.getString("PKCOLUMN_NAME") shouldBe "id"
+      rs.getString("FKTABLE_NAME")  shouldBe "books"
+      rs.getString("FKCOLUMN_NAME") shouldBe "author_id"
+      rs.getInt("KEY_SEQ")          shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getExportedKeys empty when no children" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id SERIAL PRIMARY KEY)")
+      val rs = conn.getMetaData.getExportedKeys(null, null, "t")
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getImportedKeys DELETE_RULE and UPDATE_RULE" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE parents (id INT PRIMARY KEY)")
+      st.executeUpdate("CREATE TABLE children (id INT, pid INT REFERENCES parents(id) ON DELETE CASCADE ON UPDATE RESTRICT)")
+      val rs = conn.getMetaData.getImportedKeys(null, null, "children")
+      rs.next() shouldBe true
+      rs.getInt("DELETE_RULE") shouldBe java.sql.DatabaseMetaData.importedKeyCascade
+      rs.getInt("UPDATE_RULE") shouldBe java.sql.DatabaseMetaData.importedKeyRestrict
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getIndexInfo returns indexes" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, name TEXT)")
+      st.executeUpdate("CREATE INDEX idx_name ON t (name)")
+      val rs = conn.getMetaData.getIndexInfo(null, null, "t", false, false)
+      rs.next() shouldBe true
+      rs.getString("TABLE_NAME")   shouldBe "t"
+      rs.getString("INDEX_NAME")   shouldBe "idx_name"
+      rs.getString("COLUMN_NAME")  shouldBe "name"
+      rs.getBoolean("NON_UNIQUE")  shouldBe true
+      rs.getInt("ORDINAL_POSITION") shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getIndexInfo unique filter" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT, name TEXT, code TEXT)")
+      st.executeUpdate("CREATE INDEX idx_name ON t (name)")
+      st.executeUpdate("CREATE UNIQUE INDEX idx_code ON t (code)")
+      val rsAll = conn.getMetaData.getIndexInfo(null, null, "t", false, false)
+      var count = 0
+      while rsAll.next() do count += 1
+      count shouldBe 2
+      val rsUniq = conn.getMetaData.getIndexInfo(null, null, "t", true, false)
+      rsUniq.next() shouldBe true
+      rsUniq.getString("INDEX_NAME") shouldBe "idx_code"
+      rsUniq.getBoolean("NON_UNIQUE") shouldBe false
+      rsUniq.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getIndexInfo empty when no indexes" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (id INT)")
+      val rs = conn.getMetaData.getIndexInfo(null, null, "t", false, false)
+      rs.next() shouldBe false
+    finally conn.close()
+
+  "in-memory: getIndexInfo multi-column index" in:
+    val conn = memConn()
+    try
+      val st = conn.createStatement()
+      st.executeUpdate("CREATE TABLE t (a INT, b INT, c TEXT)")
+      st.executeUpdate("CREATE INDEX idx_ab ON t (a, b)")
+      val rs = conn.getMetaData.getIndexInfo(null, null, "t", false, false)
+      rs.next() shouldBe true
+      rs.getString("COLUMN_NAME")   shouldBe "a"
+      rs.getInt("ORDINAL_POSITION") shouldBe 1
+      rs.next() shouldBe true
+      rs.getString("COLUMN_NAME")   shouldBe "b"
+      rs.getInt("ORDINAL_POSITION") shouldBe 2
+      rs.next() shouldBe false
+    finally conn.close()
+
   "shared DB: memory connections are independent" in:
     val conn1 = memConn()
     val conn2 = memConn()

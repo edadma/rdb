@@ -109,6 +109,28 @@ class PetraPreparedStatement(conn: AbstractConnection, sql: String)
   override def setNClob(paramIndex: Int, reader: java.io.Reader): Unit    = throw SQLFeatureNotSupportedException()
   override def setSQLXML(paramIndex: Int, xmlObject: java.sql.SQLXML): Unit = throw SQLFeatureNotSupportedException()
 
-  override def addBatch(): Unit = throw SQLFeatureNotSupportedException()
+  private val _psBatch = new mutable.ArrayBuffer[Map[Int, Any]]()
+
+  override def addBatch(): Unit =
+    _psBatch += params.toMap
+    params.clear()
+
+  override def clearBatch(): Unit = _psBatch.clear()
+
+  override def executeBatch(): Array[Int] =
+    if _psBatch.isEmpty then
+      return Array.empty[Int]
+    val savedParams = params.clone()
+    val sqls = _psBatch.map { paramSet =>
+      params.clear()
+      params ++= paramSet
+      buildSql()
+    }
+    params.clear()
+    params ++= savedParams
+    val combined = sqls.mkString(";\n")
+    val results  = conn.execute(combined)
+    _psBatch.clear()
+    results.map(resultToUpdateCount).toArray
   override def getMetaData(): java.sql.ResultSetMetaData = null
   override def getParameterMetaData(): java.sql.ParameterMetaData = throw SQLFeatureNotSupportedException()

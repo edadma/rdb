@@ -95,6 +95,51 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
           }.toVector
         case None => Vector.empty
       QueryResult(TableValue(rows, meta))
+    case ShowForeignKeysCommand(Ident(table)) =>
+      val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
+      val fks = db.foreignKeys(t)
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "fk_name", TextType),
+        ColumnMetadata(None, "fk_column", TextType),
+        ColumnMetadata(None, "ref_table", TextType),
+        ColumnMetadata(None, "ref_column", TextType),
+        ColumnMetadata(None, "on_delete", TextType),
+        ColumnMetadata(None, "on_update", TextType),
+        ColumnMetadata(None, "seq", IntegerType),
+      ))
+      val rows = fks.flatMap { fk =>
+        fk.columns.zip(fk.referencedColumns).zipWithIndex.map { case ((col, refCol), idx) =>
+          Row(IndexedSeq(
+            TextValue(fk.name.getOrElse("")),
+            TextValue(col),
+            TextValue(fk.referencedTable),
+            TextValue(refCol),
+            TextValue(fk.onDelete.toString),
+            TextValue(fk.onUpdate.toString),
+            NumberValue(idx + 1),
+          ), meta, None, None)
+        }
+      }.toVector
+      QueryResult(TableValue(rows, meta))
+    case ShowIndexesCommand(Ident(table)) =>
+      val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "index_name", TextType),
+        ColumnMetadata(None, "column_name", TextType),
+        ColumnMetadata(None, "is_unique", BooleanType),
+        ColumnMetadata(None, "seq", IntegerType),
+      ))
+      val rows = t.tableIndexes.values.toSeq.sortBy(_.meta.name).flatMap { idx =>
+        idx.meta.columns.zipWithIndex.map { case (col, i) =>
+          Row(IndexedSeq(
+            TextValue(idx.meta.name),
+            TextValue(col),
+            BooleanValue(idx.meta.unique),
+            NumberValue(i + 1),
+          ), meta, None, None)
+        }
+      }.toVector
+      QueryResult(TableValue(rows, meta))
     case PrepareCommand(id @ Ident(name), cmds) =>
       if session.preparedStatements.contains(name) then
         throw SchemaException(id.pos, s"prepared statement '$name' already exists")

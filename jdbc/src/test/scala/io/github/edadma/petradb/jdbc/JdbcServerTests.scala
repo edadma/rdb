@@ -313,3 +313,89 @@ class JdbcServerTests extends AnyFreeSpec with Matchers:
       rs.next() shouldBe false
     finally conn.close()
   }
+
+  "Statement batch INSERT via server" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id INT, name TEXT)")
+      st.addBatch("INSERT INTO t VALUES (1, 'Alice')")
+      st.addBatch("INSERT INTO t VALUES (2, 'Bob')")
+      st.addBatch("INSERT INTO t VALUES (3, 'Carol')")
+      val counts = st.executeBatch()
+      counts shouldBe Array(1, 1, 1)
+      val rs = st.executeQuery("SELECT * FROM t ORDER BY id")
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 1; rs.getString("name") shouldBe "Alice"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 2; rs.getString("name") shouldBe "Bob"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 3; rs.getString("name") shouldBe "Carol"
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "PreparedStatement batch INSERT via server" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id INT, name TEXT)")
+      val ps = conn.prepareStatement("INSERT INTO t VALUES (?, ?)")
+      ps.setInt(1, 1); ps.setString(2, "Alice"); ps.addBatch()
+      ps.setInt(1, 2); ps.setString(2, "Bob");   ps.addBatch()
+      ps.setInt(1, 3); ps.setString(2, "Carol"); ps.addBatch()
+      val counts = ps.executeBatch()
+      counts shouldBe Array(1, 1, 1)
+      val rs = st.executeQuery("SELECT * FROM t ORDER BY id")
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 1; rs.getString("name") shouldBe "Alice"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 2; rs.getString("name") shouldBe "Bob"
+      rs.next() shouldBe true; rs.getInt("id") shouldBe 3; rs.getString("name") shouldBe "Carol"
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getImportedKeys via server" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE authors (id SERIAL PRIMARY KEY, name TEXT)")
+      st.execute("CREATE TABLE books (id SERIAL PRIMARY KEY, author_id INT REFERENCES authors(id))")
+      val rs = conn.getMetaData.getImportedKeys(null, null, "books")
+      rs.next() shouldBe true
+      rs.getString("PKTABLE_NAME")  shouldBe "authors"
+      rs.getString("PKCOLUMN_NAME") shouldBe "id"
+      rs.getString("FKTABLE_NAME")  shouldBe "books"
+      rs.getString("FKCOLUMN_NAME") shouldBe "author_id"
+      rs.getInt("KEY_SEQ")          shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getExportedKeys via server" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE authors (id SERIAL PRIMARY KEY, name TEXT)")
+      st.execute("CREATE TABLE books (id SERIAL PRIMARY KEY, author_id INT REFERENCES authors(id))")
+      val rs = conn.getMetaData.getExportedKeys(null, null, "authors")
+      rs.next() shouldBe true
+      rs.getString("PKTABLE_NAME")  shouldBe "authors"
+      rs.getString("PKCOLUMN_NAME") shouldBe "id"
+      rs.getString("FKTABLE_NAME")  shouldBe "books"
+      rs.getString("FKCOLUMN_NAME") shouldBe "author_id"
+      rs.next() shouldBe false
+    finally conn.close()
+  }
+
+  "getIndexInfo via server" in withServer { port =>
+    val conn = serverConn(port)
+    try
+      val st = conn.createStatement()
+      st.execute("CREATE TABLE t (id INT, name TEXT)")
+      st.execute("CREATE INDEX idx_name ON t (name)")
+      val rs = conn.getMetaData.getIndexInfo(null, null, "t", false, false)
+      rs.next() shouldBe true
+      rs.getString("INDEX_NAME")    shouldBe "idx_name"
+      rs.getString("COLUMN_NAME")   shouldBe "name"
+      rs.getBoolean("NON_UNIQUE")   shouldBe true
+      rs.getInt("ORDINAL_POSITION") shouldBe 1
+      rs.next() shouldBe false
+    finally conn.close()
+  }

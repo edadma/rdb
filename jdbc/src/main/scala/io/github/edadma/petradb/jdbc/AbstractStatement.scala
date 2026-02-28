@@ -28,7 +28,7 @@ abstract class AbstractStatement extends java.sql.Statement:
   def getResultSetConcurrency(): Int       = ResultSet.CONCUR_READ_ONLY
   def getResultSetType(): Int              = ResultSet.TYPE_FORWARD_ONLY
   def addBatch(sql: String): Unit          = throw SQLFeatureNotSupportedException()
-  def clearBatch(): Unit                   = throw SQLFeatureNotSupportedException()
+  def clearBatch(): Unit                   = ()
   def executeBatch(): Array[Int]           = throw SQLFeatureNotSupportedException()
   def getMoreResults(current: Int): Boolean = false
   def getGeneratedKeys(): ResultSet        = emptyRS
