@@ -8,7 +8,7 @@ import scala.concurrent.{Future, ExecutionContext}
 
 case class SessionOptions(
   host: String = "localhost",
-  port: Int = 3000,
+  port: Int = DefaultPort,
   username: Option[String] = None,
   password: Option[String] = None,
 )

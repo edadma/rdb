@@ -14,7 +14,7 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
   private val opts = options.toOption
   private val session = new Session(SessionOptions(
     host = opts.flatMap(o => o.selectDynamic("host").asInstanceOf[js.UndefOr[String]].toOption).getOrElse("localhost"),
-    port = opts.flatMap(o => o.selectDynamic("port").asInstanceOf[js.UndefOr[Int]].toOption).getOrElse(3000),
+    port = opts.flatMap(o => o.selectDynamic("port").asInstanceOf[js.UndefOr[Int]].toOption).getOrElse(DefaultPort),
     username = opts.flatMap(o => o.selectDynamic("username").asInstanceOf[js.UndefOr[String]].toOption),
     password = opts.flatMap(o => o.selectDynamic("password").asInstanceOf[js.UndefOr[String]].toOption),
   ))

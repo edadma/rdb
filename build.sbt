@@ -128,7 +128,7 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-client",
-    version := "1.2.1",
+    version := "1.2.2",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "fetch"     % "0.0.1",
