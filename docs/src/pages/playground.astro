@@ -1,0 +1,15 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro'
+import Playground from '../components/Playground'
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Playground',
+    tableOfContents: false,
+  }}
+>
+  <div class="playground-wrapper not-content" style="height: calc(100vh - 4rem); margin: -1rem -1.5rem;">
+    <Playground client:only="react" />
+  </div>
+</StarlightPage>

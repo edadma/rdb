@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@plugin "daisyui" {
+  prefix: "d-";
+}
+
+@source "../components/*.tsx";
+@source "../../node_modules/@aster-ui/prefixed/dist";
+
+/* Playground page: full width, no content max-width */
+html.playground-page .content-panel {
+  --sl-content-width: 100%;
+  max-width: none;
+}
+
+html.playground-page .sl-markdown-content {
+  max-width: none;
+}
+
+/* Undo Starlight's reset inside the playground */
+@layer starlight.reset {
+  .playground-wrapper *,
+  .playground-wrapper *::before,
+  .playground-wrapper *::after {
+    margin: revert-layer;
+    font-size: revert-layer;
+  }
+}
