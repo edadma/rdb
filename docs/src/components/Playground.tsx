@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Session } from '@petradb/engine'
 import { TextTable } from '@edadma/table'
-import { Navbar, Button, Space, Table, Alert, Flex, Badge, Splitter } from '@aster-ui/prefixed'
+import { Button, Space, Table, Alert, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
 import { Terminal, type TerminalRef } from '@aster-ui/prefixed/terminal'
 import { EditorView, type Extension } from '@codemirror/view'
@@ -33,7 +33,7 @@ interface ResultEntry {
 }
 
 const SAMPLE_SQL = `-- Welcome to the PetraDB Playground!
--- Press Ctrl+Enter or click Run to execute.
+-- Click Run to execute.
 
 CREATE TABLE employees (
   id SERIAL,
@@ -73,7 +73,7 @@ function formatTableText(fields: any[], rows: any[]): string {
   return t.render().trimEnd()
 }
 
-function App() {
+export default function Playground() {
   const [results, setResults] = useState<ResultEntry[]>([])
   const [execTime, setExecTime] = useState<number | null>(null)
   const dbRef = useRef<any>(null)
@@ -165,11 +165,6 @@ function App() {
 
   return (
     <Flex direction="column" className="h-screen" data-theme="dark">
-      <Navbar
-        color="neutral"
-        start={<span className="font-bold text-lg">PetraDB Playground</span>}
-      />
-
       <div className="flex-1 min-h-0">
         <Splitter direction="horizontal" defaultSizes={[50, 50]} gutterSize={6}>
           {/* Left: Editor + Terminal */}
@@ -287,12 +282,6 @@ function App() {
         </Splitter>
       </div>
 
-      <Flex justify="between" align="center" className="px-3 py-1 bg-base-200 text-xs text-base-content/40 shrink-0">
-        <span>@petradb/engine — in-memory SQL database</span>
-        <span>All queries run locally in your browser</span>
-      </Flex>
     </Flex>
   )
 }
-
-export default App
