@@ -4,9 +4,28 @@ import { TextTable } from '@edadma/table'
 import { Navbar, Button, Space, Table, Alert, Kbd, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
 import { Terminal, type TerminalRef } from '@aster-ui/prefixed/terminal'
-import type { EditorView, Extension } from '@codemirror/view'
+import { EditorView, type Extension } from '@codemirror/view'
 
-const EMPTY_EXTENSIONS: Extension[] = []
+const editorTheme = EditorView.theme({
+  '.cm-gutters': {
+    backgroundColor: 'oklch(var(--b3))',
+    borderRight: '2px solid oklch(var(--bc) / 0.2)',
+    paddingRight: '4px',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    fontSize: '0.75em',
+    opacity: '0.4',
+    padding: '0 12px 0 8px',
+  },
+  '.cm-content': {
+    outline: 'none',
+  },
+  '&.cm-editor.cm-focused': {
+    outline: 'none',
+  },
+})
+
+const EDITOR_EXTENSIONS: Extension[] = [editorTheme]
 
 interface ResultEntry {
   type: 'table' | 'info' | 'error'
@@ -183,7 +202,7 @@ function App() {
                       lineNumbers
                       foldGutter={false}
                       className="h-full"
-                      extensions={EMPTY_EXTENSIONS}
+                      extensions={EDITOR_EXTENSIONS}
                       onEditorReady={handleEditorReady}
                     />
                   </div>
