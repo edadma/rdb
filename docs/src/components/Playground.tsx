@@ -164,7 +164,7 @@ export default function Playground() {
   }, [getDb, resetDb, resultLabel])
 
   return (
-    <Flex direction="column" className="h-screen" data-theme="dark">
+    <Flex direction="column" className="h-full">
       <div className="flex-1 min-h-0">
         <Splitter direction="horizontal" defaultSizes={[50, 50]} gutterSize={6}>
           {/* Left: Editor + Terminal */}
