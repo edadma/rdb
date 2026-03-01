@@ -142,7 +142,7 @@ function App() {
     <Flex direction="column" className="h-screen" data-theme="dark">
       <Navbar
         color="neutral"
-        start={<span className="font-bold text-lg">PetraDB playground</span>}
+        start={<span className="font-bold text-lg">PetraDB Playground</span>}
         end={
           <Space>
             <Button variant="outline" size="sm" onClick={resetDb}>Reset DB</Button>
