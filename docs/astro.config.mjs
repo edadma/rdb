@@ -39,11 +39,11 @@ export default defineConfig({
 				},
 			],
 			sidebar: [
-				{ label: 'Playground', link: '/playground/' },
 				{
 					label: 'Getting Started',
 					items: [
 						{ label: 'Introduction', slug: 'getting-started' },
+						{ label: 'Playground', link: '/playground/' },
 					],
 				},
 				{
