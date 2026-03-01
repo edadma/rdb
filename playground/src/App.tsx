@@ -32,10 +32,7 @@ interface ResultEntry {
   content: any
 }
 
-const SAMPLE_SQL = `-- Welcome to the PetraDB Playground!
--- Press Ctrl+Enter or click Run to execute.
-
-CREATE TABLE employees (
+const SAMPLE_SQL = `CREATE TABLE employees (
   id SERIAL,
   name TEXT NOT NULL,
   department TEXT,

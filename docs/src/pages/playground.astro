@@ -9,7 +9,8 @@ import Playground from '../components/Playground'
     tableOfContents: false,
   }}
 >
-  <div class="playground-wrapper not-content" style="height: calc(100vh - 4rem); margin: -1rem -1.5rem;">
+  <p>Try PetraDB right in your browser. This playground uses <a href="https://www.npmjs.com/package/@petradb/engine"><code>@petradb/engine</code></a> to create an in-memory database. Write SQL in the editor and click <strong>Run</strong> to execute — all queries run locally, nothing is sent to a server. Scroll down a bit to fit the full playground on screen.</p>
+  <div class="playground-wrapper not-content" style="height: calc(100vh - 4rem); margin: 0 -1.5rem -1rem;">
     <Playground client:only="react" />
   </div>
 </StarlightPage>
