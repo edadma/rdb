@@ -56,13 +56,21 @@ export default defineConfig({
 				{
 					label: 'SQL Reference',
 					items: [
-						{ label: 'SQL Features', slug: 'reference/sql' },
+						{ label: 'Data Types', slug: 'reference/data-types' },
+						{ label: 'DDL', slug: 'reference/ddl' },
+						{ label: 'DML', slug: 'reference/dml' },
+						{ label: 'Queries', slug: 'reference/queries' },
+						{ label: 'Functions', slug: 'reference/functions' },
+						{ label: 'JSON', slug: 'reference/json' },
+						{ label: 'Transactions', slug: 'reference/transactions' },
 					],
 				},
 				{
 					label: 'API Reference',
 					items: [
-						{ label: 'API', slug: 'reference/api' },
+						{ label: 'JavaScript / TypeScript', slug: 'reference/api-javascript' },
+						{ label: 'Scala', slug: 'reference/api-scala' },
+						{ label: 'JDBC', slug: 'reference/api-jdbc' },
 					],
 				},
 			],
