@@ -26,7 +26,7 @@
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.15",
-    "@petradb/engine": "^1.2.1",
+    "@petradb/engine": "^1.2.0",
     "@edadma/table": "^0.0.4",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
