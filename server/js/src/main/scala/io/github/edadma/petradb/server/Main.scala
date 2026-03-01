@@ -4,6 +4,9 @@ import mainargs.{main, arg, Flag, ParserForMethods}
 import io.github.edadma.petradb.*
 import io.github.edadma.cross_platform.exists
 
+import scala.scalajs.js
+import scala.scalajs.js.annotation.JSExportTopLevel
+
 object Main:
   @main
   def run(
@@ -38,3 +41,7 @@ object Main:
 
   def main(args: Array[String]): Unit =
     ParserForMethods(this).runOrExit(args.toIndexedSeq, allowPositional = true)
+
+  @JSExportTopLevel("main")
+  def jsMain(args: js.Array[String]): Unit =
+    main(args.toArray)

@@ -1,6 +1,6 @@
 {
   "name": "@petradb/server",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "PetraDB — lightweight SQL database server",
   "bin": {
     "petradb-server": "./bin/petradb-server"
