@@ -85,7 +85,7 @@ function App() {
     }
   }, [])
 
-  const runSql = useCallback(() => {
+  const runSql = useCallback(async () => {
     const view = editorViewRef.current
     if (!view) return
     const db = getDb()
@@ -93,7 +93,7 @@ function App() {
     const start = performance.now()
 
     try {
-      const rawResults = db.execute(view.state.doc.toString())
+      const rawResults = await db.execute(view.state.doc.toString())
       for (const r of rawResults) {
         if (r.command === 'select') {
           entries.push({ type: 'table', content: r })
@@ -121,8 +121,7 @@ function App() {
     const db = getDb()
     const start = performance.now()
 
-    try {
-      const rawResults = db.execute(trimmed)
+    return db.execute(trimmed).then((rawResults: any[]) => {
       for (const r of rawResults) {
         if (r.command === 'select') {
           for (const line of formatTableText(r.fields, r.rows).split('\n')) {
@@ -133,11 +132,10 @@ function App() {
           term.writeln(`\x1b[32m${resultLabel(r)}\x1b[0m`)
         }
       }
-    } catch (e: any) {
+      term.writeln(`\x1b[90m(${(performance.now() - start).toFixed(1)}ms)\x1b[0m`)
+    }).catch((e: any) => {
       term.writeln(`\x1b[31mERROR: ${e.message || String(e)}\x1b[0m`)
-    }
-
-    term.writeln(`\x1b[90m(${(performance.now() - start).toFixed(1)}ms)\x1b[0m`)
+    })
   }, [getDb, resetDb, resultLabel])
 
   return (
@@ -197,7 +195,7 @@ function App() {
                     <Terminal
                       ref={terminalRef}
                       readline
-                      prompt="sql> "
+                      prompt="petra> "
                       onLine={handleTerminalLine}
                       onReady={(term) => {
                         term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
