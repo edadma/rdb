@@ -4,7 +4,9 @@ import { TextTable } from '@edadma/table'
 import { Navbar, Button, Space, Table, Alert, Kbd, Flex, Badge, Splitter } from '@aster-ui/prefixed'
 import { CodeEditor } from '@aster-ui/prefixed/codeeditor'
 import { Terminal, type TerminalRef } from '@aster-ui/prefixed/terminal'
-import type { EditorView } from '@codemirror/view'
+import type { EditorView, Extension } from '@codemirror/view'
+
+const EMPTY_EXTENSIONS: Extension[] = []
 
 interface ResultEntry {
   type: 'table' | 'info' | 'error'
@@ -58,6 +60,10 @@ function App() {
   const dbRef = useRef<any>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const terminalRef = useRef<TerminalRef>(null)
+
+  const handleEditorReady = useCallback((view: EditorView) => {
+    editorViewRef.current = view
+  }, [])
 
   const getDb = useCallback(() => {
     if (!dbRef.current) dbRef.current = new Session()
@@ -142,7 +148,7 @@ function App() {
     <Flex direction="column" className="h-screen" data-theme="dark">
       <Navbar
         color="neutral"
-        start={<span className="font-bold text-lg">PetraDB playground</span>}
+        start={<span className="font-bold text-lg">PetraDB Playground</span>}
         end={
           <Space>
             <Button variant="outline" size="sm" onClick={resetDb}>Reset DB</Button>
@@ -177,8 +183,8 @@ function App() {
                       lineNumbers
                       foldGutter={false}
                       className="h-full"
-                      minHeight="100%"
-                      onEditorReady={(view) => { editorViewRef.current = view }}
+                      extensions={EMPTY_EXTENSIONS}
+                      onEditorReady={handleEditorReady}
                     />
                   </div>
                 </Flex>
