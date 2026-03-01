@@ -11,7 +11,7 @@ interface ResultEntry {
   content: any
 }
 
-const SAMPLE_SQL = `-- Welcome to the RDB Playground!
+const SAMPLE_SQL = `-- Welcome to the PetraDB Playground!
 -- Press Ctrl+Enter or click Run to execute.
 
 CREATE TABLE employees (
@@ -204,7 +204,7 @@ function App() {
                           if ((e.ctrlKey || e.metaKey) && e.key === 'v') return false
                           return true
                         })
-                        term.writeln('RDB interactive terminal. Type SQL to execute.')
+                        term.writeln('PetraDB interactive terminal. Type SQL to execute.')
                         term.writeln('Commands: \x1b[36mclear\x1b[0m, \x1b[36mreset\x1b[0m')
                         term.writeln('')
                       }}
