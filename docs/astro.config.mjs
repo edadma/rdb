@@ -51,6 +51,9 @@ export default defineConfig({
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'guides/javascript' },
 						{ label: 'Scala', slug: 'guides/scala' },
+						{ label: 'CLI', slug: 'guides/cli' },
+						{ label: 'Server', slug: 'guides/server' },
+						{ label: 'Client', slug: 'guides/client' },
 					],
 				},
 				{
