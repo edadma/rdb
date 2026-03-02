@@ -3,12 +3,6 @@ title: JavaScript / TypeScript Usage
 description: Using PetraDB from JavaScript and TypeScript.
 ---
 
-## Installation
-
-```bash
-npm install @petradb/engine
-```
-
 ## Creating a Database
 
 Each `Session` instance is a fully isolated database. By default it runs in-memory, but you can choose persistent or text storage.
@@ -108,58 +102,9 @@ const [{ rows }] = await stmt.execute([42]);
 const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
-You can also use `PREPARE` / `EXECUTE` / `DEALLOCATE` via SQL:
+SQL-level `PREPARE` / `EXECUTE` / `DEALLOCATE` is also supported — see the [Transactions reference](/reference/transactions/) for details.
 
-```sql
-PREPARE get_user AS SELECT * FROM users WHERE id = $1;
-EXECUTE get_user(42);
-DEALLOCATE get_user;
-```
-
-## Result Types
-
-Every result has a `command` field for easy discrimination:
-
-```typescript
-// DDL
-{ command: 'create table', table: string }
-{ command: 'drop table', table: string }
-{ command: 'create type', type: string }
-{ command: 'drop type', type: string }
-{ command: 'create index', index: string }
-{ command: 'drop index', index: string }
-{ command: 'truncate table', table: string }
-{ command: 'alter table' }
-
-// DML
-{ command: 'insert', result: Record<string, any>, rows: T[], fields: FieldInfo[] }
-{ command: 'select', rows: T[], fields: { name: string, dataType: string }[] }
-{ command: 'update', rowCount: number }
-{ command: 'delete', rowCount: number }
-
-// Transactions
-{ command: 'begin' }
-{ command: 'commit' }
-{ command: 'rollback' }
-
-// Prepared statements
-{ command: 'prepare', name: string }
-{ command: 'deallocate', name: string }
-```
-
-## Value Mapping
-
-| SQL Type | JavaScript Type |
-|----------|----------------|
-| INT, BIGINT, DOUBLE, NUMERIC | `number` |
-| TEXT, CHAR, VARCHAR | `string` |
-| BOOLEAN | `boolean` |
-| UUID | `string` |
-| TIMESTAMP | `Date` |
-| ENUM | `string` (label) |
-| JSON array | `Array` |
-| JSON object | `Object` |
-| NULL | `null` |
+See the [JavaScript API reference](/reference/api-javascript/) for result types, value mapping, and full TypeScript interfaces.
 
 ## TypeScript
 

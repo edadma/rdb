@@ -36,6 +36,19 @@ given Session = db.connect()
 db.close()
 ```
 
+## Text Database
+
+```scala
+import io.github.edadma.petradb.*
+
+val db = TextDB.open("path/to/data.ptxt")
+given Session = db.connect()
+
+db.close()
+```
+
+Human-readable `.ptxt` file. Loads into memory on open, rewrites after every change. Works on JVM and Native.
+
 ## Executing SQL
 
 ### `executeSQL(sql: String)(using Session): Seq[Result]`
