@@ -1,14 +1,21 @@
 ---
 title: PetraDB
-description: A cross-platform embeddable SQL database for JVM, JavaScript, and Native.
+description: A PostgreSQL-syntax-compatible SQL database that runs in-memory, in the browser, or on disk. No Docker, no server — just import and query.
 template: splash
 hero:
-  tagline: A lightweight, embeddable SQL database written in Scala — runs on JVM, JavaScript, and Native platforms.
+  tagline: A PostgreSQL-syntax-compatible SQL database that runs in-memory, in the browser, or on disk. No Docker, no server — just import and query.
   actions:
-    - text: Get Started
-      link: /getting-started/
+    - text: Get Started with JavaScript / TypeScript
+      link: /getting-started/javascript/
       icon: right-arrow
-    - text: View on GitHub
+    - text: Get Started with Scala
+      link: /getting-started/scala/
+      icon: right-arrow
+    - text: Try the Playground
+      link: /playground/
+      variant: minimal
+      icon: right-arrow
+    - text: GitHub
       link: https://github.com/edadma/petradb
       variant: minimal
       icon: external
@@ -17,16 +24,22 @@ hero:
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
 <CardGrid stagger>
-	<Card title="Full SQL support" icon="pencil">
-		PostgreSQL-compatible syntax with DDL, DML, joins, aggregations, subqueries, transactions, and more.
+	<Card title="npm install and go" icon="rocket">
+		Add a real SQL database to any JavaScript or TypeScript project as a dependency — no Docker, no native bindings, no server process.
 	</Card>
-	<Card title="Cross-platform" icon="rocket">
-		Compiles to JVM, JavaScript (Node.js & browsers), and Native — one codebase, every runtime.
+	<Card title="Scala cross-project" icon="setting">
+		Written in Scala 3, cross-compiled to JVM, Scala.js, and Scala Native. Use the same database library across platforms from a single codebase.
 	</Card>
-	<Card title="Zero dependencies" icon="approve-check">
-		No external services or native modules required. Import and query.
+	<Card title="PostgreSQL-compatible" icon="pencil">
+		Real SQL — DDL, DML, joins, aggregations, subqueries, transactions, and prepared statements with familiar PostgreSQL syntax.
 	</Card>
-	<Card title="Persistent storage" icon="document">
-		Crash-safe durable storage or human-editable text files — pick the backend that fits your workflow.
+	<Card title="In-memory by default" icon="star">
+		Spin up a full SQL database in one line. Perfect for tests, prototyping, browser apps, and anywhere you need SQL without infrastructure.
+	</Card>
+	<Card title="Grows with you" icon="document">
+		Start in-memory for fast iteration, then switch to crash-safe persistent storage in a single file — no migration, no config change.
+	</Card>
+	<Card title="Runs in the browser" icon="laptop">
+		The engine compiles to JavaScript with zero native dependencies, so it works in Node.js, Deno, Bun, and directly in the browser.
 	</Card>
 </CardGrid>
