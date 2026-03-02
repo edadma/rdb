@@ -3,16 +3,6 @@ title: Scala Usage
 description: Using PetraDB from Scala on JVM, JS, and Native.
 ---
 
-## Installation
-
-Add to your `build.sbt`:
-
-```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.1"
-```
-
-The `%%%` operator selects the correct artifact for your platform (JVM, Scala.js, or Scala Native).
-
 ## In-Memory Database
 
 ```scala
@@ -124,33 +114,7 @@ Works on JVM and Native. The `.ptxt` format is human-readable and diff-friendly.
 val results: Seq[Result] = executeSQL("SELECT * FROM users; SELECT * FROM products;")
 ```
 
-## Result Types
-
-```scala
-sealed trait Result
-case class QueryResult(table: TableValue) extends Result
-case class InsertResult(obj: Map[String, Value], table: TableValue) extends Result
-case class CreateTableResult(table: String) extends Result
-case class DropTableResult(table: String) extends Result
-case class TruncateResult(table: String) extends Result
-case class UpdateResult(rows: Int) extends Result
-case class DeleteResult(rows: Int) extends Result
-```
-
-## Accessing Query Data
-
-```scala
-val QueryResult(table) = executeQuery("SELECT * FROM users")
-
-// Access rows
-val rows: IndexedSeq[Row] = table.data
-
-for (row <- table.data) {
-  val id: Int = row.getInt("id")
-  val name: String = row.getString("name")
-  val email: Option[String] = row.getStringOption("email")
-}
-```
+See the [Scala API reference](/reference/api-scala/) for result types, value extraction, and the full API.
 
 ## Testing
 
