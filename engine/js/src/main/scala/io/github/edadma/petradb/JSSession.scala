@@ -2,6 +2,8 @@ package io.github.edadma.petradb
 
 import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, BigDecType}
 
+import io.github.edadma.cross_platform.exists
+
 import scala.scalajs.js
 import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
@@ -9,7 +11,24 @@ import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 @JSExportTopLevel("Session")
 class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
 
-  private val db = new MemoryDB()
+  private val db: DB =
+    val storage = options.toOption.flatMap(o => o.selectDynamic("storage").asInstanceOf[js.UndefOr[String]].toOption).getOrElse("memory")
+    val path = options.toOption.flatMap(o => o.selectDynamic("path").asInstanceOf[js.UndefOr[String]].toOption)
+
+    storage match
+      case "memory" => new MemoryDB()
+      case "persistent" =>
+        val p = path.getOrElse(throw js.JavaScriptException(js.Error("'path' option is required for persistent storage")))
+        val pageSize = options.toOption
+          .flatMap(o => o.selectDynamic("pageSize").asInstanceOf[js.UndefOr[Int]].toOption)
+          .getOrElse(4096)
+        if exists(p) then PersistentDB.open(p) else PersistentDB.create(p, pageSize)
+      case "text" =>
+        val p = path.getOrElse(throw js.JavaScriptException(js.Error("'path' option is required for text storage")))
+        TextDB.open(p)
+      case other =>
+        throw js.JavaScriptException(js.Error(s"Unknown storage type: '$other'. Use 'memory', 'persistent', or 'text'."))
+
   given session: Session = db.connect()
 
   private val defaultRowMode: String =
@@ -123,6 +142,9 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
       .getOrElse(defaultRowMode)
 
     js.Promise.resolve((executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray)
+
+  @JSExport
+  def close(): Unit = db.close()
 
   @JSExport
   def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))

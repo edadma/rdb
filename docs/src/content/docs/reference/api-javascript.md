@@ -13,11 +13,31 @@ npm install @petradb/engine
 
 ### `new Session(options?)`
 
-Creates a new isolated in-memory database instance.
+Creates a new database instance.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `rowMode` | `'object' \| 'array'` | `'object'` | Default row format for SELECT results |
+| `storage` | `'memory' \| 'persistent' \| 'text'` | `'memory'` | Storage backend |
+| `path` | `string` | — | File path (required for persistent and text) |
+| `pageSize` | `number` | `4096` | Page size in bytes (persistent only) |
+
+```javascript
+// In-memory (default)
+const db = new Session();
+
+// Crash-safe persistent storage (Node.js)
+const db = new Session({ storage: 'persistent', path: './mydb' });
+
+// Human-readable text file (Node.js)
+const db = new Session({ storage: 'text', path: './data.ptxt' });
+```
+
+For persistent storage, PetraDB auto-detects whether to create a new file or open an existing one.
+
+### `db.close()`
+
+Releases file handles. Required for persistent and text storage. No-op for memory databases.
 
 ### `db.execute(sql, options?)`
 
@@ -48,6 +68,9 @@ const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```typescript
 interface SessionOptions {
   rowMode?: 'object' | 'array';
+  storage?: 'memory' | 'persistent' | 'text';
+  path?: string;
+  pageSize?: number;
 }
 
 interface ExecuteOptions {
@@ -62,6 +85,7 @@ class Session {
   constructor(options?: SessionOptions)
   execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
   prepare(sql: string): PreparedStatement
+  close(): void
 }
 ```
 

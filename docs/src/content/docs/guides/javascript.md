@@ -11,12 +11,54 @@ npm install @petradb/engine
 
 ## Creating a Database
 
-Each `Session` instance is a fully isolated in-memory database.
+Each `Session` instance is a fully isolated database. By default it runs in-memory, but you can choose persistent or text storage.
 
 ```javascript
 import { Session } from '@petradb/engine';
 
+// In-memory (default)
 const db = new Session();
+```
+
+## Storage Modes
+
+### Memory (default)
+
+Data lives in memory and is lost when the process exits. Works everywhere: Node.js, Deno, Bun, and browsers.
+
+```javascript
+const db = new Session();
+// or explicitly:
+const db = new Session({ storage: 'memory' });
+```
+
+### Persistent (Node.js)
+
+Crash-safe durable storage in a single binary file, using copy-on-write pages and double-buffered headers. If the file exists it is opened; otherwise a new database is created.
+
+```javascript
+const db = new Session({ storage: 'persistent', path: './mydb' });
+
+// Optional: set page size (default 4096)
+const db = new Session({ storage: 'persistent', path: './mydb', pageSize: 8192 });
+```
+
+### Text (Node.js)
+
+Stores data in a human-readable text file (`.ptxt`). Useful for debugging, version control, or hand-editing data.
+
+```javascript
+const db = new Session({ storage: 'text', path: './data.ptxt' });
+```
+
+### Closing
+
+Call `db.close()` to release file handles when using persistent or text storage. For memory databases, `close()` is a no-op.
+
+```javascript
+const db = new Session({ storage: 'persistent', path: './mydb' });
+// ... use the database ...
+db.close();
 ```
 
 ## Executing SQL
@@ -187,7 +229,8 @@ async function safeExecute(db, sql) {
 
 ## Platform Notes
 
-- Works in browsers with bundlers (webpack, Vite, Rollup, etc.)
+- In-memory mode works everywhere: Node.js, Deno, Bun, and browsers (with bundlers)
+- Persistent and text storage require Node.js (they use the filesystem)
 - No external dependencies or native modules required
 - TypeScript definitions included
 - Consider Web Workers for large datasets in browsers
