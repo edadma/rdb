@@ -24,6 +24,18 @@ const [{ rows }] = await db.execute('SELECT * FROM users');
 console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ```
 
+### Persistent Storage
+
+Data survives restarts with crash-safe durable storage in a single file:
+
+```javascript
+const db = new Session({ storage: 'persistent', path: './mydb' });
+// ... use the database ...
+db.close();
+```
+
+Also available: `{ storage: 'text', path: './data.ptxt' }` for human-readable text files.
+
 ## Documentation
 
 Full documentation, SQL reference, and API details are available at **[petradb.dev](https://petradb.dev)**.
