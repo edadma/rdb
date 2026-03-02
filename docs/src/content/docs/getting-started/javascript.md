@@ -46,8 +46,20 @@ The engine is pure JavaScript with zero native dependencies, so it works anywher
 
 ## Persistent storage
 
-The JavaScript API is in-memory only. When you need data to survive restarts, run PetraDB as a [server](/guides/server/) and connect from your app with the [client](/guides/client/) library — the server supports crash-safe durable storage in a single file. See the [CLI guide](/guides/cli/) for a quick way to get a persistent database running.
+When you need data to survive restarts, pass a `storage` option to the constructor:
+
+```javascript
+// Crash-safe durable storage in a single file (Node.js)
+const db = new Session({ storage: 'persistent', path: './mydb' });
+
+// Human-readable text file (Node.js)
+const db = new Session({ storage: 'text', path: './data.ptxt' });
+```
+
+For persistent databases, PetraDB auto-detects whether to create a new file or open an existing one. Call `db.close()` when you're done to release the file handle.
+
+For multi-process or networked access, run PetraDB as a [server](/guides/server/) and connect with the [client](/guides/client/) library.
 
 ## Next steps
 
-The [JavaScript / TypeScript guide](/guides/javascript/) covers row modes, prepared statements, and the full API. If you need a database that persists to disk or a network server, see the [CLI](/guides/cli/), [Server](/guides/server/), and [Client](/guides/client/) guides.
+The [JavaScript / TypeScript guide](/guides/javascript/) covers storage modes, row modes, prepared statements, and the full API. See also the [CLI](/guides/cli/), [Server](/guides/server/), and [Client](/guides/client/) guides.

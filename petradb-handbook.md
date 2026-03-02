@@ -59,10 +59,10 @@ results.foreach(println)
 ## Core Concepts
 
 ### Database Instance
-- **JavaScript/TypeScript**: `new Session()` creates an in-memory database
+- **JavaScript/TypeScript**: `new Session()` creates an in-memory database. Use `{ storage: 'persistent', path }` or `{ storage: 'text', path }` for durable storage (Node.js).
 - **Scala**: `new MemoryDB` creates an in-memory database
 - Each instance is isolated and independent
-- All data is stored in memory (no persistence)
+- Call `db.close()` to release file handles when using persistent or text storage
 
 ### Execution Model
 - **JavaScript/TypeScript**: `await db.execute(sql)` returns array of result objects
@@ -467,7 +467,26 @@ class Session {
   constructor(options?: SessionOptions)
   execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
   prepare(sql: string): PreparedStatement
+  close(): void
 }
+```
+
+**Storage modes:**
+
+```javascript
+// In-memory (default)
+const db = new Session();
+
+// Crash-safe persistent storage (Node.js)
+const db = new Session({ storage: 'persistent', path: './mydb' });
+
+// Human-readable text file (Node.js)
+const db = new Session({ storage: 'text', path: './data.ptxt' });
+
+// Optional: custom page size for persistent (default 4096)
+const db = new Session({ storage: 'persistent', path: './mydb', pageSize: 8192 });
+
+db.close(); // release file handle (no-op for memory)
 ```
 
 #### Result Objects
@@ -957,17 +976,23 @@ tableContents.foreach(println)
    ```javascript
    // Reuse database instances
    class DatabaseService {
-     constructor() {
-       this.db = new Session();
+     constructor(options) {
+       this.db = new Session(options);
      }
-     
+
      async query(sql) {
        return await this.db.execute(sql);
      }
+
+     close() {
+       this.db.close();
+     }
    }
-   
+
    // Single instance for the application
-   const dbService = new DatabaseService();
+   const dbService = new DatabaseService({ storage: 'persistent', path: './app.db' });
+   // ... use dbService ...
+   dbService.close();
    ```
 
 3. **Result processing**
@@ -987,7 +1012,8 @@ tableContents.foreach(println)
 ## Platform-Specific Notes
 
 ### JavaScript/TypeScript/Node.js
-- Works in browsers with bundlers (webpack, rollup, etc.)
+- In-memory mode works everywhere: Node.js, Deno, Bun, and browsers (with bundlers)
+- Persistent and text storage require Node.js (they use the filesystem)
 - No external dependencies required
 - Use `process.memoryUsage()` to monitor memory
 - Consider Web Workers for large datasets in browsers
