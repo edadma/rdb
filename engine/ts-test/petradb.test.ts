@@ -1,5 +1,8 @@
-import { describe, it, before } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const { Session } = await import("../npm/main.js");
 
@@ -669,6 +672,77 @@ describe("Session", () => {
       await d.execute("ROLLBACK");
       const [res] = await d.execute("SELECT * FROM tx2");
       assert.equal(res.rows.length, 1);
+    });
+  });
+
+  describe("persistent storage", () => {
+    let tmpFile: string;
+
+    before(() => {
+      tmpFile = path.join(os.tmpdir(), `petradb-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    });
+
+    after(() => {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    });
+
+    it("data survives close and reopen", async () => {
+      const db1 = new Session({ storage: "persistent", path: tmpFile });
+      await db1.execute("CREATE TABLE persist_t (id INT, name TEXT)");
+      await db1.execute("INSERT INTO persist_t (id, name) VALUES (1, 'Alice'), (2, 'Bob')");
+      db1.close();
+
+      const db2 = new Session({ storage: "persistent", path: tmpFile });
+      const [res] = await db2.execute("SELECT id, name FROM persist_t ORDER BY id", { rowMode: "array" });
+      assert.equal(res.rows.length, 2);
+      assert.equal(res.rows[0][0], 1);
+      assert.equal(res.rows[0][1], "Alice");
+      assert.equal(res.rows[1][0], 2);
+      assert.equal(res.rows[1][1], "Bob");
+      db2.close();
+    });
+
+    it("throws when path is missing", () => {
+      assert.throws(() => new Session({ storage: "persistent" } as any), /path/i);
+    });
+  });
+
+  describe("text storage", () => {
+    let tmpFile: string;
+
+    before(() => {
+      tmpFile = path.join(os.tmpdir(), `petradb-test-${Date.now()}-${Math.random().toString(36).slice(2)}.ptxt`);
+    });
+
+    after(() => {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    });
+
+    it("data survives close and reopen", async () => {
+      const db1 = new Session({ storage: "text", path: tmpFile });
+      await db1.execute("CREATE TABLE text_t (id INT, val TEXT)");
+      await db1.execute("INSERT INTO text_t (id, val) VALUES (1, 'hello'), (2, 'world')");
+      db1.close();
+
+      const db2 = new Session({ storage: "text", path: tmpFile });
+      const [res] = await db2.execute("SELECT id, val FROM text_t ORDER BY id", { rowMode: "array" });
+      assert.equal(res.rows.length, 2);
+      assert.equal(res.rows[0][0], 1);
+      assert.equal(res.rows[0][1], "hello");
+      assert.equal(res.rows[1][0], 2);
+      assert.equal(res.rows[1][1], "world");
+      db2.close();
+    });
+
+    it("throws when path is missing", () => {
+      assert.throws(() => new Session({ storage: "text" } as any), /path/i);
+    });
+  });
+
+  describe("close method", () => {
+    it("close is a no-op for memory sessions", () => {
+      const d = new Session();
+      assert.doesNotThrow(() => d.close());
     });
   });
 });

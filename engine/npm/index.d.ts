@@ -1,5 +1,8 @@
 export interface SessionOptions {
     rowMode?: 'object' | 'array';
+    storage?: 'memory' | 'persistent' | 'text';
+    path?: string;
+    pageSize?: number;
 }
 
 export interface ExecuteOptions {
@@ -134,4 +137,5 @@ export class Session {
     constructor(options?: SessionOptions);
     execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>;
     prepare(sql: string): PreparedStatement;
+    close(): void;
 }
