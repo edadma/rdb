@@ -1,6 +1,7 @@
 package io.github.edadma.petradb
 
 import scala.collection.mutable
+import scala.util.parsing.input.Position
 
 class AggregateCollector:
   private val specs = mutable.ArrayBuffer[AggregateSpec]()
@@ -65,6 +66,12 @@ def resolveAliases(expr: Expr, aliases: Map[String, Expr]): Expr =
     case CastExpr(e, t) =>
       CastExpr(resolveAliases(e, aliases), t) setType expr.typ
     case _ => expr
+
+private def evalCountExpr(pos: Position, expr: Expr, label: String)(using session: Session): Int =
+  val v = eval(rewrite(expr), Nil)
+  v match
+    case NumberValue(_, n) => n.intValue
+    case other             => throw ExecutionException(pos, s"$label must be an integer, got: $other")
 
 def rewrite(expr: Expr)(using session: Session): Expr =
   expr match
@@ -287,16 +294,16 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val r_distinct = if distinct then DistinctOperator(r_ordered) else r_ordered
       val r5 =
         offset match
-          case Some(Count(pos, count)) =>
+          case Some(Count(pos, expr)) =>
+            val count = evalCountExpr(pos, expr, "offset")
             if count < 0 then throw ExecutionException(pos, s"offset should be non-negative: $count")
-
             OffsetOperator(r_distinct, count)
           case None => r_distinct
       val r6 =
         limit match
-          case Some(Count(pos, count)) =>
+          case Some(Count(pos, expr)) =>
+            val count = evalCountExpr(pos, expr, "limit")
             if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
-
             LimitOperator(r5, count)
           case None => r5
 
@@ -318,13 +325,15 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           case Some(os) => SortOperator(r, os map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) })
       val r2 =
         offset match
-          case Some(Count(pos, count)) =>
+          case Some(Count(pos, expr)) =>
+            val count = evalCountExpr(pos, expr, "offset")
             if count < 0 then throw ExecutionException(pos, s"offset should be non-negative: $count")
             OffsetOperator(r1, count)
           case None => r1
       val r3 =
         limit match
-          case Some(Count(pos, count)) =>
+          case Some(Count(pos, expr)) =>
+            val count = evalCountExpr(pos, expr, "limit")
             if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
             LimitOperator(r2, count)
           case None => r2

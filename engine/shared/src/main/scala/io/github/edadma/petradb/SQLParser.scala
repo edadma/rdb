@@ -700,7 +700,7 @@ object SQLParser:
   private def orderByClause[p: P]: P[Option[Seq[OrderBy]]] = P((kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?)
 
   private def count[p: P]: P[Count] =
-    P(Idx ~ integer).map((loc, n) => Count(mkPos(loc), n))
+    P(Idx ~ expression).map((loc, e) => Count(mkPos(loc), e))
 
   private def offsetClause[p: P]: P[Option[Count]] = P((kw("offset") ~ count).?)
 
@@ -861,12 +861,12 @@ object SQLParser:
   // INSERT INTO table [(cols)] VALUES (row), ... [ON CONFLICT ...] [RETURNING ...]
   // INSERT INTO table [(cols)] query [ON CONFLICT ...] [RETURNING ...]
   private def insertValues[p: P]: P[Command] =
-    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("values") ~ row.rep(1, sep = ",") ~ onConflictClause.? ~ (kw("returning") ~ identifier).?).map {
+    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("values") ~ row.rep(1, sep = ",") ~ onConflictClause.? ~ returningClause.?).map {
       case (t, cs, rows, oc, ret) => InsertCommand(t, cs, rows, ret, oc)
     }
 
   private def insertSelect[p: P]: P[Command] =
-    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ query ~ onConflictClause.? ~ (kw("returning") ~ identifier).?).map {
+    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ query ~ onConflictClause.? ~ returningClause.?).map {
       case (t, cs, q, oc, ret) => InsertSelectCommand(t, cs, q, ret, oc)
     }
 
@@ -1197,7 +1197,7 @@ object SQLParser:
   private def showTables[p: P]: P[Command] =
     P(kw("show") ~ kw("tables")).map(_ => ShowTablesCommand)
   private def showColumns[p: P]: P[Command] =
-    P(kw("show") ~ kw("columns") ~ identifier).map(ShowColumnsCommand(_))
+    P(kw("show") ~ kw("columns") ~ kw("from").? ~ identifier).map(ShowColumnsCommand(_))
   private def showPrimaryKey[p: P]: P[Command] =
     P(kw("show") ~ kw("primary") ~ kw("key") ~ identifier).map(ShowPrimaryKeyCommand(_))
   private def showForeignKeys[p: P]: P[Command] =

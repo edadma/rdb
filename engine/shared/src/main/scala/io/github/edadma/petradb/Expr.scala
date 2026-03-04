@@ -53,7 +53,7 @@ case class CompoundQueryExpr(
 
 case class When(when: Expr, expr: Expr)
 
-case class Count(pos: Position, count: Int)
+case class Count(pos: Position, expr: Expr)
 
 case class SQLSelectExpr(
     exprs: ArraySeq[Expr],

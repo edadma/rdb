@@ -168,6 +168,16 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
 
+        // Resolve RETURNING exprs to column name list for the DB layer
+        val retColNames: Option[Seq[String]] = returning.map { exprs =>
+          if exprs.exists(_.isInstanceOf[StarExpr]) then Seq.empty // empty = all columns
+          else exprs.map {
+            case ColumnExpr(_, Ident(name)) => name
+            case Ident(name) => name
+            case e => sys.error(s"unsupported RETURNING expression: $e")
+          }
+        }
+
         rows find (_.length != cols) match
           case Some(row) => throw ExecutionException(row.head.pos, s"row length (${row.length}) not equal to number of columns ($cols)")
           case None      =>
@@ -192,26 +202,33 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                     val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
                     val metadata    = Metadata(cols.toIndexedSeq)
                     (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                  case Some(ret @ Ident(retCol)) =>
-                    if lastResult contains retCol then
-                      val (cols, seq) = lastResult filter { case (k, _) => k == retCol } map { case (k, v) =>
-                        (ColumnMetadata(Some(table), k, v.vtyp), v)
-                      } unzip
-                      val metadata = Metadata(cols.toIndexedSeq)
-                      (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                    else throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
+                  case Some(retExprs) =>
+                    // Determine which columns to include in response
+                    val retNames =
+                      if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
+                      else retExprs.map {
+                        case ColumnExpr(_, Ident(name)) => name
+                        case Ident(name) => name
+                        case e => sys.error(s"unsupported RETURNING expression: $e")
+                      }
+                    val filtered = retNames.flatMap { name =>
+                      lastResult.get(name).map(v => (ColumnMetadata(Some(table), name, v.vtyp), v))
+                    }
+                    val (cols, seq) = filtered.unzip
+                    val metadata = Metadata(cols.toIndexedSeq)
+                    (Row(seq.toIndexedSeq, metadata, None, None), metadata)
               InsertResult(lastResult, TableValue(Vector(row), metadata))
 
             onConflict match
               case None =>
-                val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+                val result = t.bulkInsert(resolvedColumns map (_.name), data, retColNames, fkCheck)
                 buildInsertResult(result)
 
               case Some(OnConflictDoNothing) =>
                 var lastResult: Map[String, Value] = Map.empty
                 for d <- data do
                   try
-                    lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+                    lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
                   catch
                     case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
                 buildInsertResult(lastResult)
@@ -226,7 +243,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                 var lastResult: Map[String, Value] = Map.empty
                 for d <- data do
                   try
-                    lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), returning, fkCheck)
+                    lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
                   catch
                     case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
                       val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
@@ -248,18 +265,27 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                           for (col, value) <- evalUpdates do
                             updatedData(t.columnMap(col)) = value
                           lastResult = t.columns.map(_.name).zip(updatedData).toMap
-                          returning match
-                            case Some(ret @ Ident(retCol)) =>
-                              t.columnMap.get(retCol) match
-                                case Some(idx) => lastResult = lastResult + (retCol -> updatedData(idx))
-                                case None      => throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
-                            case None =>
+                          // Add RETURNING columns to result for upsert
+                          for retNames <- retColNames do
+                            val names = if retNames.isEmpty then t.columns.map(_.name).toSeq else retNames
+                            for col <- names do
+                              t.columnMap.get(col).foreach(idx => lastResult += (col -> updatedData(idx)))
                 buildInsertResult(lastResult)
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
+
+        // Resolve RETURNING exprs to column name list for the DB layer
+        val retColNames: Option[Seq[String]] = returning.map { exprs =>
+          if exprs.exists(_.isInstanceOf[StarExpr]) then Seq.empty
+          else exprs.map {
+            case ColumnExpr(_, Ident(name)) => name
+            case Ident(name) => name
+            case e => sys.error(s"unsupported RETURNING expression: $e")
+          }
+        }
 
         for (id @ Ident(c) <- resolvedColumns)
           if !t.hasColumn(c) then throw UndefinedReferenceException(id.pos, s"unknown column: $c")
@@ -284,26 +310,32 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                 val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
                 val metadata = Metadata(cols.toIndexedSeq)
                 (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              case Some(ret @ Ident(retCol)) =>
-                if lastResult contains retCol then
-                  val (cols, seq) = lastResult filter { case (k, _) => k == retCol } map { case (k, v) =>
-                    (ColumnMetadata(Some(table), k, v.vtyp), v)
-                  } unzip
-                  val metadata = Metadata(cols.toIndexedSeq)
-                  (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                else throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
+              case Some(retExprs) =>
+                val retNames =
+                  if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
+                  else retExprs.map {
+                    case ColumnExpr(_, Ident(name)) => name
+                    case Ident(name) => name
+                    case e => sys.error(s"unsupported RETURNING expression: $e")
+                  }
+                val filtered = retNames.flatMap { name =>
+                  lastResult.get(name).map(v => (ColumnMetadata(Some(table), name, v.vtyp), v))
+                }
+                val (cols, seq) = filtered.unzip
+                val metadata = Metadata(cols.toIndexedSeq)
+                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
           InsertResult(lastResult, TableValue(Vector(row), metadata))
 
         onConflict match
           case None =>
-            val result = t.bulkInsert(resolvedColumns map (_.name), data, returning, fkCheck)
+            val result = t.bulkInsert(resolvedColumns map (_.name), data, retColNames, fkCheck)
             buildSelectInsertResult(result)
 
           case Some(OnConflictDoNothing) =>
             var lastResult: Map[String, Value] = Map.empty
             for d <- data do
               try
-                lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), returning, fkCheck)
+                lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
               catch
                 case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
             buildSelectInsertResult(lastResult)
@@ -318,7 +350,7 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
             var lastResult: Map[String, Value] = Map.empty
             for d <- data do
               try
-                lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), returning, fkCheck)
+                lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
               catch
                 case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
                   val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
@@ -340,12 +372,10 @@ private[petradb] def executeCommands(cs: Seq[Command])(using session: Session): 
                       for (col, value) <- evalUpdates do
                         updatedData(t.columnMap(col)) = value
                       lastResult = t.columns.map(_.name).zip(updatedData).toMap
-                      returning match
-                        case Some(ret @ Ident(retCol)) =>
-                          t.columnMap.get(retCol) match
-                            case Some(idx) => lastResult = lastResult + (retCol -> updatedData(idx))
-                            case None      => throw UndefinedReferenceException(ret.pos, s"'$retCol' not found in result from insert")
-                        case None =>
+                      for retNames <- retColNames do
+                        val names = if retNames.isEmpty then t.columns.map(_.name).toSeq else retNames
+                        for col <- names do
+                          t.columnMap.get(col).foreach(idx => lastResult += (col -> updatedData(idx)))
             buildSelectInsertResult(lastResult)
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists, temporary) =>
@@ -781,7 +811,9 @@ private[petradb] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexe
     case ValuesExpr(rows)                  => ValuesExpr(rows.map(_.map(deepCopyExpr(_, params))))
     case LateralExpr(q)                    => LateralExpr(deepCopyExpr(q, params))
     case CompoundQueryExpr(q, ob, off, lim) =>
-      CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))), off, lim)
+      CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))),
+        off.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
+        lim.map(c => Count(c.pos, deepCopyExpr(c.expr, params))))
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       SQLSelectExpr(
         exprs.map(deepCopyExpr(_, params)).to(ArraySeq),
@@ -790,8 +822,8 @@ private[petradb] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexe
         groupBy.map(_.map(deepCopyExpr(_, params))),
         having.map(deepCopyExpr(_, params)),
         orderBy.map(_.map(deepCopyOrderBy(_, params))),
-        offset,
-        limit,
+        offset.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
+        limit.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         distinct,
       )
     case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r, params), a, cs)
@@ -807,14 +839,16 @@ private[petradb] def deepCopyCommand(cmd: Command, params: IndexedSeq[Value] = I
     case QueryCommand(query) =>
       QueryCommand(deepCopyExpr(query, params))
     case InsertCommand(table, columns, rows, returning, onConflict) =>
-      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))), returning,
+      InsertCommand(table, columns, rows.map(_.map(deepCopyExpr(_, params))),
+        returning.map(_.map(deepCopyExpr(_, params))),
         onConflict.map {
           case OnConflictDoNothing => OnConflictDoNothing
           case OnConflictDoUpdate(cols, updates) =>
             OnConflictDoUpdate(cols, updates.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))))
         })
     case InsertSelectCommand(table, columns, query, returning, onConflict) =>
-      InsertSelectCommand(table, columns, deepCopyExpr(query, params), returning,
+      InsertSelectCommand(table, columns, deepCopyExpr(query, params),
+        returning.map(_.map(deepCopyExpr(_, params))),
         onConflict.map {
           case OnConflictDoNothing => OnConflictDoNothing
           case OnConflictDoUpdate(cols, updates) =>

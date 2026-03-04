@@ -125,14 +125,14 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       groupBy.foreach(gb => sb.append(s" GROUP BY ${gb.map(e => exprToSQLInner(e)._1).mkString(", ")}"))
       having.foreach(h => sb.append(s" HAVING ${exprToSQLInner(h)._1}"))
       orderBy.foreach(ob => sb.append(s" ORDER BY ${ob.map(orderByToSQL).mkString(", ")}"))
-      limit.foreach(l => sb.append(s" LIMIT ${l.count}"))
-      offset.foreach(o => sb.append(s" OFFSET ${o.count}"))
+      limit.foreach(l => sb.append(s" LIMIT ${exprToSQLInner(l.expr)._1}"))
+      offset.foreach(o => sb.append(s" OFFSET ${exprToSQLInner(o.expr)._1}"))
       (sb.toString, 99)
     case CompoundQueryExpr(query, orderBy, offset, limit) =>
       val sb = new StringBuilder(exprToSQLInner(query)._1)
       orderBy.foreach(ob => sb.append(s" ORDER BY ${ob.map(orderByToSQL).mkString(", ")}"))
-      limit.foreach(l => sb.append(s" LIMIT ${l.count}"))
-      offset.foreach(o => sb.append(s" OFFSET ${o.count}"))
+      limit.foreach(l => sb.append(s" LIMIT ${exprToSQLInner(l.expr)._1}"))
+      offset.foreach(o => sb.append(s" OFFSET ${exprToSQLInner(o.expr)._1}"))
       (sb.toString, 99)
     case SetOperationExpr(op, left, right) =>
       (s"${exprToSQLInner(left)._1} $op ${exprToSQLInner(right)._1}", 99)

@@ -415,14 +415,14 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
       case _ =>
     constraints.remove(idx)
 
-  def insert(row: Map[String, Value], returning: Option[Ident]): Map[String, Value] =
+  def insert(row: Map[String, Value], returning: Option[Seq[String]]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
 
     bulkInsert(keys, Seq(values), returning)
 
   protected def addRow(row: Seq[Value]): Unit
 
-  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Ident], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
@@ -486,11 +486,15 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
           if !beval(c.parsedExpr, Seq(row)) then
             sys.error(s"new row violates check constraint${c.name.map(n => s""" "$n"""").getOrElse("")}")
 
-      if returning.isDefined then
-        val idx =
-          columnMap.getOrElse(returning.get.name, throw UndefinedReferenceException(returning.get.pos, s"column '${returning.get.name}' not found"))
-
-        result += (returning.get.name -> arr(idx))
+      for retCols <- returning do
+        if retCols.isEmpty then
+          // RETURNING * — include all columns
+          for col <- columns do
+            result += (col.name -> arr(columnMap(col.name)))
+        else
+          for col <- retCols do
+            val idx = columnMap.getOrElse(col, sys.error(s"column '$col' not found"))
+            result += (col -> arr(idx))
 
       fkCheck.foreach(_(arr.toIndexedSeq))
       addRow(arr to immutable.ArraySeq)
