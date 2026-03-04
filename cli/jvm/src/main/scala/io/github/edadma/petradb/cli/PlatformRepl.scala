@@ -4,6 +4,8 @@ import io.github.edadma.petradb.Session
 import org.jline.reader.{LineReader, LineReaderBuilder, EndOfFileException, UserInterruptException}
 import org.jline.terminal.TerminalBuilder
 import java.nio.file.Paths
+import scala.concurrent.{Await, Promise => SPromise}
+import scala.concurrent.duration.Duration
 
 class PlatformRepl(session: Session) extends Repl(session):
   private val terminal = TerminalBuilder.builder().system(true).build()
@@ -32,7 +34,11 @@ class PlatformRepl(session: Session) extends Repl(session):
           val trimmed = line.trim
           if trimmed.nonEmpty then
             if trimmed.startsWith("\\") then
-              running = handleMeta(trimmed)
+              val p = SPromise[Boolean]()
+              handleMeta(trimmed)(result => p.success(result))
+              running = Await.result(p.future, Duration.Inf)
             else
-              collectAndExecute(trimmed, jlineReadLine)
+              val p = SPromise[Unit]()
+              collectAndExecute(trimmed, jlineReadLine)(p.success(()))
+              Await.result(p.future, Duration.Inf)
     terminal.close()

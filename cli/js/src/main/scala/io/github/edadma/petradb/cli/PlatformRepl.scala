@@ -37,19 +37,20 @@ class PlatformRepl(session: Session) extends Repl(session):
         buffer.append("\n").append(line)
         if trimmed.endsWith(";") then
           collecting = false
-          executeSql(buffer.toString)
+          val sql = buffer.toString
           buffer.clear()
-          askLine(prompt)
+          executeSql(sql)(askLine(prompt))
         else
           askLine(contPrompt)
       else if trimmed.isEmpty then
         askLine(prompt)
       else if trimmed.startsWith("\\") then
-        if handleMeta(trimmed) then askLine(prompt)
-        else rl.close()
+        handleMeta(trimmed) { continue =>
+          if continue then askLine(prompt)
+          else rl.close()
+        }
       else if trimmed.endsWith(";") then
-        executeSql(trimmed)
-        askLine(prompt)
+        executeSql(trimmed)(askLine(prompt))
       else
         collecting = true
         buffer.clear()

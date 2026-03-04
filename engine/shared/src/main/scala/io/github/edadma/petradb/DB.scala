@@ -4,6 +4,7 @@ import io.github.edadma.dllist.DLList
 import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
+import scala.concurrent.{Future, ExecutionContext}
 
 trait TransactionHandle
 object NoOpTransactionHandle extends TransactionHandle
@@ -505,6 +506,9 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
   def execute(params: Value*)(using session: Session): Seq[Result] =
     val copied = deepCopyCommands(commands, params.toIndexedSeq)
     executeCommands(copied)
+
+  def execute(params: IndexedSeq[Value])(using session: Session, ec: ExecutionContext): Future[Seq[Result]] =
+    Future.successful(execute(params*))
 
   def parameterCount: Int =
     def countInExpr(expr: Expr): Seq[Int] =

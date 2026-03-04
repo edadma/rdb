@@ -1,6 +1,7 @@
 package io.github.edadma.petradb
 
 import scala.collection.mutable
+import scala.concurrent.{Future, ExecutionContext}
 
 class Session(val db: DB):
   private var _inTransaction: Boolean = false
@@ -50,6 +51,9 @@ class Session(val db: DB):
 
   private[petradb] def deactivateHandle(): Unit =
     txnHandle.foreach(_ => db.deactivateHandle())
+
+  def execute(sql: String)(using ExecutionContext): Future[Seq[Result]] =
+    Future.successful(executeSQL(sql)(using this))
 
   def prepare(sql: String): PreparedStatement =
     val cmds = SQLParser.parseCommands(sql)

@@ -8,7 +8,7 @@ import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 import scala.concurrent.ExecutionContext.Implicits.global
 
-@JSExportTopLevel("Session")
+@JSExportTopLevel("Client")
 class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   private val opts = options.toOption

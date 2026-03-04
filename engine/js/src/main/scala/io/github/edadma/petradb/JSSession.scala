@@ -7,6 +7,7 @@ import io.github.edadma.cross_platform.exists
 import scala.scalajs.js
 import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
+import scala.concurrent.ExecutionContext
 
 @JSExportTopLevel("Session")
 class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
@@ -30,6 +31,7 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
         throw js.JavaScriptException(js.Error(s"Unknown storage type: '$other'. Use 'memory', 'persistent', or 'text'."))
 
   given session: Session = db.connect()
+  private given ExecutionContext = ExecutionContext.global
 
   private val defaultRowMode: String =
     options.toOption.flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption).getOrElse("object")
@@ -141,7 +143,7 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
       .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
       .getOrElse(defaultRowMode)
 
-    js.Promise.resolve((executeSQL(sql) map (r => resultToJS(r, rowMode))).toJSArray)
+    session.execute(sql).map(results => (results map (r => resultToJS(r, rowMode))).toJSArray).toJSPromise
 
   @JSExport
   def close(): Unit = db.close()
@@ -156,5 +158,4 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
         .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
         .getOrElse(defaultRowMode)
       val paramValues = params.map(fromJS).toIndexedSeq
-      val results = ps.execute(paramValues*)(using session)
-      js.Promise.resolve((results map (r => resultToJS(r, rowMode))).toJSArray)
+      ps.execute(paramValues).map(results => (results map (r => resultToJS(r, rowMode))).toJSArray).toJSPromise

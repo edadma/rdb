@@ -32,12 +32,12 @@ object Main:
     val batch = execute.nonEmpty || file.nonEmpty || stdin.value
 
     if batch then
-      for f <- file do repl.executeFile(f)
+      for f <- file do repl.executeFile(f) {}
       if stdin.value then
         repl.readStdin() match
-          case Some(sql) => repl.executeSql(sql)
+          case Some(sql) => repl.executeSql(sql) {}
           case None      => Console.err.println("--stdin is not supported on this platform")
-      for sql <- execute do repl.executeSql(sql)
+      for sql <- execute do repl.executeSql(sql) {}
     else
       println("PetraDB — interactive SQL shell")
       println("Type \\q to quit, \\dt to list tables, \\d <table> to describe a table.")

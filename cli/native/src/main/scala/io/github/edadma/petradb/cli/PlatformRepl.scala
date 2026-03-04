@@ -2,6 +2,8 @@ package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb.Session
 import io.github.edadma.readline
+import scala.concurrent.{Await, Promise => SPromise}
+import scala.concurrent.duration.Duration
 
 class PlatformRepl(session: Session) extends Repl(session):
   private val historyFile = System.getProperty("user.home") + "/.petradb_history"
@@ -26,7 +28,11 @@ class PlatformRepl(session: Session) extends Repl(session):
           if trimmed.nonEmpty then
             readline.add_history(line)
             if trimmed.startsWith("\\") then
-              running = handleMeta(trimmed)
+              val p = SPromise[Boolean]()
+              handleMeta(trimmed)(result => p.success(result))
+              running = Await.result(p.future, Duration.Inf)
             else
-              collectAndExecute(trimmed, nativeReadLine)
+              val p = SPromise[Unit]()
+              collectAndExecute(trimmed, nativeReadLine)(p.success(()))
+              Await.result(p.future, Duration.Inf)
     readline.write_history(historyFile)
