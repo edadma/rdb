@@ -6,13 +6,13 @@
   "exports": {
     ".": {
       "types": "./index.d.ts",
-      "default": "./main.js"
+      "default": "./client.js"
     }
   },
-  "main": "main.js",
+  "main": "client.js",
   "types": "index.d.ts",
   "files": [
-    "main.js",
+    "client.js",
     "index.d.ts",
     "README.md"
   ],
