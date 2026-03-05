@@ -109,6 +109,14 @@ SELECT (DATE '2024-01-01', DATE '2024-01-31')
 SELECT DISTINCT category FROM products;
 ```
 
+## EXPLAIN
+
+Show the query execution plan:
+
+```sql
+EXPLAIN SELECT * FROM orders WHERE status = 'pending';
+```
+
 ## ARRAY Constructor
 
 ```sql

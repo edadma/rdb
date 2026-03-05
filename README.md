@@ -35,11 +35,12 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.2"
 ```
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 given Session = new MemoryDB().connect()
 

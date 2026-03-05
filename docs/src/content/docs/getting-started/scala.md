@@ -8,7 +8,7 @@ description: Add PetraDB to your Scala project and run your first SQL queries.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.1"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.2"
 ```
 
 The `%%%` operator selects the correct artifact for your platform — JVM, Scala.js, or Scala Native.
@@ -17,6 +17,7 @@ The `%%%` operator selects the correct artifact for your platform — JVM, Scala
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 given Session = new MemoryDB().connect()
 

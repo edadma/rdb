@@ -106,6 +106,9 @@ Every result has a `command` field for discrimination:
 { command: 'create view', view: string }
 { command: 'drop view', view: string }
 
+// Query plan
+{ command: 'explain', plan: string }
+
 // DML
 { command: 'insert', result: Record<string, any>, rows: T[], fields: FieldInfo[] }
 { command: 'select', rows: T[], fields: { name: string, dataType: string }[] }

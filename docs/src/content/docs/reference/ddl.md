@@ -106,11 +106,19 @@ Inspect database metadata:
 
 ```sql
 SHOW TABLES;
+SHOW VIEWS;
 SHOW COLUMNS orders;
 SHOW PRIMARY KEY orders;
 SHOW FOREIGN KEYS orders;
 SHOW INDEXES orders;
 ```
+
+### SHOW VIEWS output
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `view_name` | TEXT | View name |
+| `definition` | TEXT | The SQL query that defines the view |
 
 ### SHOW COLUMNS output
 

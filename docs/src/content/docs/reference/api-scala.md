@@ -8,13 +8,28 @@ description: Scala API reference for PetraDB.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "<version>"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.2"
+```
+
+## Package Structure
+
+PetraDB is split across two packages:
+
+- **`io.github.edadma.petradb`** — shared types (`Result`, `Value`, `Row`, `TableValue`, `Session` trait)
+- **`io.github.edadma.petradb.engine`** — the database engine (`MemoryDB`, `PersistentDB`, `TextDB`, `Session`, `executeSQL`)
+
+Import both to use the engine directly:
+
+```scala
+import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 ```
 
 ## In-Memory Database
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 given Session = new MemoryDB().connect()
 ```
@@ -23,6 +38,7 @@ given Session = new MemoryDB().connect()
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 // Create new
 val db = PersistentDB.create("path/to/db", pageSize = 4096)
@@ -40,6 +56,7 @@ db.close()
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 val db = TextDB.open("path/to/data.ptxt")
 given Session = db.connect()
@@ -63,16 +80,27 @@ val results: Seq[Result] = executeSQL("SELECT * FROM users")
 
 ```scala
 sealed trait Result
-case class QueryResult(table: TableValue) extends Result
+case class QueryResult(table: TableValue)                           extends Result
 case class InsertResult(obj: Map[String, Value], table: TableValue) extends Result
-case class CreateTableResult(table: String) extends Result
-case class DropTableResult(table: String) extends Result
-case class CreateViewResult(name: String) extends Result
-case class DropViewResult(name: String) extends Result
-case class TruncateResult(table: String) extends Result
-case class UpdateResult(rows: Int) extends Result
-case class DeleteResult(rows: Int) extends Result
-case class CopyResult(count: Int) extends Result
+case class CreateTableResult(table: String)                         extends Result
+case class DropTableResult(table: String)                           extends Result
+case class CreateIndexResult(name: String)                          extends Result
+case class DropIndexResult(name: String)                            extends Result
+case class CreateTypeResult(typ: String)                            extends Result
+case class DropTypeResult(name: String)                             extends Result
+case class CreateViewResult(name: String)                           extends Result
+case class DropViewResult(name: String)                             extends Result
+case class UpdateResult(rows: Int)                                  extends Result
+case class DeleteResult(rows: Int)                                  extends Result
+case class TruncateResult(table: String)                            extends Result
+case class AlterTableResult()                                       extends Result
+case class ExplainResult(plan: String)                              extends Result
+case class PrepareResult(name: String)                              extends Result
+case class DeallocateResult(name: String)                           extends Result
+case class CopyResult(rows: Int)                                    extends Result
+case object BeginResult                                             extends Result
+case object CommitResult                                            extends Result
+case object RollbackResult                                          extends Result
 ```
 
 ## Accessing Query Data
