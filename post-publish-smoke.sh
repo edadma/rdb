@@ -418,11 +418,10 @@ libraryDependencies += "io.github.edadma" %% "petradb-jdbc" % "${JDBC_SCALA_VERS
 SBT
 
 cat > "$SCALA_JDBC_DIR/src/main/scala/Smoke.scala" <<'SCALA'
-import java.sql.DriverManager
+import io.github.edadma.petradb.jdbc.PetraDriver
 
 @main def smoke(): Unit =
-  Class.forName("io.github.edadma.petradb.jdbc.PetraDriver")
-  val conn = DriverManager.getConnection("jdbc:petradb:memory")
+  val conn = new PetraDriver().connect("jdbc:petradb:memory", new java.util.Properties())
   val stmt = conn.createStatement()
 
   stmt.executeUpdate("CREATE TABLE items (id SERIAL, name TEXT, price NUMERIC(10,2))")
