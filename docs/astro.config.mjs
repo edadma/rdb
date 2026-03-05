@@ -53,6 +53,7 @@ export default defineConfig({
 						{ label: 'JavaScript / TypeScript', slug: 'guides/javascript' },
 						{ label: 'Scala', slug: 'guides/scala' },
 						{ label: 'CLI', slug: 'guides/cli' },
+						{ label: 'Knex.js', slug: 'guides/knex' },
 						{ label: 'Server', slug: 'guides/server' },
 						{ label: 'Client', slug: 'guides/client' },
 					],
