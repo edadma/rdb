@@ -5,6 +5,7 @@ import java.util.Properties
 import java.util.logging.Logger
 
 class PetraDriver extends java.sql.Driver:
+  PetraDriver.ensureRegistered(this)
 
   def acceptsURL(url: String): Boolean =
     url != null && (url.startsWith("jdbc:petradb://") || url.startsWith("jdbc:petradb:file:") || url == "jdbc:petradb:memory")
@@ -40,4 +41,8 @@ class PetraDriver extends java.sql.Driver:
   def getParentLogger(): Logger = throw java.sql.SQLFeatureNotSupportedException()
 
 object PetraDriver:
-  java.sql.DriverManager.registerDriver(new PetraDriver())
+  @volatile private var registered = false
+  def ensureRegistered(instance: PetraDriver): Unit =
+    if !registered then
+      registered = true
+      java.sql.DriverManager.registerDriver(instance)

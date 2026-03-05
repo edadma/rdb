@@ -446,6 +446,48 @@ SCALA_JDBC_OUT=$(cd "$SCALA_JDBC_DIR" && sbt --no-colors "run" 2>&1 || true)
 check_output "JDBC: DDL, INSERT, SELECT, metadata" "OK" "$SCALA_JDBC_OUT"
 
 
+# ── 8. JDBC: DriverManager auto-discovery ─────────────────────────────────────
+
+header "JDBC: DriverManager ServiceLoader (fat jar)"
+
+info "Building fat jar with sbt jdbc/assembly..."
+ASSEMBLY_OUT=$(cd /home/eam/dev/petradb && sbt --no-colors jdbc/assembly 2>&1 || true)
+FAT_JAR="/home/eam/dev/petradb/jdbc/target/scala-${SCALA_FULL_VERSION}/petradb-jdbc.jar"
+
+if [[ ! -f "$FAT_JAR" ]]; then
+  fail "Fat jar not found at $FAT_JAR"
+  echo "$ASSEMBLY_OUT" | tail -10 | sed 's/^/      /'
+else
+  JDBC_JAVA_DIR="$WORK/jdbc-java"
+  mkdir -p "$JDBC_JAVA_DIR"
+
+  cat > "$JDBC_JAVA_DIR/JdbcSmoke.java" <<'JAVA'
+import java.sql.*;
+
+public class JdbcSmoke {
+    public static void main(String[] args) throws Exception {
+        // No Class.forName — rely on ServiceLoader auto-discovery
+        Connection conn = DriverManager.getConnection("jdbc:petradb:memory");
+        Statement stmt = conn.createStatement();
+        stmt.executeUpdate("CREATE TABLE t (id SERIAL, v TEXT)");
+        stmt.executeUpdate("INSERT INTO t (v) VALUES ('hello')");
+        ResultSet rs = stmt.executeQuery("SELECT v FROM t");
+        rs.next();
+        String val_ = rs.getString("v");
+        if (!"hello".equals(val_)) throw new RuntimeException("Expected hello, got " + val_);
+        stmt.close();
+        conn.close();
+        System.out.println("OK");
+    }
+}
+JAVA
+
+  info "Compiling and running with java -cp (no Class.forName)..."
+  JAVA_OUT=$(cd "$JDBC_JAVA_DIR" && javac -cp "$FAT_JAR" JdbcSmoke.java && java -cp ".:$FAT_JAR" JdbcSmoke 2>&1 || true)
+  check_output "DriverManager auto-discovers PetraDriver via ServiceLoader" "OK" "$JAVA_OUT"
+fi
+
+
 # ── Summary ─────────────────────────────────────────────────────────────────────
 
 kill_server
