@@ -1,9 +1,9 @@
 package io.github.edadma.petradb.cli
 
-import io.github.edadma.petradb.Session
+import io.github.edadma.petradb
 import io.github.edadma.readline
 
-class PlatformRepl(session: Session) extends Repl(session):
+class PlatformRepl(session: petradb.Session) extends Repl(session):
   private val historyFile = System.getProperty("user.home") + "/.petradb_history"
 
   override def readStdin(): Option[String] =
@@ -26,7 +26,7 @@ class PlatformRepl(session: Session) extends Repl(session):
           if trimmed.nonEmpty then
             readline.add_history(line)
             if trimmed.startsWith("\\") then
-              running = handleMeta(trimmed)
+              handleMeta(trimmed)(result => running = result)
             else
-              collectAndExecute(trimmed, nativeReadLine)
+              collectAndExecute(trimmed, nativeReadLine) {}
     readline.write_history(historyFile)

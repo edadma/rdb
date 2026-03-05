@@ -1,10 +1,18 @@
 package io.github.edadma.petradb.cli
 
 import mainargs.{main, arg, Flag, ParserForMethods}
+import io.github.edadma.petradb
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
+import io.github.edadma.petradb.client
+import io.github.edadma.petradb.client.SessionOptions
 import io.github.edadma.cross_platform
 
+import scala.concurrent.ExecutionContext
+
 object Main:
+  given ExecutionContext = ExecutionContext.global
+
   @main
   def run(
       @arg(short = 'm', doc = "Use in-memory database")
@@ -17,27 +25,40 @@ object Main:
       stdin: Flag = Flag(false),
       @arg(doc = "Database file path")
       path: Option[String] = None,
+      @arg(doc = "Server host")
+      host: Option[String] = None,
+      @arg(doc = "Server port")
+      port: Option[Int] = None,
+      @arg(doc = "Username")
+      user: Option[String] = None,
+      @arg(doc = "Password")
+      password: Option[String] = None,
   ): Unit =
-    val db: DB =
-      if memory.value || path.isEmpty then new MemoryDB
-      else
-        val p = path.get
-        if p.endsWith(".ptxt") then TextDB.open(p)
-        else if cross_platform.exists(p) then PersistentDB.open(p)
-        else PersistentDB.create(p, 4096)
+    host match
+      case Some(h) =>
+        val cs = new client.Session(SessionOptions(h, port.getOrElse(DefaultPort), user, password))
+        cs.connect().foreach(_ => startRepl(cs, execute, file, stdin.value))
+      case None =>
+        val db: DB =
+          if memory.value || path.isEmpty then new MemoryDB
+          else
+            val p = path.get
+            if p.endsWith(".ptxt") then TextDB.open(p)
+            else if cross_platform.exists(p) then PersistentDB.open(p)
+            else PersistentDB.create(p, 4096)
+        startRepl(db.connect(), execute, file, stdin.value)
 
-    val session = db.connect()
-    val repl    = new PlatformRepl(session)
-
-    val batch = execute.nonEmpty || file.nonEmpty || stdin.value
+  def startRepl(session: petradb.Session, execute: Seq[String], file: Seq[String], stdin: Boolean): Unit =
+    val repl = new PlatformRepl(session)
+    val batch = execute.nonEmpty || file.nonEmpty || stdin
 
     if batch then
-      for f <- file do repl.executeFile(f)
-      if stdin.value then
+      for f <- file do repl.executeFile(f) {}
+      if stdin then
         repl.readStdin() match
-          case Some(sql) => repl.executeSql(sql)
+          case Some(sql) => repl.executeSql(sql) {}
           case None      => Console.err.println("--stdin is not supported on this platform")
-      for sql <- execute do repl.executeSql(sql)
+      for sql <- execute do repl.executeSql(sql) {}
     else
       println("PetraDB — interactive SQL shell")
       println("Type \\q to quit, \\dt to list tables, \\d <table> to describe a table.")
@@ -53,9 +74,13 @@ object Main:
 
   private val subcommands = Set("run", "dump")
 
+  def mainWithArgs(args: Array[String]): Unit =
+    runParsed(args.map(a => if a == "-h" then "--help" else a))
+
   def main(args: Array[String]): Unit =
-    val realArgs = cross_platform.processArgs(args.toSeq).toArray
-    val normalizedArgs = realArgs.map(a => if a == "-h" then "--help" else a)
+    mainWithArgs(cross_platform.processArgs(args.toSeq).toArray)
+
+  private def runParsed(normalizedArgs: Array[String]): Unit =
     val effective =
       if normalizedArgs.isEmpty then
         Array("run")

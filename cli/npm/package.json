@@ -1,7 +1,7 @@
 {
   "name": "@petradb/cli",
-  "version": "1.2.1",
-  "description": "PetraDB — a lightweight PostgreSQL-compatible SQL database",
+  "version": "1.2.3",
+  "description": "PetraDB \u2014 a lightweight PostgreSQL-compatible SQL database",
   "bin": {
     "petradb": "./bin/petradb"
   },

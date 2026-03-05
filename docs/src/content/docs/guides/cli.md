@@ -25,6 +25,10 @@ If a path is given, the CLI opens (or creates) a persistent database at that loc
 | `-e`, `--execute` | Execute SQL and exit (repeatable) |
 | `-f`, `--file` | Execute a SQL file and exit (repeatable) |
 | `--stdin` | Read SQL from stdin and exit |
+| `--host` | Connect to a remote PetraDB server |
+| `--port` | Server port (default: 5480) |
+| `--user` | Username for authentication |
+| `--password` | Password for authentication |
 
 ### Examples
 
@@ -43,6 +47,12 @@ petradb mydata.db -f schema.sql -e "SELECT count(*) FROM users"
 
 # Pipe SQL from stdin
 echo "SELECT 1 + 1" | petradb --stdin
+
+# Connect to a remote server
+petradb --host myserver.example.com --port 5480
+
+# Connect with authentication
+petradb --host localhost --user admin --password secret
 ```
 
 ## Database Modes

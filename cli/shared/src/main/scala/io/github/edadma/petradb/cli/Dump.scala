@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 import io.github.edadma.cross_platform
 
 object Dump:

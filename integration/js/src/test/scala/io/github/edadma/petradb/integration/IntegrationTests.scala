@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.integration
 
-import io.github.edadma.petradb.MemoryDB
+import io.github.edadma.petradb.engine.MemoryDB
 import io.github.edadma.petradb.server.PetraServer
 
 import scala.concurrent.{Future, Promise}

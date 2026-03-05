@@ -3,7 +3,7 @@ package io.github.edadma.petradb.jdbc
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-import io.github.edadma.petradb.MemoryDB
+import io.github.edadma.petradb.engine.MemoryDB
 import io.github.edadma.petradb.server.PetraServer
 import io.github.edadma.microserve.EventLoop
 

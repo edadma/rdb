@@ -2,7 +2,7 @@ package io.github.edadma.petradb.server
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import io.github.edadma.petradb.MemoryDB
+import io.github.edadma.petradb.engine.MemoryDB
 import io.github.edadma.cross_platform.{createTempFile, writeFile, deleteFile}
 
 class SessionLimitTests extends AnyFreeSpec with Matchers:

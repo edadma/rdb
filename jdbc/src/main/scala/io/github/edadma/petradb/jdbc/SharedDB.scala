@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.jdbc
 
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 import scala.collection.mutable
 

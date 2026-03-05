@@ -2,6 +2,7 @@ package io.github.edadma.petradb.server
 
 import mainargs.{main, arg, Flag, ParserForMethods}
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 import io.github.edadma.cross_platform.exists
 
 import scala.scalajs.js

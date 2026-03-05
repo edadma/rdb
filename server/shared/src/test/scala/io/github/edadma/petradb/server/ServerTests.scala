@@ -3,6 +3,7 @@ package io.github.edadma.petradb.server
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 

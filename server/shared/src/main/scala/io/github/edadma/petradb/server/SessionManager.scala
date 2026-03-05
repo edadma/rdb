@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{DB, Session, Platform}
+import io.github.edadma.petradb.Platform
+import io.github.edadma.petradb.engine.{DB, Session}
 
 import scala.collection.mutable
 

@@ -1,18 +1,18 @@
 {
   "name": "@petradb/client",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "PetraDB network client for JavaScript and TypeScript",
   "type": "module",
   "exports": {
     ".": {
       "types": "./index.d.ts",
-      "default": "./main.js"
+      "default": "./client.js"
     }
   },
-  "main": "main.js",
+  "main": "client.js",
   "types": "index.d.ts",
   "files": [
-    "main.js",
+    "client.js",
     "index.d.ts",
     "README.md"
   ],

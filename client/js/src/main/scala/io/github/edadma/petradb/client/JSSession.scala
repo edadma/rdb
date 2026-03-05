@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.client
 
-import io.github.edadma.petradb.*
+import io.github.edadma.petradb.{Session as _, *}
 import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, BigDecType}
 
 import scala.scalajs.js
@@ -8,7 +8,7 @@ import js.JSConverters._
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 import scala.concurrent.ExecutionContext.Implicits.global
 
-@JSExportTopLevel("Session")
+@JSExportTopLevel("Session", "client")
 class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
 
   private val opts = options.toOption

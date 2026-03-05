@@ -7,6 +7,7 @@ description: Using PetraDB from Scala on JVM, JS, and Native.
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 given Session = new MemoryDB().connect()
 
@@ -42,6 +43,7 @@ PetraDB supports crash-safe durable storage on JVM and Native via [stow](https:/
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 val db = PersistentDB.create("mydata.db", 4096)
 given Session = db.connect()
@@ -82,6 +84,7 @@ Persistent databases use copy-on-write pages and double-buffered headers for cra
 
 ```scala
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine.*
 
 val db = TextDB.open("mydata.ptxt")
 given Session = db.connect()

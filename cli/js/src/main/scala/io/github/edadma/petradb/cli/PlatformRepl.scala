@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.cli
 
-import io.github.edadma.petradb.Session
+import io.github.edadma.petradb
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
 
@@ -14,7 +14,7 @@ private trait NodeReadlineInterface extends js.Object:
   def question(query: String, callback: js.Function1[String, Unit]): Unit = js.native
   def close(): Unit = js.native
 
-class PlatformRepl(session: Session) extends Repl(session):
+class PlatformRepl(session: petradb.Session) extends Repl(session):
   private lazy val rl = NodeReadlineModule.createInterface(
     js.Dynamic.literal(
       input = js.Dynamic.global.process.stdin,
@@ -37,19 +37,20 @@ class PlatformRepl(session: Session) extends Repl(session):
         buffer.append("\n").append(line)
         if trimmed.endsWith(";") then
           collecting = false
-          executeSql(buffer.toString)
+          val sql = buffer.toString
           buffer.clear()
-          askLine(prompt)
+          executeSql(sql)(askLine(prompt))
         else
           askLine(contPrompt)
       else if trimmed.isEmpty then
         askLine(prompt)
       else if trimmed.startsWith("\\") then
-        if handleMeta(trimmed) then askLine(prompt)
-        else rl.close()
+        handleMeta(trimmed) { continue =>
+          if continue then askLine(prompt)
+          else rl.close()
+        }
       else if trimmed.endsWith(";") then
-        executeSql(trimmed)
-        askLine(prompt)
+        executeSql(trimmed)(askLine(prompt))
       else
         collecting = true
         buffer.clear()

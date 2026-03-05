@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{executeSQL, Session, PetraException, ParseException, TypeException, UndefinedReferenceException, SchemaException, ConstraintException, ExecutionException}
+import io.github.edadma.petradb.{PetraException, ParseException, TypeException, UndefinedReferenceException, SchemaException, ConstraintException, ExecutionException}
+import io.github.edadma.petradb.engine.{executeSQL, Session}
 import io.github.edadma.petradb.Codecs.given
 import upickle.default.*
 

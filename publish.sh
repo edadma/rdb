@@ -18,9 +18,10 @@ case "$1" in
     ;;
   cli)
     MODULE=cliJS
-    SRC="cli/js/target/scala-${SCALA_VERSION}/petradb-cli-opt/main.js"
-    DEST="cli/npm/bin/main.js"
+    SRC_DIR="cli/js/target/scala-${SCALA_VERSION}/petradb-cli-opt"
+    DEST_DIR="cli/npm/bin"
     PKG_DIR="cli/npm"
+    MULTI=true
     ;;
   server)
     MODULE=serverJS
@@ -38,7 +39,11 @@ echo "==> Building ${MODULE}/fullLinkJS..."
 sbt ${MODULE}/fullLinkJS
 
 echo "==> Copying artifact..."
-cp "$SRC" "$DEST"
+if [ "$MULTI" = "true" ]; then
+  cp "$SRC_DIR"/*.js "$DEST_DIR/"
+else
+  cp "$SRC" "$DEST"
+fi
 
 echo "==> Package contents:"
 cd "$PKG_DIR"
