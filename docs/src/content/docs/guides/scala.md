@@ -138,5 +138,5 @@ sbt engineNative/test
 ## Platform Notes
 
 - **JVM** — thread-safe, integrates with Spring Boot, Play Framework, Akka, etc.
-- **Scala.js** — runs in Node.js and browsers; no persistent storage
+- **Scala.js** — runs in Node.js and browsers
 - **Scala Native** — compiles to native executables; ideal for CLI tools and embedded systems
