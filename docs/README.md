@@ -21,13 +21,26 @@ Doc pages live in `src/content/docs/`:
 ```
 src/content/docs/
 ├── index.mdx
-├── getting-started.md
-├── guides/
+├── getting-started/
 │   ├── javascript.md
 │   └── scala.md
+├── guides/
+│   ├── cli.md
+│   ├── client.md
+│   ├── javascript.md
+│   ├── scala.md
+│   └── server.md
 └── reference/
-    ├── api.md
-    └── sql.md
+    ├── api-javascript.md
+    ├── api-jdbc.md
+    ├── api-scala.md
+    ├── data-types.md
+    ├── ddl.md
+    ├── dml.md
+    ├── functions.md
+    ├── json.md
+    ├── queries.md
+    └── transactions.md
 ```
 
 ## Deployment
