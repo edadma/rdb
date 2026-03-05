@@ -212,7 +212,7 @@ lazy val jdbc = project
   .dependsOn(client.jvm, engine.jvm, server.jvm % Test)
   .settings(
     name    := "petradb-jdbc",
-    version := "1.2.2",
+    version := "1.2.3",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     assembly / assemblyJarName := "petradb-jdbc.jar",
