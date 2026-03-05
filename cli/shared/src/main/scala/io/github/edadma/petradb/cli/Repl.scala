@@ -1,12 +1,14 @@
 package io.github.edadma.petradb.cli
 
+import io.github.edadma.petradb
 import io.github.edadma.petradb.*
+import io.github.edadma.petradb.engine
 import io.github.edadma.cross_platform.readFile
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Success, Failure}
 
-abstract class Repl(val session: Session):
+abstract class Repl(val session: petradb.Session):
   val prompt     = "petra> "
   val contPrompt = "  -> "
   var timing     = false
@@ -26,18 +28,17 @@ abstract class Repl(val session: Session):
       case MetaCommand.Quit =>
         onDone(false)
       case MetaCommand.ListTables =>
-        Output.listTables(session.db)
-        onDone(true)
+        executeSql("SHOW TABLES;")(onDone(true))
       case MetaCommand.ListViews =>
-        Output.listViews(session.db)
-        onDone(true)
+        executeSql("SHOW VIEWS;")(onDone(true))
       case MetaCommand.DescribeTable(name) =>
-        Output.describeTable(session.db, name)
-        onDone(true)
+        executeSql(s"SHOW COLUMNS FROM $name;")(onDone(true))
       case MetaCommand.Include(path) =>
         executeFile(path) { onDone(true) }
       case MetaCommand.DumpSchema =>
-        Dump.dump(session.db)
+        session match
+          case es: engine.Session => Dump.dump(es.db)
+          case _ => println("\\dump is only available in local mode")
         onDone(true)
       case MetaCommand.Copy(args) =>
         executeSql(s"COPY $args;") { onDone(true) }

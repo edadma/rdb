@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, ColumnMetadata, ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta}
+import io.github.edadma.petradb.{Result, ColumnMetadata}
+import io.github.edadma.petradb.engine.{ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta}
 
 import java.sql.{SQLFeatureNotSupportedException, SQLWarning, Savepoint}
 import java.util.Properties

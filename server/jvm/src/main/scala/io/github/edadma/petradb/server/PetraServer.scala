@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.server
 
-import io.github.edadma.petradb.{DB, DefaultPort}
+import io.github.edadma.petradb.DefaultPort
+import io.github.edadma.petradb.engine.DB
 import io.github.edadma.microserve.*
 
 class PetraServer(

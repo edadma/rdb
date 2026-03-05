@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait IntegrationTestBase extends AsyncFreeSpec with Matchers:
 
-  implicit override def executionContext: ExecutionContext = ExecutionContext.global
+  override given executionContext: ExecutionContext = ExecutionContext.global
 
   protected def startServer(): Future[(AnyRef, Int)]
   protected def stopServer(handle: AnyRef): Future[Unit]

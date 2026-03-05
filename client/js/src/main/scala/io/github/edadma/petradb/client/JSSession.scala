@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.client
 
-import io.github.edadma.petradb.*
+import io.github.edadma.petradb.{Session as _, *}
 import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, BigDecType}
 
 import scala.scalajs.js

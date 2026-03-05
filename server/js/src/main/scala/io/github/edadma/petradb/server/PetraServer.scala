@@ -3,7 +3,8 @@ package io.github.edadma.petradb.server
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.compiletime.uninitialized
-import io.github.edadma.petradb.{DB, DefaultPort}
+import io.github.edadma.petradb.DefaultPort
+import io.github.edadma.petradb.engine.DB
 
 class PetraServer(
   db: DB,

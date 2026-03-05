@@ -155,9 +155,9 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 // ── cli: SQL interactive shell ──────────────────────────────────────
 
-lazy val cli = crossProject(JVMPlatform, JSPlatform, NativePlatform)
+lazy val cli = crossProject(JSPlatform, NativePlatform)
   .in(file("cli"))
-  .dependsOn(engine)
+  .dependsOn(engine, client)
   .settings(
     name    := "petradb-cli",
     version := "1.2.0",
@@ -165,9 +165,6 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform, NativePlatform)
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
     publishLocal / skip := true,
-  )
-  .jvmSettings(
-    libraryDependencies += "org.jline" % "jline" % "3.29.0",
   )
   .jsSettings(
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
@@ -258,7 +255,7 @@ lazy val root = project
     shared.js, shared.jvm, shared.native,
     engine.js, engine.jvm, engine.native,
     client.js, client.jvm, client.native,
-    cli.js, cli.jvm, cli.native,
+    cli.js, cli.native,
     server.jvm, server.js,
     integration.jvm, integration.js,
     jdbc,

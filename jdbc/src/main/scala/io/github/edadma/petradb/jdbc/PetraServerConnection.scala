@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta, TextValue, BooleanValue, NumberValue, Codecs, ReferentialAction}
+import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, TextValue, BooleanValue, NumberValue, Codecs}
+import io.github.edadma.petradb.engine.{ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta, ReferentialAction}
 import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.{Session => ClientSession, SessionOptions}
 

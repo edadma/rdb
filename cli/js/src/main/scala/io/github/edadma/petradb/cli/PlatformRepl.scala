@@ -1,8 +1,15 @@
 package io.github.edadma.petradb.cli
 
-import io.github.edadma.petradb.Session
+import io.github.edadma.petradb
+import io.github.edadma.petradb.client
+import io.github.edadma.petradb.client.SessionOptions
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
+import scala.concurrent.ExecutionContext.Implicits.global
+
+def connectAndRun(options: SessionOptions, execute: Seq[String], file: Seq[String], stdin: Boolean): Unit =
+  val cs = new client.Session(options)
+  cs.connect().foreach(_ => Main.startRepl(cs, execute, file, stdin))
 
 @js.native
 @JSImport("readline", JSImport.Namespace)
@@ -14,7 +21,7 @@ private trait NodeReadlineInterface extends js.Object:
   def question(query: String, callback: js.Function1[String, Unit]): Unit = js.native
   def close(): Unit = js.native
 
-class PlatformRepl(session: Session) extends Repl(session):
+class PlatformRepl(session: petradb.Session) extends Repl(session):
   private lazy val rl = NodeReadlineModule.createInterface(
     js.Dynamic.literal(
       input = js.Dynamic.global.process.stdin,

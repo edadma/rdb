@@ -13,7 +13,7 @@ case class SessionOptions(
   password: Option[String] = None,
 )
 
-class Session(options: SessionOptions = SessionOptions()):
+class Session(options: SessionOptions = SessionOptions()) extends io.github.edadma.petradb.Session:
 
   private val baseUrl                   = s"http://${options.host}:${options.port}"
   private var sessionId: Option[String] = None
@@ -31,7 +31,7 @@ class Session(options: SessionOptions = SessionOptions()):
 
   private def baseHeaders: Map[String, String] = authHeader
 
-  def execute(sql: String)(implicit ec: ExecutionContext): Future[Seq[Result]] =
+  def execute(sql: String)(using ec: ExecutionContext): Future[Seq[Result]] =
     fetch(
       s"$baseUrl/sql",
       "POST",
@@ -44,7 +44,7 @@ class Session(options: SessionOptions = SessionOptions()):
         Future.failed(new RuntimeException(res.bodyAsString))
     }
 
-  def connect()(implicit ec: ExecutionContext): Future[String] =
+  def connect()(using ec: ExecutionContext): Future[String] =
     fetch(s"$baseUrl/session", "POST", headers = baseHeaders).flatMap { res =>
       if res.ok then
         val id = readBinary[Map[String, String]](res.body).apply("sessionId")
@@ -54,7 +54,7 @@ class Session(options: SessionOptions = SessionOptions()):
         Future.failed(new RuntimeException(s"Failed to create session: ${res.bodyAsString}"))
     }
 
-  def close()(implicit ec: ExecutionContext): Future[Unit] =
+  def close()(using ec: ExecutionContext): Future[Unit] =
     sessionId match
       case None => Future.unit
       case Some(id) =>

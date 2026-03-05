@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.*
+import io.github.edadma.petradb.{Session as _, *}
+import io.github.edadma.petradb.engine.*
 
 class PetraFileConnection(key: String, displayPath: String) extends AbstractConnection:
 
