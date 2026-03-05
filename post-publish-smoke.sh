@@ -401,54 +401,9 @@ SCALA
 fi
 
 
-# ── 7. Scala: JDBC driver ─────────────────────────────────────────────────────
+# ── 7. JDBC: fat jar from Maven Central ───────────────────────────────────────
 
-header "Scala: JDBC driver (petradb-jdbc:${JDBC_SCALA_VERSION})"
-
-SCALA_JDBC_DIR="$WORK/scala-jdbc"
-mkdir -p "$SCALA_JDBC_DIR/src/main/scala"
-mkdir -p "$SCALA_JDBC_DIR/project"
-
-echo "sbt.version=1.10.6" > "$SCALA_JDBC_DIR/project/build.properties"
-
-cat > "$SCALA_JDBC_DIR/build.sbt" <<SBT
-scalaVersion := "${SCALA_FULL_VERSION}"
-resolvers += Resolver.mavenCentral
-libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "${JDBC_SCALA_VERSION}"
-SBT
-
-cat > "$SCALA_JDBC_DIR/src/main/scala/Smoke.scala" <<'SCALA'
-import io.github.edadma.petradb.jdbc.PetraDriver
-
-@main def smoke(): Unit =
-  val conn = new PetraDriver().connect("jdbc:petradb:memory", new java.util.Properties())
-  val stmt = conn.createStatement()
-
-  stmt.executeUpdate("CREATE TABLE items (id SERIAL, name TEXT, price NUMERIC(10,2))")
-  stmt.executeUpdate("INSERT INTO items (name, price) VALUES ('Widget', 9.99)")
-  stmt.executeUpdate("INSERT INTO items (name, price) VALUES ('Gadget', 24.99)")
-
-  val rs = stmt.executeQuery("SELECT name, price FROM items ORDER BY name")
-  var names = List.empty[String]
-  while rs.next() do names = names :+ rs.getString("name")
-  assert(names == List("Gadget", "Widget"), s"Expected [Gadget, Widget], got $names")
-
-  val meta = conn.getMetaData
-  assert(meta.getDatabaseProductName() == "PetraDB", s"Bad product name: ${meta.getDatabaseProductName()}")
-
-  stmt.close()
-  conn.close()
-  println("OK")
-SCALA
-
-info "Running JDBC smoke test..."
-SCALA_JDBC_OUT=$(cd "$SCALA_JDBC_DIR" && sbt --no-colors "run" 2>&1 || true)
-check_output "JDBC: DDL, INSERT, SELECT, metadata" "OK" "$SCALA_JDBC_OUT"
-
-
-# ── 8. JDBC: DriverManager auto-discovery (fat jar from Maven Central) ────────
-
-header "JDBC: DriverManager ServiceLoader (fat jar)"
+header "JDBC: fat jar (petradb-jdbc:${JDBC_SCALA_VERSION})"
 
 JDBC_JAVA_DIR="$WORK/jdbc-java"
 mkdir -p "$JDBC_JAVA_DIR"
