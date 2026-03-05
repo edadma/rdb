@@ -421,6 +421,7 @@ cat > "$SCALA_JDBC_DIR/src/main/scala/Smoke.scala" <<'SCALA'
 import java.sql.DriverManager
 
 @main def smoke(): Unit =
+  Class.forName("io.github.edadma.petradb.jdbc.PetraDriver")
   val conn = DriverManager.getConnection("jdbc:petradb:memory")
   val stmt = conn.createStatement()
 
