@@ -28,6 +28,8 @@ java9-rt-ext-*/
 code.txt
 
 */npm/main.js
+*/npm/client.js
+cli/npm/bin/*.js
 
 node_modules/
 .vscode/
