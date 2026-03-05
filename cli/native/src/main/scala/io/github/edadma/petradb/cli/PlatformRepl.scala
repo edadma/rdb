@@ -1,15 +1,7 @@
 package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb
-import io.github.edadma.petradb.client
-import io.github.edadma.petradb.client.SessionOptions
 import io.github.edadma.readline
-import scala.concurrent.ExecutionContext
-
-def connectAndRun(options: SessionOptions, execute: Seq[String], file: Seq[String], stdin: Boolean): Unit =
-  given ExecutionContext = ExecutionContext.global
-  val cs = new client.Session(options)
-  cs.connect().foreach(_ => Main.startRepl(cs, execute, file, stdin))
 
 class PlatformRepl(session: petradb.Session) extends Repl(session):
   private val historyFile = System.getProperty("user.home") + "/.petradb_history"

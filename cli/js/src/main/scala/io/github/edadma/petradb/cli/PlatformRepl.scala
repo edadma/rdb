@@ -1,15 +1,8 @@
 package io.github.edadma.petradb.cli
 
 import io.github.edadma.petradb
-import io.github.edadma.petradb.client
-import io.github.edadma.petradb.client.SessionOptions
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
-import scala.concurrent.ExecutionContext.Implicits.global
-
-def connectAndRun(options: SessionOptions, execute: Seq[String], file: Seq[String], stdin: Boolean): Unit =
-  val cs = new client.Session(options)
-  cs.connect().foreach(_ => Main.startRepl(cs, execute, file, stdin))
 
 @js.native
 @JSImport("readline", JSImport.Namespace)

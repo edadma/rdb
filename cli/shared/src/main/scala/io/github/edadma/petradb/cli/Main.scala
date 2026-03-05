@@ -4,10 +4,15 @@ import mainargs.{main, arg, Flag, ParserForMethods}
 import io.github.edadma.petradb
 import io.github.edadma.petradb.*
 import io.github.edadma.petradb.engine.*
+import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.SessionOptions
 import io.github.edadma.cross_platform
 
+import scala.concurrent.ExecutionContext
+
 object Main:
+  given ExecutionContext = ExecutionContext.global
+
   @main
   def run(
       @arg(short = 'm', doc = "Use in-memory database")
@@ -31,8 +36,8 @@ object Main:
   ): Unit =
     host match
       case Some(h) =>
-        val options = SessionOptions(h, port.getOrElse(DefaultPort), user, password)
-        connectAndRun(options, execute, file, stdin.value)
+        val cs = new client.Session(SessionOptions(h, port.getOrElse(DefaultPort), user, password))
+        cs.connect().foreach(_ => startRepl(cs, execute, file, stdin.value))
       case None =>
         val db: DB =
           if memory.value || path.isEmpty then new MemoryDB
