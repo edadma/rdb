@@ -29,6 +29,7 @@ CLI_NPM_VERSION=$(node -p "require('./cli/npm/package.json').version")
 # Parse build.sbt for Scala versions
 ENGINE_SCALA_VERSION=$(awk '/name.*:=.*"petradb-engine"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 CLIENT_SCALA_VERSION=$(awk '/name.*:=.*"petradb-client"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
+JDBC_SCALA_VERSION=$(awk '/name.*:=.*"petradb-jdbc"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 SCALA_FULL_VERSION=$(awk '/ThisBuild.*scalaVersion/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ info "npm server  : @petradb/server@${SERVER_NPM_VERSION}"
 info "npm cli     : @petradb/cli@${CLI_NPM_VERSION}"
 info "scala engine: io.github.edadma:petradb-engine:${ENGINE_SCALA_VERSION}"
 info "scala client: io.github.edadma:petradb-client:${CLIENT_SCALA_VERSION}"
+info "scala jdbc  : io.github.edadma:petradb-jdbc:${JDBC_SCALA_VERSION}"
 info "scala ver   : ${SCALA_FULL_VERSION}"
 info "server port : ${PORT}"
 echo ""
@@ -397,6 +399,51 @@ SCALA
   SCALA_CLIENT_OUT=$(cd "$SCALA_CLIENT_DIR" && sbt --no-colors "run" 2>&1 || true)
   check_output "Network client: connect, DDL, INSERT, SELECT" "OK" "$SCALA_CLIENT_OUT"
 fi
+
+
+# ── 7. Scala: JDBC driver ─────────────────────────────────────────────────────
+
+header "Scala: JDBC driver (petradb-jdbc:${JDBC_SCALA_VERSION})"
+
+SCALA_JDBC_DIR="$WORK/scala-jdbc"
+mkdir -p "$SCALA_JDBC_DIR/src/main/scala"
+mkdir -p "$SCALA_JDBC_DIR/project"
+
+echo "sbt.version=1.10.6" > "$SCALA_JDBC_DIR/project/build.properties"
+
+cat > "$SCALA_JDBC_DIR/build.sbt" <<SBT
+scalaVersion := "${SCALA_FULL_VERSION}"
+resolvers += Resolver.mavenCentral
+libraryDependencies += "io.github.edadma" %% "petradb-jdbc" % "${JDBC_SCALA_VERSION}"
+SBT
+
+cat > "$SCALA_JDBC_DIR/src/main/scala/Smoke.scala" <<'SCALA'
+import java.sql.DriverManager
+
+@main def smoke(): Unit =
+  val conn = DriverManager.getConnection("jdbc:petradb:memory")
+  val stmt = conn.createStatement()
+
+  stmt.executeUpdate("CREATE TABLE items (id SERIAL, name TEXT, price NUMERIC(10,2))")
+  stmt.executeUpdate("INSERT INTO items (name, price) VALUES ('Widget', 9.99)")
+  stmt.executeUpdate("INSERT INTO items (name, price) VALUES ('Gadget', 24.99)")
+
+  val rs = stmt.executeQuery("SELECT name, price FROM items ORDER BY name")
+  var names = List.empty[String]
+  while rs.next() do names = names :+ rs.getString("name")
+  assert(names == List("Gadget", "Widget"), s"Expected [Gadget, Widget], got $names")
+
+  val meta = conn.getMetaData
+  assert(meta.getDatabaseProductName() == "PetraDB", s"Bad product name: ${meta.getDatabaseProductName()}")
+
+  stmt.close()
+  conn.close()
+  println("OK")
+SCALA
+
+info "Running JDBC smoke test..."
+SCALA_JDBC_OUT=$(cd "$SCALA_JDBC_DIR" && sbt --no-colors "run" 2>&1 || true)
+check_output "JDBC: DDL, INSERT, SELECT, metadata" "OK" "$SCALA_JDBC_OUT"
 
 
 # ── Summary ─────────────────────────────────────────────────────────────────────

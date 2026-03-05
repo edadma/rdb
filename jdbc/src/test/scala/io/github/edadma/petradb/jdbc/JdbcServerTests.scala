@@ -154,16 +154,32 @@ class JdbcServerTests extends AnyFreeSpec with Matchers:
     finally conn.close()
   }
 
-  "PetraDriver.connect parses server URL" in withServer { port =>
+  "PetraDriver acceptsURL" in withServer { port =>
     val driver = new PetraDriver()
     driver.acceptsURL(s"jdbc:petradb://localhost:$port") shouldBe true
-    driver.acceptsURL("jdbc:petradb:file::memory:")      shouldBe true
+    driver.acceptsURL("jdbc:petradb:memory")             shouldBe true
+    driver.acceptsURL("jdbc:petradb:file:/tmp/test.db")  shouldBe true
     driver.acceptsURL("jdbc:other://host")               shouldBe false
-    val conn = driver.connect(s"jdbc:petradb://localhost:$port", new java.util.Properties())
+  }
+
+  "PetraDriver.connect server URL" in withServer { port =>
+    val conn = new PetraDriver().connect(s"jdbc:petradb://localhost:$port", new java.util.Properties())
     try
       val rs = conn.createStatement().executeQuery("SELECT 1 AS x")
       rs.next() shouldBe true
       rs.getInt("x") shouldBe 1
+    finally conn.close()
+  }
+
+  "PetraDriver.connect memory URL" in {
+    val conn = new PetraDriver().connect("jdbc:petradb:memory", new java.util.Properties())
+    try
+      val stmt = conn.createStatement()
+      stmt.executeUpdate("CREATE TABLE t (x INT)")
+      stmt.executeUpdate("INSERT INTO t VALUES (42)")
+      val rs = stmt.executeQuery("SELECT x FROM t")
+      rs.next() shouldBe true
+      rs.getInt("x") shouldBe 42
     finally conn.close()
   }
 

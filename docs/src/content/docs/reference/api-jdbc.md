@@ -10,7 +10,7 @@ PetraDB includes a JDBC 4 driver for JVM applications. The driver registers itse
 ### In-Memory
 
 ```java
-Connection conn = DriverManager.getConnection("jdbc:petradb:file::memory:");
+Connection conn = DriverManager.getConnection("jdbc:petradb:memory");
 ```
 
 Each connection creates an isolated in-memory database.
@@ -36,7 +36,7 @@ Properties props = new Properties();
 props.setProperty("user", "username");
 props.setProperty("password", "password");
 
-Connection conn = DriverManager.getConnection("jdbc:petradb://localhost:5432", props);
+Connection conn = DriverManager.getConnection("jdbc:petradb://localhost:5480", props);
 ```
 
 ## Statements
