@@ -28,6 +28,7 @@ src/content/docs/
 │   ├── cli.md
 │   ├── client.md
 │   ├── javascript.md
+│   ├── knex.md
 │   ├── scala.md
 │   └── server.md
 └── reference/

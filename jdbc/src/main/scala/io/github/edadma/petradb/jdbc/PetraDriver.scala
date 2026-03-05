@@ -5,9 +5,10 @@ import java.util.Properties
 import java.util.logging.Logger
 
 class PetraDriver extends java.sql.Driver:
+  PetraDriver.ensureRegistered(this)
 
   def acceptsURL(url: String): Boolean =
-    url != null && (url.startsWith("jdbc:petradb://") || url.startsWith("jdbc:petradb:file:"))
+    url != null && (url.startsWith("jdbc:petradb://") || url.startsWith("jdbc:petradb:file:") || url == "jdbc:petradb:memory")
 
   def connect(url: String, info: Properties): java.sql.Connection =
     if !acceptsURL(url) then return null
@@ -24,11 +25,12 @@ class PetraDriver extends java.sql.Driver:
       val username = Option(props.getProperty("user")).getOrElse("")
       val password = Option(props.getProperty("password")).getOrElse("")
       new PetraServerConnection(host, port, username, password)
+    else if url == "jdbc:petradb:memory" then
+      val key = s"memory:${java.util.UUID.randomUUID()}"
+      new PetraFileConnection(key, ":memory:")
     else
       val path = url.stripPrefix("jdbc:petradb:file:")
-      val key =
-        if path == ":memory:" then s"memory:${java.util.UUID.randomUUID()}"
-        else new java.io.File(path).getCanonicalPath
+      val key  = new java.io.File(path).getCanonicalPath
       new PetraFileConnection(key, path)
 
   def getPropertyInfo(url: String, info: Properties): Array[java.sql.DriverPropertyInfo] = Array.empty
@@ -39,4 +41,8 @@ class PetraDriver extends java.sql.Driver:
   def getParentLogger(): Logger = throw java.sql.SQLFeatureNotSupportedException()
 
 object PetraDriver:
-  java.sql.DriverManager.registerDriver(new PetraDriver())
+  @volatile private var registered = false
+  def ensureRegistered(instance: PetraDriver): Unit =
+    if !registered then
+      registered = true
+      java.sql.DriverManager.registerDriver(instance)

@@ -29,6 +29,7 @@ CLI_NPM_VERSION=$(node -p "require('./cli/npm/package.json').version")
 # Parse build.sbt for Scala versions
 ENGINE_SCALA_VERSION=$(awk '/name.*:=.*"petradb-engine"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 CLIENT_SCALA_VERSION=$(awk '/name.*:=.*"petradb-client"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
+JDBC_SCALA_VERSION=$(awk '/name.*:=.*"petradb-jdbc"/{found=1} found && /version.*:=/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 SCALA_FULL_VERSION=$(awk '/ThisBuild.*scalaVersion/{split($0, a, "\""); print a[2]; exit}' build.sbt)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ info "npm server  : @petradb/server@${SERVER_NPM_VERSION}"
 info "npm cli     : @petradb/cli@${CLI_NPM_VERSION}"
 info "scala engine: io.github.edadma:petradb-engine:${ENGINE_SCALA_VERSION}"
 info "scala client: io.github.edadma:petradb-client:${CLIENT_SCALA_VERSION}"
+info "scala jdbc  : io.github.edadma:petradb-jdbc:${JDBC_SCALA_VERSION}"
 info "scala ver   : ${SCALA_FULL_VERSION}"
 info "server port : ${PORT}"
 echo ""
@@ -315,7 +317,7 @@ libraryDependencies += "io.github.edadma" %% "petradb-engine" % "${ENGINE_SCALA_
 SBT
 
 cat > "$SCALA_ENGINE_DIR/src/main/scala/Smoke.scala" <<'SCALA'
-import io.github.edadma.petradb.*
+import io.github.edadma.petradb.{Session as _, *}
 import io.github.edadma.petradb.engine.*
 
 @main def smoke(): Unit =
@@ -396,6 +398,50 @@ SCALA
   info "Running Scala client smoke test..."
   SCALA_CLIENT_OUT=$(cd "$SCALA_CLIENT_DIR" && sbt --no-colors "run" 2>&1 || true)
   check_output "Network client: connect, DDL, INSERT, SELECT" "OK" "$SCALA_CLIENT_OUT"
+fi
+
+
+# ── 7. JDBC: fat jar from Maven Central ───────────────────────────────────────
+
+header "JDBC: fat jar (petradb-jdbc:${JDBC_SCALA_VERSION})"
+
+JDBC_JAVA_DIR="$WORK/jdbc-java"
+mkdir -p "$JDBC_JAVA_DIR"
+
+JDBC_JAR_URL="https://repo1.maven.org/maven2/io/github/edadma/petradb-jdbc/${JDBC_SCALA_VERSION}/petradb-jdbc-${JDBC_SCALA_VERSION}.jar"
+FAT_JAR="$JDBC_JAVA_DIR/petradb-jdbc.jar"
+
+info "Downloading petradb-jdbc-${JDBC_SCALA_VERSION}.jar from Maven Central..."
+HTTP_CODE=$(curl -s -o "$FAT_JAR" -w "%{http_code}" "$JDBC_JAR_URL" 2>&1 || true)
+
+if [[ "$HTTP_CODE" != "200" || ! -s "$FAT_JAR" ]]; then
+  fail "Failed to download fat jar (HTTP $HTTP_CODE)"
+  info "URL: $JDBC_JAR_URL"
+else
+  cat > "$JDBC_JAVA_DIR/JdbcSmoke.java" <<'JAVA'
+import java.sql.*;
+
+public class JdbcSmoke {
+    public static void main(String[] args) throws Exception {
+        // No Class.forName — rely on ServiceLoader auto-discovery
+        Connection conn = DriverManager.getConnection("jdbc:petradb:memory");
+        Statement stmt = conn.createStatement();
+        stmt.executeUpdate("CREATE TABLE t (id SERIAL, v TEXT)");
+        stmt.executeUpdate("INSERT INTO t (v) VALUES ('hello')");
+        ResultSet rs = stmt.executeQuery("SELECT v FROM t");
+        rs.next();
+        String val_ = rs.getString("v");
+        if (!"hello".equals(val_)) throw new RuntimeException("Expected hello, got " + val_);
+        stmt.close();
+        conn.close();
+        System.out.println("OK");
+    }
+}
+JAVA
+
+  info "Compiling and running with java -cp (no Class.forName)..."
+  JAVA_OUT=$(cd "$JDBC_JAVA_DIR" && javac -cp "$FAT_JAR" JdbcSmoke.java && java -cp ".:$FAT_JAR" JdbcSmoke 2>&1 || true)
+  check_output "DriverManager auto-discovers PetraDriver via ServiceLoader" "OK" "$JAVA_OUT"
 fi
 
 

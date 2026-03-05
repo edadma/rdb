@@ -19,6 +19,17 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
   private def petraConn()  = new PetraFileConnection(new java.io.File(tmpPetra).getCanonicalPath, tmpPetra)
   private def ptxtConn()   = new PetraFileConnection(new java.io.File(tmpPtxt).getCanonicalPath, tmpPtxt)
 
+  "PetraDriver.connect file URL" in:
+    val conn = new PetraDriver().connect(s"jdbc:petradb:file:$tmpPetra", new java.util.Properties())
+    try
+      val stmt = conn.createStatement()
+      stmt.executeUpdate("CREATE TABLE t (x INT)")
+      stmt.executeUpdate("INSERT INTO t VALUES (7)")
+      val rs = stmt.executeQuery("SELECT x FROM t")
+      rs.next() shouldBe true
+      rs.getInt("x") shouldBe 7
+    finally conn.close()
+
   "in-memory: connect and close" in:
     val conn = memConn()
     conn.isClosed shouldBe false
