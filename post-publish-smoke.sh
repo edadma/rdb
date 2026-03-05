@@ -315,7 +315,7 @@ libraryDependencies += "io.github.edadma" %% "petradb-engine" % "${ENGINE_SCALA_
 SBT
 
 cat > "$SCALA_ENGINE_DIR/src/main/scala/Smoke.scala" <<'SCALA'
-import io.github.edadma.petradb.*
+import io.github.edadma.petradb.{Session as _, *}
 import io.github.edadma.petradb.engine.*
 
 @main def smoke(): Unit =
