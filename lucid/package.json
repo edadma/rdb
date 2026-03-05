@@ -1,0 +1,49 @@
+{
+  "name": "@petradb/lucid",
+  "version": "1.0.0",
+  "description": "AdonisJS Lucid ORM driver for PetraDB",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@adonisjs/lucid": ">=22.0.0",
+    "@petradb/engine": ">=1.2.0",
+    "@petradb/knex": ">=1.2.0"
+  },
+  "devDependencies": {
+    "@adonisjs/lucid": "^22.0.0",
+    "@petradb/engine": "file:../engine/npm",
+    "@petradb/knex": "file:../knex/npm",
+    "knex": "^3.1.0",
+    "typescript": "^5.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": [
+    "adonisjs",
+    "lucid",
+    "petradb",
+    "SQL",
+    "database",
+    "orm"
+  ],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC",
+  "homepage": "https://petradb.dev"
+}
