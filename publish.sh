@@ -12,8 +12,8 @@ case "$1" in
     ;;
   client)
     MODULE=clientJS
-    SRC="client/js/target/scala-${SCALA_VERSION}/petradb-client-opt/main.js"
-    DEST="client/npm/main.js"
+    SRC="client/js/target/scala-${SCALA_VERSION}/petradb-client-opt/client.js"
+    DEST="client/npm/client.js"
     PKG_DIR="client/npm"
     ;;
   cli)
