@@ -414,7 +414,7 @@ echo "sbt.version=1.10.6" > "$SCALA_JDBC_DIR/project/build.properties"
 cat > "$SCALA_JDBC_DIR/build.sbt" <<SBT
 scalaVersion := "${SCALA_FULL_VERSION}"
 resolvers += Resolver.mavenCentral
-libraryDependencies += "io.github.edadma" %% "petradb-jdbc" % "${JDBC_SCALA_VERSION}"
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "${JDBC_SCALA_VERSION}"
 SBT
 
 cat > "$SCALA_JDBC_DIR/src/main/scala/Smoke.scala" <<'SCALA'
@@ -446,21 +446,23 @@ SCALA_JDBC_OUT=$(cd "$SCALA_JDBC_DIR" && sbt --no-colors "run" 2>&1 || true)
 check_output "JDBC: DDL, INSERT, SELECT, metadata" "OK" "$SCALA_JDBC_OUT"
 
 
-# ── 8. JDBC: DriverManager auto-discovery ─────────────────────────────────────
+# ── 8. JDBC: DriverManager auto-discovery (fat jar from Maven Central) ────────
 
 header "JDBC: DriverManager ServiceLoader (fat jar)"
 
-info "Building fat jar with sbt jdbc/assembly..."
-ASSEMBLY_OUT=$(cd /home/eam/dev/petradb && sbt --no-colors jdbc/assembly 2>&1 || true)
-FAT_JAR="/home/eam/dev/petradb/jdbc/target/scala-${SCALA_FULL_VERSION}/petradb-jdbc.jar"
+JDBC_JAVA_DIR="$WORK/jdbc-java"
+mkdir -p "$JDBC_JAVA_DIR"
 
-if [[ ! -f "$FAT_JAR" ]]; then
-  fail "Fat jar not found at $FAT_JAR"
-  echo "$ASSEMBLY_OUT" | tail -10 | sed 's/^/      /'
+JDBC_JAR_URL="https://repo1.maven.org/maven2/io/github/edadma/petradb-jdbc/${JDBC_SCALA_VERSION}/petradb-jdbc-${JDBC_SCALA_VERSION}.jar"
+FAT_JAR="$JDBC_JAVA_DIR/petradb-jdbc.jar"
+
+info "Downloading petradb-jdbc-${JDBC_SCALA_VERSION}.jar from Maven Central..."
+HTTP_CODE=$(curl -s -o "$FAT_JAR" -w "%{http_code}" "$JDBC_JAR_URL" 2>&1 || true)
+
+if [[ "$HTTP_CODE" != "200" || ! -s "$FAT_JAR" ]]; then
+  fail "Failed to download fat jar (HTTP $HTTP_CODE)"
+  info "URL: $JDBC_JAR_URL"
 else
-  JDBC_JAVA_DIR="$WORK/jdbc-java"
-  mkdir -p "$JDBC_JAVA_DIR"
-
   cat > "$JDBC_JAVA_DIR/JdbcSmoke.java" <<'JAVA'
 import java.sql.*;
 

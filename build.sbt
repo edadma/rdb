@@ -221,9 +221,22 @@ lazy val jdbc = project
       case PathList("META-INF", _*)             => MergeStrategy.discard
       case _                                    => MergeStrategy.first
     },
+    // Publish fat jar: no Scala suffix, no transitive deps
+    crossVersion           := CrossVersion.disabled,
+    Compile / packageBin   := assembly.value,
     publishMavenStyle      := true,
     publishTo              := sonatypePublishToBundle.value,
     Test / publishArtifact := false,
+    pomPostProcess := { node =>
+      import scala.xml._
+      import scala.xml.transform._
+      new RuleTransformer(new RewriteRule {
+        override def transform(n: Node): Seq[Node] = n match {
+          case e: Elem if e.label == "dependencies" => NodeSeq.Empty
+          case other                                => other
+        }
+      }).transform(node).head
+    },
   )
 
 // ── integration: end-to-end client + server tests ───────────────────

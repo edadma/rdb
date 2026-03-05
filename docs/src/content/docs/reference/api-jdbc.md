@@ -3,7 +3,30 @@ title: JDBC
 description: JDBC driver reference for PetraDB.
 ---
 
-PetraDB includes a JDBC 4 driver for JVM applications. The driver registers itself automatically via the Java ServiceLoader mechanism.
+PetraDB includes a JDBC 4 driver for JVM applications. The driver registers itself automatically via the Java ServiceLoader mechanism. It ships as a single fat jar with no transitive dependencies.
+
+## Installation
+
+**Maven:**
+```xml
+<dependency>
+    <groupId>io.github.edadma</groupId>
+    <artifactId>petradb-jdbc</artifactId>
+    <version>1.2.5</version>
+</dependency>
+```
+
+**Gradle:**
+```groovy
+implementation 'io.github.edadma:petradb-jdbc:1.2.5'
+```
+
+**sbt:**
+```scala
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.2.5"
+```
+
+Or download the jar directly from [Maven Central](https://central.sonatype.com/artifact/io.github.edadma/petradb-jdbc).
 
 ## Connection Modes
 
