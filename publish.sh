@@ -18,10 +18,11 @@ case "$1" in
     ;;
   cli)
     MODULE=cliJS
-    SRC_DIR="cli/js/target/scala-${SCALA_VERSION}/petradb-cli-opt"
+    SRC_DIR="cli/js/target/scala-${SCALA_VERSION}/petradb-cli-fastopt"
     DEST_DIR="cli/npm/bin"
     PKG_DIR="cli/npm"
     MULTI=true
+    LINK_TASK=fastLinkJS
     ;;
   server)
     MODULE=serverJS
@@ -35,8 +36,9 @@ case "$1" in
     ;;
 esac
 
-echo "==> Building ${MODULE}/fullLinkJS..."
-sbt ${MODULE}/fullLinkJS
+LINK_TASK="${LINK_TASK:-fullLinkJS}"
+echo "==> Building ${MODULE}/${LINK_TASK}..."
+sbt ${MODULE}/${LINK_TASK}
 
 echo "==> Copying artifact..."
 if [ "$MULTI" = "true" ]; then
