@@ -85,6 +85,16 @@ export interface RollbackResult {
     command: 'rollback';
 }
 
+export interface ExplainResult {
+    command: 'explain';
+    plan: string;
+}
+
+export interface CopyResult {
+    command: 'copy';
+    rowCount: number;
+}
+
 export interface InsertResult {
     command: 'insert';
     result: Record<string, any>;
@@ -127,7 +137,9 @@ export type ExecuteResult =
     | DeallocateResult
     | BeginResult
     | CommitResult
-    | RollbackResult;
+    | RollbackResult
+    | ExplainResult
+    | CopyResult;
 
 export interface PreparedStatement {
     execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>;
