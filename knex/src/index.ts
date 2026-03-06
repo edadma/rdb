@@ -347,6 +347,32 @@ class QueryCompiler_PetraDB extends QueryCompilerBase {
     };
   }
 
+  columnInfo() {
+    const column = this.single.columnInfo;
+    const table = this.client.customWrapIdentifier(this.single.table, (v: string) => v);
+
+    return {
+      sql: `SHOW COLUMNS FROM "${table}"`,
+      output(resp: any) {
+        const rows = resp.rows || resp;
+        const out = rows.reduce((columns: any, val: any) => {
+          let type = val.type || "";
+          const maxLengthMatch = type.match(/.*\((\d+)\)/);
+          const maxLength = maxLengthMatch ? maxLengthMatch[1] : null;
+          if (maxLength) type = type.split("(")[0];
+          columns[val.name] = {
+            type: type.toLowerCase(),
+            maxLength,
+            nullable: !val.required,
+            defaultValue: val.default_value || null,
+          };
+          return columns;
+        }, {});
+        return (column && out[column]) || out;
+      },
+    };
+  }
+
   _returning(value: any) {
     return value ? ` returning ${this.formatter.columnize(value)}` : "";
   }

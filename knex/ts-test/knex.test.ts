@@ -12,7 +12,7 @@ const npmDir = path.resolve(
 const require = createRequire(path.join(npmDir, "index.js"));
 const Knex = require("knex");
 
-const { default: PetraDBClient } = await import("../npm/src/index.ts");
+const { default: PetraDBClient } = await import("../src/index.ts");
 
 function createKnex() {
   return Knex({
@@ -105,6 +105,28 @@ describe("Knex PetraDB dialect", () => {
 
     it("dropTableIfExists does not throw for missing table", async () => {
       await knex.schema.dropTableIfExists("never_existed");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Column info
+  // -----------------------------------------------------------------------
+  describe("columnInfo", () => {
+    it("returns info for all columns in a table", async () => {
+      const info = await knex("users").columnInfo();
+      assert.ok(info.id);
+      assert.ok(info.name);
+      assert.ok(info.age);
+      // id is serial (NOT NULL implied), name/age are nullable by default in knex
+      assert.equal(info.id.nullable, false);
+      assert.equal(info.age.nullable, true);
+      assert.equal(typeof info.name.type, "string");
+    });
+
+    it("returns info for a single column", async () => {
+      const info = await knex("users").columnInfo("name");
+      assert.equal(typeof info.type, "string");
+      assert.ok("nullable" in info);
     });
   });
 
