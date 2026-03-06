@@ -30,25 +30,40 @@ case "$1" in
     DEST="server/npm/bin/main.js"
     PKG_DIR="server/npm"
     ;;
+  knex)
+    PKG_DIR="knex"
+    TS_ONLY=true
+    ;;
+  lucid)
+    PKG_DIR="lucid"
+    TS_ONLY=true
+    ;;
   *)
-    echo "Usage: ./publish.sh <engine|client|cli|server> [--publish]"
+    echo "Usage: ./publish.sh <engine|client|cli|server|knex|lucid> [--publish]"
     exit 1
     ;;
 esac
 
-LINK_TASK="${LINK_TASK:-fullLinkJS}"
-echo "==> Building ${MODULE}/${LINK_TASK}..."
-sbt ${MODULE}/${LINK_TASK}
-
-echo "==> Copying artifact..."
-if [ "$MULTI" = "true" ]; then
-  cp "$SRC_DIR"/*.js "$DEST_DIR/"
+if [ "$TS_ONLY" = "true" ]; then
+  echo "==> Building TypeScript..."
+  cd "$PKG_DIR"
+  npx tsc
 else
-  cp "$SRC" "$DEST"
+  LINK_TASK="${LINK_TASK:-fullLinkJS}"
+  echo "==> Building ${MODULE}/${LINK_TASK}..."
+  sbt ${MODULE}/${LINK_TASK}
+
+  echo "==> Copying artifact..."
+  if [ "$MULTI" = "true" ]; then
+    cp "$SRC_DIR"/*.js "$DEST_DIR/"
+  else
+    cp "$SRC" "$DEST"
+  fi
+
+  cd "$PKG_DIR"
 fi
 
 echo "==> Package contents:"
-cd "$PKG_DIR"
 npm pack --dry-run
 
 if [ "$2" = "--publish" ]; then

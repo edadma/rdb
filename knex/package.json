@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@adonisjs/lucid": "^22.0.0",
-    "@petradb/engine": "file:../../engine/npm",
+    "@petradb/engine": "file:../engine/npm",
     "knex": "^3.1.0",
     "luxon": "^3.7.2",
     "typescript": "^5.9.3"
