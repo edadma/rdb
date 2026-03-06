@@ -53,6 +53,19 @@ function patch() {
 
   // PetraDB is an in-process engine — no read/write replicas, no dynamic
   // connection patching needed. Skip patchKnex for petradb connections.
+  // 4. Default disableTransactions for migrations (PetraDB doesn't support DDL
+  //    inside transactions, same as SQLite)
+  const originalConnect = Connection.prototype.connect;
+  Connection.prototype.connect = function () {
+    if (this.clientName === "petradb") {
+      this.config.migrations = Object.assign(
+        { disableTransactions: true },
+        this.config.migrations
+      );
+    }
+    return originalConnect.call(this);
+  };
+
   const originalSetupWriteConnection = Connection.prototype.setupWriteConnection;
   Connection.prototype.setupWriteConnection = function () {
     if (this.clientName === "petradb") {
