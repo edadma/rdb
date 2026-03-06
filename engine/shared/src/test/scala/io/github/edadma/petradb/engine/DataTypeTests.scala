@@ -3,6 +3,7 @@ package io.github.edadma.petradb.engine
 import io.github.edadma.petradb.{Session as _, *}
 
 import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType}
+import java.time.LocalDateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -175,6 +176,114 @@ class DataTypeTests extends AnyFreeSpec with Matchers with Testing {
       )
 
       table.data.length shouldBe 1
+    }
+
+    "parses ISO 8601 with Z suffix" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15T10:30:00Z');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0))
+    }
+
+    "parses ISO 8601 with +00:00 offset" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15T10:30:00+00:00');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0))
+    }
+
+    "parses ISO 8601 with positive timezone offset, strips zone" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15T10:30:00+05:30');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0))
+    }
+
+    "parses ISO 8601 with negative timezone offset, strips zone" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15T10:30:00-04:00');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0))
+    }
+
+    "parses ISO 8601 with milliseconds" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15T10:30:00.123');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0, 123000000))
+    }
+
+    "parses ISO 8601 with milliseconds and timezone offset" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2026-03-06T21:04:30.125+00:00');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2026, 3, 6, 21, 4, 30, 125000000))
+    }
+
+    "parses date-only string as midnight timestamp" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 0, 0, 0))
+    }
+
+    "parses space-separated timestamp with timezone offset" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15 10:30:00+00:00');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0))
+    }
+
+    "parses space-separated timestamp with milliseconds and timezone" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val TIMESTAMP);
+          |INSERT INTO t (val) VALUES ('2024-01-15 10:30:00.456+05:30');
+          |SELECT val FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe TimestampValue(LocalDateTime.of(2024, 1, 15, 10, 30, 0, 456000000))
     }
   }
 

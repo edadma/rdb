@@ -325,4 +325,10 @@ private def parseTimestamp(s: String): LocalDateTime =
       try LocalDateTime.parse(s, spaceTimestampFormat)
       catch
         case _: DateTimeParseException =>
-          LocalDate.parse(s).atStartOfDay
+          try OffsetDateTime.parse(s).toLocalDateTime
+          catch
+            case _: DateTimeParseException =>
+              try OffsetDateTime.parse(s.replaceFirst(" ", "T")).toLocalDateTime
+              catch
+                case _: DateTimeParseException =>
+                  LocalDate.parse(s).atStartOfDay
