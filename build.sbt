@@ -159,7 +159,7 @@ lazy val cli = crossProject(JSPlatform, NativePlatform)
   .dependsOn(engine, client)
   .settings(
     name    := "petradb-cli",
-    version := "1.2.2",
+    version := "1.2.3",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
