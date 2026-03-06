@@ -623,6 +623,9 @@ object SQLParser:
 
   // ── Star ───────────────────────────────────────────────────────────
 
+  private def qualifiedStar[p: P]: P[Expr] =
+    P(Idx ~ identifier ~ "." ~ "*").map((loc, t) => pos(loc, TableStarExpr(t)))
+
   private def star[p: P]: P[Expr] =
     P(Idx ~ "*").map(loc => pos(loc, StarExpr()))
 
@@ -670,10 +673,11 @@ object SQLParser:
 
   // ── SELECT expressions ─────────────────────────────────────────────
 
-  // selectExpression: star | expression [IS [NOT] NULL|TRUE|FALSE|UNKNOWN] [AS alias]
+  // selectExpression: qualifiedStar | star | expression [IS [NOT] NULL|TRUE|FALSE|UNKNOWN] [AS alias]
   private def selectExpression[p: P]: P[Expr] =
     P(
-      star
+      qualifiedStar
+      | star
       | (expression ~ isNull.? ~ (kw("as").? ~ identifier).?).map {
           case (e, Some(n), None) => UnaryExpr(n, e).setPos(e.pos).asInstanceOf[Expr]
           case (e, Some(n), Some(a)) =>

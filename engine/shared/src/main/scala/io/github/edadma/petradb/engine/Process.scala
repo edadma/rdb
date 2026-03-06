@@ -107,7 +107,16 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
       }
 
 case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Process:
-  private val ctx = Seq(input.meta)
+  private val metaCtx = Seq(input.meta)
+
+  // Expand TableStarExpr into individual ColumnExpr for each column of the named table
+  private val expandedFields: IndexedSeq[Expr] = fields.flatMap {
+    case ts @ TableStarExpr(Ident(tableName)) =>
+      val matching = input.meta.columns.filter(c => c.table.contains(tableName))
+      if matching.isEmpty then throw UndefinedReferenceException(ts.pos, s"table '$tableName' not found in FROM clause")
+      matching.map(c => ColumnExpr(Some(Ident(tableName)), Ident(c.name)).setPos(ts.pos))
+    case other => IndexedSeq(other)
+  }
 
   @tailrec
   private def lookup(name: String, ctx: Seq[Metadata]): Option[(Type, Option[String])] =
@@ -119,12 +128,12 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Proc
           case Some((_, typ, tab)) => Some((typ, tab))
 
   val meta: Metadata =
-    Metadata(fields.zipWithIndex map {
+    Metadata(expandedFields.zipWithIndex map {
       case (AliasExpr(expr, alias), _)             => ColumnMetadata(None, alias.name, expr.typ)
       case (c @ ColumnExpr(table, Ident(name)), _) =>
         val lookupName = table.map(t => s"${t.name}.$name").getOrElse(name)
 
-        lookup(lookupName, ctx) match
+        lookup(lookupName, metaCtx) match
           case None             => throw UndefinedReferenceException(c.pos, s"'$lookupName' not found")
           case Some((typ, tab)) => ColumnMetadata(tab, name, typ)
       case (expr: Expr, _) => ColumnMetadata(None, exprToSQL(expr), expr.typ)
@@ -134,7 +143,7 @@ case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Proc
     input
       .iterator(ctx)
       .map(row =>
-        val projected = fields.map(f => eval(f, row +: ctx))
+        val projected = expandedFields.map(f => eval(f, row +: ctx))
         Row(projected, meta, None, None),
       )
 
