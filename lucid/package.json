@@ -1,7 +1,7 @@
 {
-  "name": "@petradb/knex",
+  "name": "@petradb/lucid",
   "version": "1.2.0",
-  "description": "Knex.js dialect for PetraDB",
+  "description": "AdonisJS Lucid ORM driver for PetraDB",
   "type": "module",
   "exports": {
     ".": {
@@ -20,12 +20,14 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
+    "@adonisjs/lucid": ">=22.0.0",
     "@petradb/engine": ">=1.2.0",
-    "knex": ">=2.0.0"
+    "@petradb/knex": ">=1.2.0"
   },
   "devDependencies": {
     "@adonisjs/lucid": "^22.0.0",
-    "@petradb/engine": "file:../../engine/npm",
+    "@petradb/engine": "file:../engine/npm",
+    "@petradb/knex": "file:../knex",
     "knex": "^3.1.0",
     "luxon": "^3.7.2",
     "typescript": "^5.9.0"
@@ -35,11 +37,12 @@
     "url": "git+https://github.com/edadma/petradb.git"
   },
   "keywords": [
-    "knex",
+    "adonisjs",
+    "lucid",
     "petradb",
     "SQL",
     "database",
-    "dialect"
+    "orm"
   ],
   "author": "Edward A. Maxedon, Sr.",
   "license": "ISC",

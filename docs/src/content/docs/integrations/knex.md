@@ -8,7 +8,7 @@ PetraDB provides a [Knex.js](https://knexjs.org) dialect via the `@petradb/knex`
 ## Install
 
 ```bash
-npm install @petradb/knex @petradb/engine knex
+npm install @petradb/knex knex
 ```
 
 ## Setup

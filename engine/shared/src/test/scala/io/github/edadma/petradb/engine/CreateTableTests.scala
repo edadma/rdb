@@ -345,6 +345,20 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
       ) should include("CreateTableResult(\"categories\")")
     }
 
+    "key as column name (not reserved in PostgreSQL)" in {
+      test(
+        """
+          |CREATE TABLE kv_store (
+          | id SERIAL PRIMARY KEY,
+          | key TEXT NOT NULL,
+          | value TEXT
+          |);
+          |INSERT INTO kv_store (key, value) VALUES ('host', 'localhost');
+          |SELECT key, value FROM kv_store;
+          |""".trim.stripMargin
+      ) should include("host")
+    }
+
     "constraint validation" in {
       test(
         """

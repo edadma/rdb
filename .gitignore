@@ -34,3 +34,5 @@ cli/npm/bin/*.js
 node_modules/
 .vscode/
 */npm/dist/
+knex/dist/
+lucid/dist/
