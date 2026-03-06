@@ -111,7 +111,6 @@ object SQLParser:
     "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
     "indexes", "intersect", "interval", "into", "is",
     "join", "json", "jsonb",
-    "key", "keys",
     "last", "lateral", "left", "like", "limit",
     "no", "not", "nothing", "null", "nulls", "numeric",
     "offset", "on", "or", "order", "outer", "overlay", "overlaps",
