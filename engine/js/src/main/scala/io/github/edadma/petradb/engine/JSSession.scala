@@ -51,6 +51,12 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
       case ArrayValue(elems)           => elems map toJS toJSArray
       case ObjectValue(properties)     => (properties map { case (k, v) => k -> toJS(v) } toMap) toJSDictionary
       case TimestampValue(t)           => new js.Date(t.toString)
+      case DateValue(d)                => new js.Date(d.toString)
+      case TimeValue(t)                => t.toString
+      case TimestampTZValue(t)         => new js.Date(t.toString)
+      case TimeTZValue(t)              => t.toString
+      case IntervalValue(d)            => v.string
+      case ByteaValue(data)            => data.toJSArray
 
   private def fromJS(v: js.Any): Value =
     if v == null || js.isUndefined(v) then NullValue()
@@ -73,6 +79,12 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
       case BooleanType       => "boolean"
       case UUIDType          => "uuid"
       case TimestampType     => "timestamp"
+      case DateType          => "date"
+      case TimeType          => "time"
+      case TimestampTZType   => "timestamptz"
+      case TimeTZType        => "timetz"
+      case IntervalType      => "interval"
+      case ByteaType         => "bytea"
       case JSONType          => "json"
       case ArrayType         => "array"
       case _: EnumType       => "enum"

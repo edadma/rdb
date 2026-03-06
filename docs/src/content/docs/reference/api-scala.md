@@ -8,7 +8,7 @@ description: Scala API reference for PetraDB.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.5"
 ```
 
 ## Package Structure
