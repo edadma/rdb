@@ -69,6 +69,37 @@ class ParameterCoercionTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "comparing TIMESTAMP column to text parameter" - {
+    "equality" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id SERIAL, ts TIMESTAMP);
+          |INSERT INTO t (ts) VALUES ('2026-03-06 10:30:00');
+          |PREPARE q AS SELECT id FROM t WHERE ts = $1;
+          |EXECUTE q ('2026-03-06T10:30:00');
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe NumberValue(1)
+    }
+
+    "greater than or equal with ISO string" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id SERIAL, ts TIMESTAMP);
+          |INSERT INTO t (ts) VALUES ('2026-01-01 00:00:00'), ('2026-06-15 12:00:00'), ('2026-12-31 23:59:59');
+          |PREPARE q AS SELECT id FROM t WHERE ts >= $1 ORDER BY id;
+          |EXECUTE q ('2026-06-15T00:00:00');
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(2)
+      table.data(1).data(0) shouldBe NumberValue(3)
+    }
+  }
+
   "comparison operators with coercion" - {
     "less than" in {
       val table = query(

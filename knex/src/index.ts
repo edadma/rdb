@@ -443,11 +443,18 @@ class PetraDBClient extends ClientBase {
     });
   }
 
+  _sanitizeBindings(bindings: any[]) {
+    return bindings.map((val) => {
+      if (val instanceof Date) return val.toISOString();
+      return val;
+    });
+  }
+
   async _query(connection: any, obj: any) {
     if (!obj.sql) throw new Error("The query is empty");
 
     const sql = obj.sql;
-    const bindings = obj.bindings || [];
+    const bindings = this._sanitizeBindings(obj.bindings || []);
     let results: any[];
 
     if (bindings.length > 0) {

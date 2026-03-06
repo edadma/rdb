@@ -67,7 +67,10 @@ case class TimestampValue(t: LocalDateTime) extends Value(TimestampType):
   override def compare(that: Value): Int =
     that match
       case TimestampValue(u) => t.compareTo(u)
-      case _                 => super.compare(that)
+      case TextValue(s) =>
+        try t.compareTo(parseTimestamp(s))
+        catch case _: Exception => super.compare(that)
+      case _ => super.compare(that)
 
   override def render: String = s"'$t'"
 
