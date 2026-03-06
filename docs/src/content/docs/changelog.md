@@ -1,0 +1,136 @@
+---
+title: Changelog
+---
+
+## v1.2-20260306
+
+Fix timestamp parsing for ISO 8601 with timezone offsets.
+
+`parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.2.2 | — |
+| engine | 1.2.4 | @petradb/engine 1.2.7 |
+| client | 1.2.4 | @petradb/client 1.2.4 |
+| server | — | @petradb/server 1.2.5 |
+| cli | — | @petradb/cli 1.2.5 |
+| jdbc | 1.2.8 | — |
+| knex | — | @petradb/knex 1.2.1 |
+| lucid | — | @petradb/lucid 1.2.1 |
+
+## v1.2-20260305
+
+### JDBC driver
+- Fat jar publishing — `io.github.edadma:petradb-jdbc` is now a single self-contained jar on Maven Central
+- Clean connection URLs — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
+- ServiceLoader auto-discovery — `DriverManager.getConnection()` works without `Class.forName`
+- Fixed hardcoded metadata version strings
+
+### JS/TS engine (`@petradb/engine`)
+- Added `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` to JS facade
+- Added `ExplainResult` and `CopyResult` to TypeScript type definitions
+
+### Documentation
+- New Knex.js guide with full examples
+- JDBC docs: added Maven/Gradle/sbt install snippets, fixed port number
+
+### Infrastructure
+- `petradb-shared` now publishable to Maven Central
+- Post-publish smoke test script covering npm, Scala, and JDBC artifacts
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.2.1 | — |
+| engine | 1.2.2 | @petradb/engine 1.2.5 |
+| client | 1.2.3 | @petradb/client 1.2.3 |
+| server | — | @petradb/server 1.2.3 |
+| cli | — | @petradb/cli 1.2.3 |
+| jdbc | 1.2.6 | — |
+| knex | — | @petradb/knex 1.2.0 |
+
+## v1.2.2
+
+### Engine subpackage restructure
+- Engine moved to `io.github.edadma.petradb.engine` subpackage
+- New shared `Session` trait extended by both engine and client
+
+### CLI client support
+- Connect to a remote PetraDB server: `petradb --host localhost --port 5480`
+- `--user` and `--password` flags for authentication
+- Meta-commands work over the network via SQL
+
+### SQL
+- `SHOW VIEWS` command returns view names and definitions
+
+### Knex dialect
+- `@petradb/knex` dialect adapter for using Knex.js query builder with PetraDB
+
+### Fixes
+- Fix client npm publish
+- Fix CLI npm publish
+- Fix hardcoded JDBC metadata version strings
+- 1013+ tests passing across JVM, JS, and Native
+
+## v1.2
+
+### JDBC driver
+- Published to Maven Central as `petradb-jdbc`
+- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/index metadata for DBeaver
+- File mode (embedded) and server mode (network) connections
+
+### SQL engine
+- `COPY FROM/TO` for CSV import/export
+- `CREATE TEMP TABLE`, `CREATE/DROP VIEW`
+- `SHOW FOREIGN KEYS`/`SHOW INDEXES` introspection
+- Index nested loop join optimization for equijoins
+- Migrated parser to fastparse
+
+### Server
+- CORS support with TOML configuration
+- Configurable `max_sessions`, default port 5480
+- JS server platform with Node.js HTTP backend
+
+### Client
+- New `@petradb/client` npm package with JS facade
+- `Session` class with `connect()`/`execute()`/`close()` returning Promises
+
+### CLI
+- `\timing`, `\copy` commands
+- Persistent history on Native
+
+### Build
+- Scala 3.8.2, sbt 1.12.4
+- 1000 tests passing across JVM, JS, and Native
+
+## v1.1.0
+
+### TextDB — human-editable text file persistence
+A new storage backend that persists the database as a `.ptxt` text file. Loads into memory on open and rewrites the file after every change.
+
+### Upsert — `ON CONFLICT DO UPDATE`
+Insert-or-update semantics with the `EXCLUDED` pseudo-table.
+
+### Improved exception hierarchy
+Typed exception classes replace generic `problem()` calls.
+
+### ALTER TABLE centralised
+`DB.alterTable()` now centralises all ALTER TABLE dispatch.
+
+## v1.0.1
+
+- Rename `ConnectSQL` to `Session` in `@petradb/engine`
+- Async `execute()` API returning `Promise<ExecuteResult[]>`
+- New `@petradb/client` package for network usage
+- Aligned response formats between engine and server
+
+## v1.0.0
+
+First stable release.
+
+- Cross-platform SQL engine (JVM, JavaScript, Native)
+- PostgreSQL-compatible syntax
+- In-memory and persistent (crash-safe) storage
+- DDL, DML, joins, subqueries, aggregations, transactions
+- JSONB operators, array types, CHECK constraints
+- 879 passing tests
