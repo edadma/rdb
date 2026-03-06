@@ -36,12 +36,12 @@ function patch() {
     dialects.clientsNames.push("petradb");
   }
 
-  // 3. Patch Connection.prototype.getWriteConfig to swap the 'petradb' string
-  //    for the actual PetraDBClient class constructor (Knex escape hatch)
+  // 3. Patch Connection to swap 'petradb' string for PetraDBClient class
+  //    and skip knex-dynamic-connection patching (PetraDB is in-process like SQLite)
   const connectionMod = _require(path.join(buildDir, "src/connection/index.js"));
   const Connection = connectionMod.Connection;
-  const originalGetWriteConfig = Connection.prototype.getWriteConfig;
 
+  const originalGetWriteConfig = Connection.prototype.getWriteConfig;
   Connection.prototype.getWriteConfig = function () {
     const config = originalGetWriteConfig.call(this);
     if (config.client === "petradb") {
@@ -49,6 +49,38 @@ function patch() {
       return { ...config, client: PetraDBClient };
     }
     return config;
+  };
+
+  // PetraDB is an in-process engine — no read/write replicas, no dynamic
+  // connection patching needed. Skip patchKnex for petradb connections.
+  const originalSetupWriteConnection = Connection.prototype.setupWriteConnection;
+  Connection.prototype.setupWriteConnection = function () {
+    if (this.clientName === "petradb") {
+      const knexMod = _require("knex");
+      const { Logger: ConnectionLogger } = _require(
+        path.join(buildDir, "src/connection/logger.js")
+      );
+      this.client = knexMod.knex(
+        Object.assign(
+          { log: new ConnectionLogger(this.name, this.logger) },
+          this.getWriteConfig(),
+          { debug: false }
+        )
+      );
+      // Skip patchKnex — not needed for in-process engines
+      return;
+    }
+    originalSetupWriteConnection.call(this);
+  };
+
+  const originalSetupReadConnection = Connection.prototype.setupReadConnection;
+  Connection.prototype.setupReadConnection = function () {
+    if (this.clientName === "petradb") {
+      // In-process engine — read client is same as write client
+      this.readClient = this.client;
+      return;
+    }
+    originalSetupReadConnection.call(this);
   };
 }
 
