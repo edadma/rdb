@@ -35,7 +35,12 @@ case class NumberValue(typ: dal.Type, value: Number) extends Value(NumberType) w
   override def compare(that: Value): Int =
     that match
       case n: NumberValue => BasicDAL.compare[TypedNumber](this, n)
-      case _              => super.compare(that)
+      case TextValue(s) =>
+        try
+          val n = if s.contains('.') then NumberValue(s.toDouble) else NumberValue(s.toInt)
+          BasicDAL.compare[TypedNumber](this, n)
+        catch case _: NumberFormatException => super.compare(that)
+      case _ => super.compare(that)
 
   override def next: Value = BasicDAL.compute(PLUS, this, ONE, NumberValue.from)
 
@@ -203,6 +208,11 @@ case class TextValue(s: String) extends Value(TextType):
   override def compare(that: Value): Int =
     that match
       case TextValue(t)    => s compare t
+      case n: NumberValue =>
+        try
+          val tv = if s.contains('.') then NumberValue(s.toDouble) else NumberValue(s.toInt)
+          BasicDAL.compare[TypedNumber](tv, n)
+        catch case _: NumberFormatException => super.compare(that)
       case EnumValue(v, t) =>
         t.labelsMap get s match
           case None    => throw TypeException(pos, s"'$s' is not a label of enum '${t.name}'")
