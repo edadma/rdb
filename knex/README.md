@@ -5,7 +5,7 @@ Knex.js dialect for [PetraDB](https://petradb.dev) — use Knex's query builder,
 ## Install
 
 ```bash
-npm install @petradb/knex @petradb/engine knex
+npm install @petradb/knex knex
 ```
 
 ## Usage

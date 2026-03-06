@@ -53,9 +53,16 @@ export default defineConfig({
 						{ label: 'JavaScript / TypeScript', slug: 'guides/javascript' },
 						{ label: 'Scala', slug: 'guides/scala' },
 						{ label: 'CLI', slug: 'guides/cli' },
-						{ label: 'Knex.js', slug: 'guides/knex' },
 						{ label: 'Server', slug: 'guides/server' },
 						{ label: 'Client', slug: 'guides/client' },
+					],
+				},
+				{
+					label: 'Integrations',
+					items: [
+						{ label: 'Knex.js', slug: 'integrations/knex' },
+						{ label: 'AdonisJS Lucid', slug: 'integrations/lucid' },
+						{ label: 'JDBC', slug: 'integrations/jdbc' },
 					],
 				},
 				{
@@ -75,7 +82,6 @@ export default defineConfig({
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'reference/api-javascript' },
 						{ label: 'Scala', slug: 'reference/api-scala' },
-						{ label: 'JDBC', slug: 'reference/api-jdbc' },
 					],
 				},
 			],
