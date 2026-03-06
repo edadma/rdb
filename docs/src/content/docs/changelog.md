@@ -4,19 +4,31 @@ title: Changelog
 
 ## v1.2-20260306
 
-Fix timestamp parsing for ISO 8601 with timezone offsets.
-
+### Timestamp parsing
 `parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
+
+### JS facade completeness
+`toJS` and `typeString` now handle `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, and `ByteaValue`.
+
+### SQL: qualified star (`table.*`)
+`SELECT t.*` syntax now works in queries, including joins and mixed expressions.
+
+### Type coercion in comparisons
+- `NumberValue` and `TextValue` can now compare across types (text parameters vs numeric columns and vice versa)
+- `TimestampValue` can now compare against `TextValue` by parsing the text as a timestamp
+
+### Knex driver: Date binding
+`_sanitizeBindings` converts JS `Date` objects to ISO strings before passing to the engine, preventing `DateTimeParseException` on `Date.toString()` format.
 
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
-| shared | 1.2.2 | — |
-| engine | 1.2.4 | @petradb/engine 1.2.7 |
-| client | 1.2.4 | @petradb/client 1.2.4 |
+| shared | 1.2.3 | — |
+| engine | 1.2.6 | @petradb/engine 1.2.12 |
+| client | 1.2.5 | @petradb/client 1.2.5 |
 | server | — | @petradb/server 1.2.5 |
 | cli | — | @petradb/cli 1.2.5 |
-| jdbc | 1.2.8 | — |
-| knex | — | @petradb/knex 1.2.1 |
+| jdbc | 1.2.10 | — |
+| knex | — | @petradb/knex 1.2.2 |
 | lucid | — | @petradb/lucid 1.2.1 |
 
 ## v1.2-20260305

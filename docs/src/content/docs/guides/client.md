@@ -16,7 +16,7 @@ npm install @petradb/client
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-client" % "1.2.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-client" % "1.2.5"
 ```
 
 ## Connection Options
