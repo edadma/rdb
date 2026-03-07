@@ -27,7 +27,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.3"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.6"
 ```
 
 ```scala
@@ -222,18 +222,18 @@ Connection URLs:
 
 ### Knex.js
 
-Query builder dialect: `npm install @petradb/knex-dialect`
+Query builder dialect: `npm install @petradb/knex`
 
 ```javascript
 import Knex from 'knex';
-import { PetraDialect } from '@petradb/knex-dialect';
+import { PetraDialect } from '@petradb/knex';
 
 const knex = Knex({ client: PetraDialect });
 ```
 
 ### AdonisJS Lucid
 
-ORM driver: `npm install @petradb/lucid-driver`
+ORM driver: `npm install @petradb/lucid`
 
 Supports schema builder, query builder, raw queries, transactions, ORM models with BaseModel, and migrations with BaseSchema.
 
@@ -256,7 +256,7 @@ Meta-commands: `\dt` (tables), `\dv` (views), `\d table` (describe), `\i file` (
 ## Server
 
 ```bash
-petradb-server                          # default: memory, port 5432
+petradb-server                          # default: memory, port 5480
 petradb-server -m persistent -p 8080    # persistent storage on port 8080
 petradb-server -c config.toml           # use config file
 ```
