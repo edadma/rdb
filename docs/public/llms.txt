@@ -237,6 +237,20 @@ ORM driver: `npm install @petradb/lucid`
 
 Supports schema builder, query builder, raw queries, transactions, ORM models with BaseModel, and migrations with BaseSchema.
 
+### Drizzle ORM
+
+Type-safe ORM driver: `npm install @petradb/drizzle drizzle-orm`
+
+```javascript
+import { Session } from '@petradb/engine';
+import { drizzle } from '@petradb/drizzle';
+
+const session = new Session({ storage: 'memory' });
+const db = drizzle(session);
+```
+
+Uses `drizzle-orm/pg-proxy` — supports `pgTable` schemas, insert/select/update/delete, returning clauses. Transactions via `db.$session.execute('BEGIN')`/`'COMMIT'`/`'ROLLBACK'`.
+
 ## CLI
 
 ```bash

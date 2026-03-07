@@ -2,6 +2,28 @@
 title: Changelog
 ---
 
+## v1.2-20260307
+
+### SQL: `DEFAULT` keyword in INSERT VALUES
+
+`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` now works. The SQL-standard `DEFAULT` keyword was previously rejected by the parser, breaking ORM-generated INSERT statements that explicitly pass `DEFAULT` for serial or defaulted columns.
+
+### Drizzle ORM integration
+
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver via `drizzle-orm/pg-proxy`. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, and type-safe queries. Transactions use `db.$session` for manual `BEGIN`/`COMMIT`/`ROLLBACK`.
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.2.3 | — |
+| engine | 1.2.6 | @petradb/engine 1.2.13 |
+| client | 1.2.5 | @petradb/client 1.2.5 |
+| server | — | @petradb/server 1.2.5 |
+| cli | — | @petradb/cli 1.2.5 |
+| jdbc | 1.2.10 | — |
+| knex | — | @petradb/knex 1.2.2 |
+| lucid | — | @petradb/lucid 1.2.1 |
+| drizzle | — | @petradb/drizzle 1.2.0 |
+
 ## v1.2-20260306
 
 ### JS API: `close()` returns `Promise<void>`
