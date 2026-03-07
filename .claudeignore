@@ -25,6 +25,8 @@ LICENSE
 **/LICENSE.txt
 CHANGELOG.md
 **/CHANGELOG.md
+changelog.md
+**/changelog.md
 
 # Editor/OS noise
 .idea/
