@@ -56,13 +56,3 @@ docs/
 
 # Large generated lock/config files in nested npm packages
 knex/npm/package-lock.json
-
-# EXPERIMENT: exclude most of the project to debug sync issues
-shared/
-engine/
-client/
-server/
-cli/
-jdbc/
-lucid/
-knex/
