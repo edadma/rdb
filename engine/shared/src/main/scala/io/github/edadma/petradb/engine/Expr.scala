@@ -46,6 +46,7 @@ case class SetOperationExpr(op: String, left: Expr, right: Expr)          extend
 case class ValuesExpr(rows: Seq[Seq[Expr]])                               extends Expr
 case class LateralExpr(query: Expr)                                       extends Expr
 case class OverlapsExpr(s1: Expr, e1: Expr, s2: Expr, e2: Expr)           extends Expr
+case object DefaultExpr                                                    extends Expr
 case class CompoundQueryExpr(
     query: Expr,
     orderBy: Option[Seq[OrderBy]],

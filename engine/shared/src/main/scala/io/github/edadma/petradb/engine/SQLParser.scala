@@ -843,7 +843,8 @@ object SQLParser:
 
   // ── DML: INSERT ────────────────────────────────────────────────────
 
-  private def row[p: P]: P[Seq[Expr]] = P("(" ~ expression.rep(1, sep = ",") ~ ")")
+  private def rowValue[p: P]: P[Expr] = P(kw("default").map(_ => DefaultExpr) | expression)
+  private def row[p: P]: P[Seq[Expr]] = P("(" ~ rowValue.rep(1, sep = ",") ~ ")")
 
   private def set[p: P]: P[UpdateSet] =
     P(identifier ~ "=" ~ expression).map((col, v) => UpdateSet(col, v))

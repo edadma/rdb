@@ -38,8 +38,12 @@ case "$1" in
     PKG_DIR="lucid"
     TS_ONLY=true
     ;;
+  drizzle)
+    PKG_DIR="drizzle"
+    TS_ONLY=true
+    ;;
   *)
-    echo "Usage: ./publish.sh <engine|client|cli|server|knex|lucid> [--publish]"
+    echo "Usage: ./publish.sh <engine|client|cli|server|knex|lucid|drizzle> [--publish]"
     exit 1
     ;;
 esac

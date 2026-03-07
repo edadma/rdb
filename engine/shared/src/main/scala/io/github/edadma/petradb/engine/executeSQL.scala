@@ -176,8 +176,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
     case cmd             => guardTransaction { cmd match
       case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
-        val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
-        val cols = resolvedColumns.length
+        val resolvedColumns0 = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
+        val cols = resolvedColumns0.length
 
         // Resolve RETURNING exprs to column name list for the DB layer
         val retColNames: Option[Seq[String]] = returning.map { exprs =>
@@ -192,8 +192,17 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         rows find (_.length != cols) match
           case Some(row) => throw ExecutionException(row.head.pos, s"row length (${row.length}) not equal to number of columns ($cols)")
           case None      =>
+            // Filter out columns/values where DEFAULT is used
+            val defaultPositions = rows.head.zipWithIndex.collect { case (DefaultExpr, i) => i }.toSet
+            val resolvedColumns =
+              if defaultPositions.isEmpty then resolvedColumns0
+              else resolvedColumns0.zipWithIndex.filterNot(p => defaultPositions(p._2)).map(_._1)
+            val effectiveRows =
+              if defaultPositions.isEmpty then rows
+              else rows.map(r => r.zipWithIndex.filterNot(p => defaultPositions(p._2)).map(_._1))
+
             val data =
-              for (r <- rows)
+              for (r <- effectiveRows)
                 yield r map (e => eval(rewrite(e), Nil))
 
             for (id @ Ident(c) <- resolvedColumns)

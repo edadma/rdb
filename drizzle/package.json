@@ -1,0 +1,37 @@
+{
+  "name": "@petradb/drizzle",
+  "version": "1.0.0",
+  "description": "Drizzle ORM driver for PetraDB",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "node --test test/integration.mjs"
+  },
+  "peerDependencies": {
+    "@petradb/engine": ">=1.2.0",
+    "drizzle-orm": ">=0.38.0"
+  },
+  "devDependencies": {
+    "@petradb/engine": "file:../engine/npm",
+    "drizzle-orm": "^0.44.0",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": ["drizzle", "drizzle-orm", "petradb", "SQL", "database", "orm"],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC",
+  "homepage": "https://petradb.dev"
+}
