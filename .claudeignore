@@ -10,13 +10,23 @@
 **/.astro/
 
 # Scala build machinery
-project/project/
-project/target/
+boot/
+project/
 **/*.class
 **/*.tasty
 **/*.jar
 
-# Source maps and compiled JS (you have the Scala source)
+# Java RT extension (65MB jar)
+java9-rt-ext-ubuntu*/
+
+# Generated JS bundles (multi-MB Scala.js output)
+engine/npm/main.js
+client/npm/main.js
+client/npm/client.js
+cli/npm/
+server/npm/bin/
+
+# Source maps and compiled JS
 **/*.js.map
 
 # Licenses, changelogs, generic boilerplate
@@ -34,9 +44,8 @@ changelog.md
 .DS_Store
 **/.DS_Store
 
-# Docs build output
-docs/dist/
-docs/.astro/
+# Docs build output and content
+docs/
 
 # Test files
 **/src/test/
