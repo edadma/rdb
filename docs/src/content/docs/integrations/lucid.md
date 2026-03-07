@@ -1,6 +1,6 @@
 ---
-title: AdonisJS Lucid
-description: Using AdonisJS Lucid ORM with PetraDB.
+title: Lucid ORM
+description: Using Lucid ORM with PetraDB.
 ---
 
 PetraDB provides an [AdonisJS Lucid](https://lucid.adonisjs.com) driver via the `@petradb/lucid` package. This lets you use Lucid's ORM, migrations, seeders, and query builder with PetraDB's embeddable SQL engine.
