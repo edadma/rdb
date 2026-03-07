@@ -195,33 +195,224 @@ INSERT INTO reviews (book_id, customer_id, rating, body) VALUES
 -- ============================================================
 -- Sample Queries to Explore
 -- ============================================================
+-- Uncomment any query below to run it. Block comments make
+-- it easy to select and copy a single query.
 
--- All books by a given author:
--- SELECT b.title, b.price, b.genre
--- FROM books b JOIN authors a ON b.author_id = a.id
--- WHERE a.last_name = 'Ishiguro';
+-- ── Basic Joins & Filters ──────────────────────────────────
 
--- Top-rated books (average rating >= 4):
--- SELECT b.title, ROUND(AVG(r.rating), 2) AS avg_rating, COUNT(*) AS review_count
--- FROM books b JOIN reviews r ON r.book_id = b.id
--- GROUP BY b.title
--- HAVING AVG(r.rating) >= 4
--- ORDER BY avg_rating DESC;
+/* All books by a given author:
+SELECT b.title, b.price, b.genre
+FROM books b JOIN authors a ON b.author_id = a.id
+WHERE a.last_name = 'Ishiguro';
+*/
 
--- Best customers by spend:
--- SELECT c.first_name, c.last_name, SUM(o.total) AS total_spend
--- FROM customers c JOIN orders o ON o.customer_id = c.id
--- WHERE o.status != 'cancelled'
--- GROUP BY c.first_name, c.last_name
--- ORDER BY total_spend DESC;
+/* Orders with their items:
+SELECT o.id, c.email, b.title, oi.quantity, oi.unit_price
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN books b ON b.id = oi.book_id
+ORDER BY o.id;
+*/
 
--- Books low on stock:
--- SELECT title, stock FROM books WHERE stock < 10 ORDER BY stock;
+/* Books low on stock:
+SELECT title, stock FROM books WHERE stock < 10 ORDER BY stock;
+*/
 
--- Orders with their items:
--- SELECT o.id, c.email, b.title, oi.quantity, oi.unit_price
--- FROM orders o
--- JOIN customers c ON c.id = o.customer_id
--- JOIN order_items oi ON oi.order_id = o.id
--- JOIN books b ON b.id = oi.book_id
--- ORDER BY o.id;
+/* Books published between two dates:
+SELECT title, published, price
+FROM books
+WHERE published BETWEEN '1960-01-01' AND '1989-12-31'
+ORDER BY published;
+*/
+
+-- ── Aggregation & HAVING ───────────────────────────────────
+
+/* Top-rated books (average rating >= 4):
+SELECT b.title, ROUND(AVG(r.rating), 2) AS avg_rating, COUNT(*) AS review_count
+FROM books b JOIN reviews r ON r.book_id = b.id
+GROUP BY b.title
+HAVING AVG(r.rating) >= 4
+ORDER BY avg_rating DESC;
+*/
+
+/* Best customers by spend:
+SELECT c.first_name, c.last_name, SUM(o.total) AS total_spend
+FROM customers c JOIN orders o ON o.customer_id = c.id
+WHERE o.status != 'cancelled'
+GROUP BY c.first_name, c.last_name
+ORDER BY total_spend DESC;
+*/
+
+/* Revenue by genre:
+SELECT b.genre, SUM(oi.quantity * oi.unit_price) AS revenue, SUM(oi.quantity) AS units_sold
+FROM order_items oi
+JOIN books b ON b.id = oi.book_id
+JOIN orders o ON o.id = oi.order_id
+WHERE o.status != 'cancelled'
+GROUP BY b.genre
+ORDER BY revenue DESC;
+*/
+
+/* Authors ranked by number of reviews:
+SELECT a.first_name, a.last_name, COUNT(r.id) AS total_reviews, ROUND(AVG(r.rating), 2) AS avg_rating
+FROM authors a
+JOIN books b ON b.author_id = a.id
+JOIN reviews r ON r.book_id = b.id
+GROUP BY a.first_name, a.last_name
+ORDER BY total_reviews DESC;
+*/
+
+-- ── CASE WHEN ──────────────────────────────────────────────
+
+/* Classify books by price tier:
+SELECT title, price,
+  CASE
+    WHEN price < 12 THEN 'budget'
+    WHEN price < 17 THEN 'mid-range'
+    ELSE 'premium'
+  END AS price_tier
+FROM books
+ORDER BY price;
+*/
+
+/* Order status summary:
+SELECT
+  COUNT(*) AS total_orders,
+  COUNT(*) FILTER (WHERE status = 'delivered') AS delivered,
+  COUNT(*) FILTER (WHERE status = 'shipped') AS shipped,
+  COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+  COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
+FROM orders;
+*/
+
+-- ── Subqueries & EXISTS ────────────────────────────────────
+
+/* Books that have never been ordered:
+SELECT title, price
+FROM books b
+WHERE NOT EXISTS (
+  SELECT 1 FROM order_items oi WHERE oi.book_id = b.id
+);
+*/
+
+/* Customers who have ordered books by more than one author:
+SELECT c.first_name, c.last_name
+FROM customers c
+WHERE (
+  SELECT COUNT(DISTINCT b.author_id)
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  JOIN books b ON b.id = oi.book_id
+  WHERE o.customer_id = c.id
+) > 1;
+*/
+
+/* Books priced above the average:
+SELECT title, price
+FROM books
+WHERE price > (SELECT AVG(price) FROM books)
+ORDER BY price DESC;
+*/
+
+-- ── IN & NOT IN ────────────────────────────────────────────
+
+/* Authors whose books have all been reviewed:
+SELECT a.first_name, a.last_name
+FROM authors a
+WHERE a.id NOT IN (
+  SELECT b.author_id FROM books b
+  WHERE b.id NOT IN (SELECT r.book_id FROM reviews r)
+);
+*/
+
+/* Genres that appear in cancelled orders:
+SELECT DISTINCT b.genre
+FROM books b
+WHERE b.id IN (
+  SELECT oi.book_id FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE o.status = 'cancelled'
+);
+*/
+
+-- ── COALESCE & NULLIF ──────────────────────────────────────
+
+/* Books with description (or a fallback):
+SELECT title, COALESCE(description, '(no description)') AS description
+FROM books;
+*/
+
+/* Average rating, treating unreviewed books as NULL:
+SELECT b.title,
+  COALESCE(ROUND(AVG(r.rating), 2), 0) AS avg_rating,
+  COALESCE(COUNT(r.id), 0) AS review_count
+FROM books b
+LEFT JOIN reviews r ON r.book_id = b.id
+GROUP BY b.title
+ORDER BY avg_rating DESC;
+*/
+
+-- ── STRING_AGG & ARRAY_AGG ─────────────────────────────────
+
+/* Each author with their book titles concatenated:
+SELECT a.first_name || ' ' || a.last_name AS author,
+  STRING_AGG(b.title, ', ' ORDER BY b.published) AS books
+FROM authors a
+JOIN books b ON b.author_id = a.id
+GROUP BY a.first_name, a.last_name;
+*/
+
+/* Each customer's ordered book titles as an array:
+SELECT c.first_name, ARRAY_AGG(DISTINCT b.title) AS books_ordered
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN books b ON b.id = oi.book_id
+GROUP BY c.first_name;
+*/
+
+-- ── Set Operations ─────────────────────────────────────────
+
+/* Authors who have been both reviewed AND ordered (INTERSECT):
+SELECT DISTINCT a.first_name, a.last_name
+FROM authors a JOIN books b ON b.author_id = a.id JOIN reviews r ON r.book_id = b.id
+INTERSECT
+SELECT DISTINCT a.first_name, a.last_name
+FROM authors a JOIN books b ON b.author_id = a.id JOIN order_items oi ON oi.book_id = b.id;
+*/
+
+/* Authors reviewed but never ordered (EXCEPT):
+SELECT DISTINCT a.first_name, a.last_name
+FROM authors a JOIN books b ON b.author_id = a.id JOIN reviews r ON r.book_id = b.id
+EXCEPT
+SELECT DISTINCT a.first_name, a.last_name
+FROM authors a JOIN books b ON b.author_id = a.id JOIN order_items oi ON oi.book_id = b.id;
+*/
+
+-- ── Correlated Subqueries ──────────────────────────────────
+
+/* Each author's most expensive book:
+SELECT a.first_name, a.last_name, b.title, b.price
+FROM books b
+JOIN authors a ON a.id = b.author_id
+WHERE b.price = (
+  SELECT MAX(b2.price) FROM books b2 WHERE b2.author_id = b.author_id
+);
+*/
+
+/* Customers whose total spend exceeds the average customer spend:
+SELECT c.first_name, c.last_name, SUM(o.total) AS total_spend
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE o.status != 'cancelled'
+GROUP BY c.first_name, c.last_name
+HAVING SUM(o.total) > (
+  SELECT AVG(customer_total) FROM (
+    SELECT SUM(o2.total) AS customer_total
+    FROM orders o2
+    WHERE o2.status != 'cancelled'
+    GROUP BY o2.customer_id
+  )
+);
+*/
