@@ -1,6 +1,40 @@
+# Dependency lockfiles
 **/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+
+# Dependencies and build output
 **/node_modules/
 **/dist/
+**/target/
+**/.astro/
+
+# Scala build machinery
+project/project/
+project/target/
+**/*.class
+**/*.tasty
+**/*.jar
+
+# Source maps and compiled JS (you have the Scala source)
 **/*.js.map
-docs/package-lock.json
-playground/package-lock.json
+
+# Licenses, changelogs, generic boilerplate
+LICENSE
+**/LICENSE
+**/LICENSE.txt
+CHANGELOG.md
+**/CHANGELOG.md
+
+# Editor/OS noise
+.idea/
+.vscode/
+.DS_Store
+**/.DS_Store
+
+# Docs build output
+docs/dist/
+docs/.astro/
+
+# Large generated lock/config files in nested npm packages
+knex/npm/package-lock.json
