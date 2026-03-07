@@ -38,5 +38,12 @@ changelog.md
 docs/dist/
 docs/.astro/
 
+# Test files
+**/src/test/
+**/ts-test/
+**/test/
+**/tests/
+**/__tests__/
+
 # Large generated lock/config files in nested npm packages
 knex/npm/package-lock.json
