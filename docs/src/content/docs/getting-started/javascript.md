@@ -56,7 +56,7 @@ const db = new Session({ storage: 'persistent', path: './mydb' });
 const db = new Session({ storage: 'text', path: './data.ptxt' });
 ```
 
-For persistent databases, PetraDB auto-detects whether to create a new file or open an existing one. Call `db.close()` when you're done to release the file handle.
+For persistent databases, PetraDB auto-detects whether to create a new file or open an existing one. Call `await db.close()` when you're done to release the file handle.
 
 For multi-process or networked access, run PetraDB as a [server](/guides/server/) and connect with the [client](/guides/client/) library.
 

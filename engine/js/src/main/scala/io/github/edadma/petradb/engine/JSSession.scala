@@ -168,7 +168,9 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
     session.execute(sql).map(results => (results map (r => resultToJS(r, rowMode))).toJSArray).toJSPromise
 
   @JSExport
-  def close(): Unit = db.close()
+  def close(): js.Promise[Unit] =
+    db.close()
+    js.Promise.resolve[Unit](())
 
   @JSExport
   def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))

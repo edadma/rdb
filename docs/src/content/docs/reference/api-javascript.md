@@ -37,7 +37,11 @@ For persistent storage, PetraDB auto-detects whether to create a new file or ope
 
 ### `db.close()`
 
-Releases file handles. Required for persistent and text storage. No-op for memory databases.
+Releases file handles. Returns a `Promise<void>`. Required for persistent and text storage. No-op (but still async) for memory databases.
+
+```javascript
+await db.close();
+```
 
 ### `db.execute(sql, options?)`
 
@@ -85,7 +89,7 @@ class Session {
   constructor(options?: SessionOptions)
   execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>
   prepare(sql: string): PreparedStatement
-  close(): void
+  close(): Promise<void>
 }
 ```
 

@@ -47,12 +47,12 @@ const db = new Session({ storage: 'text', path: './data.ptxt' });
 
 ### Closing
 
-Call `db.close()` to release file handles when using persistent or text storage. For memory databases, `close()` is a no-op.
+Call `await db.close()` to release file handles when using persistent or text storage. For memory databases, `close()` is a no-op.
 
 ```javascript
 const db = new Session({ storage: 'persistent', path: './mydb' });
 // ... use the database ...
-db.close();
+await db.close();
 ```
 
 ## Executing SQL

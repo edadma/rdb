@@ -149,5 +149,5 @@ export class Session {
     constructor(options?: SessionOptions);
     execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>;
     prepare(sql: string): PreparedStatement;
-    close(): void;
+    close(): Promise<void>;
 }

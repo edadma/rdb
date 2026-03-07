@@ -31,7 +31,7 @@ Data survives restarts with crash-safe durable storage in a single file:
 ```javascript
 const db = new Session({ storage: 'persistent', path: './mydb' });
 // ... use the database ...
-db.close();
+await db.close();
 ```
 
 Also available: `{ storage: 'text', path: './data.ptxt' }` for human-readable text files.

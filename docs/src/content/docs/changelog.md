@@ -4,6 +4,9 @@ title: Changelog
 
 ## v1.2-20260306
 
+### JS API: `close()` returns `Promise<void>`
+`Session.close()` now returns `Promise<void>` instead of `void`, matching the client module's API for interchangeability.
+
 ### Timestamp parsing
 `parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
 
@@ -23,7 +26,7 @@ title: Changelog
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
-| engine | 1.2.6 | @petradb/engine 1.2.12 |
+| engine | 1.2.6 | @petradb/engine 1.2.13 |
 | client | 1.2.5 | @petradb/client 1.2.5 |
 | server | — | @petradb/server 1.2.5 |
 | cli | — | @petradb/cli 1.2.5 |
