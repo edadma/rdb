@@ -130,6 +130,9 @@ case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
       case NumberValue(DIntType | DLongType, n) => NumberValue(BigDecimal(n.longValue * scaler, scale, mc))
       case NumberValue(DDoubleType, n)          =>
         NumberValue(BigDecimal(n.doubleValue, mc).setScale(scale, BigDecimal.RoundingMode.DOWN))
+      case TextValue(s) =>
+        try NumberValue(BigDecimal(s.trim, mc).setScale(scale, BigDecimal.RoundingMode.DOWN))
+        catch case _: NumberFormatException => throw TypeException(v.pos, s"cannot cast '$s' to numeric")
       case _ => super.convert(v)
 
 case class VarcharType(length: Int) extends Type("varchar"):

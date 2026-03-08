@@ -27,7 +27,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.6"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.8"
 ```
 
 ```scala
@@ -249,7 +249,7 @@ const session = new Session({ storage: 'memory' });
 const db = drizzle(session);
 ```
 
-Uses `drizzle-orm/pg-proxy` — supports `pgTable` schemas, insert/select/update/delete, returning clauses. Transactions via `db.$session.execute('BEGIN')`/`'COMMIT'`/`'ROLLBACK'`.
+Custom PostgreSQL dialect driver with full feature parity with `drizzle-orm/node-postgres`. Supports `pgTable` schemas, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and relational queries.
 
 ## CLI
 

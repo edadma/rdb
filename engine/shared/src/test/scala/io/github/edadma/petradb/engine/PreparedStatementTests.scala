@@ -241,6 +241,42 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "Type coercion for parameters" - {
+    "text parameter is coerced to NUMERIC column" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE t (id INTEGER, price NUMERIC(10, 2))")
+
+      val ps = session.prepare("INSERT INTO t (id, price) VALUES ($1, $2)")
+      ps.execute(NumberValue(1), TextValue("19.99"))
+
+      val table = executeSQL("SELECT * FROM t WHERE id = 1").collect { case QueryResult(t) => t }.last
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe NumberValue(BigDecimal("19.99"))
+    }
+
+    "text parameter is coerced to INTEGER column" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE t (id INTEGER, qty INTEGER)")
+
+      val ps = session.prepare("INSERT INTO t (id, qty) VALUES ($1, $2)")
+      ps.execute(NumberValue(1), TextValue("42"))
+
+      val table = executeSQL("SELECT * FROM t WHERE id = 1").collect { case QueryResult(t) => t }.last
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe NumberValue(42)
+    }
+
+    "invalid text for NUMERIC column throws" in {
+      assertThrows[TypeException] {
+        given session: Session = new MemoryDB().connect()
+        executeSQL("CREATE TABLE t (price NUMERIC(10, 2))")
+
+        val ps = session.prepare("INSERT INTO t (price) VALUES ($1)")
+        ps.execute(TextValue("not-a-number"))
+      }
+    }
+  }
+
   "Parameter validation" - {
     "unbound parameter $3 when only 2 params provided" in {
       assertThrows[RuntimeException] {

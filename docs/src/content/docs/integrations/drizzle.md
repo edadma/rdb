@@ -3,7 +3,7 @@ title: Drizzle ORM
 description: Using Drizzle ORM with PetraDB.
 ---
 
-PetraDB provides a [Drizzle ORM](https://orm.drizzle.team) driver via the `@petradb/drizzle` package. It uses `drizzle-orm/pg-proxy` under the hood — Drizzle generates PostgreSQL-dialect SQL, and PetraDB executes it in-process with no wire protocol.
+PetraDB provides a [Drizzle ORM](https://orm.drizzle.team) driver via the `@petradb/drizzle` package. It implements a custom PostgreSQL dialect driver — Drizzle generates PostgreSQL-dialect SQL, and PetraDB executes it in-process with no wire protocol. The driver has full feature parity with `drizzle-orm/node-postgres`, including `db.transaction()`, `returning()` on all mutations, and relational queries.
 
 ## Install
 
@@ -47,7 +47,7 @@ const users = pgTable("users", {
 });
 ```
 
-Create the table through the session (Drizzle's pg-proxy does not include schema push):
+Create the table through the session (schema push is not yet supported):
 
 ```typescript
 await session.execute(`
@@ -137,24 +137,43 @@ const [deleted] = await db
 
 ## Transactions
 
-Drizzle's `db.transaction()` API is not available with pg-proxy. Use `db.$session` to issue transaction commands directly:
+Use Drizzle's `db.transaction()` API for automatic commit/rollback:
 
 ```typescript
-// Commit
-await db.$session.execute("BEGIN");
-await db.insert(users).values({ name: "Eve", email: "eve@example.com", age: 22 });
-await db.$session.execute("COMMIT");
+// Automatic commit
+const result = await db.transaction(async (tx) => {
+  const [inserted] = await tx
+    .insert(users)
+    .values({ name: "Eve", email: "eve@example.com", age: 22 })
+    .returning();
+  return inserted;
+});
 
-// Rollback
+// Automatic rollback on error
+await db.transaction(async (tx) => {
+  await tx.insert(users).values({ name: "Frank", email: "frank@example.com" });
+  throw new Error("something went wrong");
+  // Frank is not inserted — transaction is rolled back
+});
+
+// Explicit rollback
+await db.transaction(async (tx) => {
+  await tx.insert(users).values({ name: "Grace", email: "grace@example.com" });
+  tx.rollback(); // throws TransactionRollbackError
+});
+```
+
+You can also use `db.$session` for manual transaction control:
+
+```typescript
 await db.$session.execute("BEGIN");
-await db.insert(users).values({ name: "Frank", email: "frank@example.com" });
-await db.$session.execute("ROLLBACK");
-// Frank is not inserted
+await db.insert(users).values({ name: "Hank", email: "hank@example.com" });
+await db.$session.execute("COMMIT");
 ```
 
 ## Type mapping
 
-PetraDB returns native JS types through the proxy — no string coercion needed:
+PetraDB returns native JS types — no string coercion needed:
 
 | Drizzle type | PetraDB column | JS type |
 |---|---|---|

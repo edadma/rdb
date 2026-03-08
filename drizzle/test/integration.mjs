@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Session } from "@petradb/engine";
 import { drizzle } from "../dist/index.js";
 import { pgTable, serial, text, integer, boolean, numeric } from "drizzle-orm/pg-core";
-import { eq, gt } from "drizzle-orm";
+import { eq, gt, asc, desc, sql } from "drizzle-orm";
 
 const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -201,9 +201,306 @@ describe("@petradb/drizzle", () => {
     });
   });
 
-  // Drizzle's db.transaction() is not supported by pg-proxy.
-  // Use db.$session to issue BEGIN/COMMIT/ROLLBACK directly.
-  describe("transactions", () => {
+  describe("db.transaction()", () => {
+    it("commits a transaction", async () => {
+      const result = await db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(users)
+          .values({ name: "TxCommit", email: "txcommit@example.com", age: 50 })
+          .returning();
+        return inserted;
+      });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, "TxCommit");
+
+      const rows = await db.select().from(users).where(eq(users.name, "TxCommit"));
+      assert.equal(rows.length, 1);
+    });
+
+    it("rolls back on error", async () => {
+      await assert.rejects(async () => {
+        await db.transaction(async (tx) => {
+          await tx.insert(users).values({ name: "TxRollback", email: "txrollback@example.com", age: 60 });
+          throw new Error("force rollback");
+        });
+      }, { message: "force rollback" });
+
+      const rows = await db.select().from(users).where(eq(users.name, "TxRollback"));
+      assert.equal(rows.length, 0);
+    });
+
+    it("rolls back via tx.rollback()", async () => {
+      await assert.rejects(async () => {
+        await db.transaction(async (tx) => {
+          await tx.insert(users).values({ name: "TxExplicit", email: "txexplicit@example.com" });
+          tx.rollback();
+        });
+      });
+
+      const rows = await db.select().from(users).where(eq(users.name, "TxExplicit"));
+      assert.equal(rows.length, 0);
+    });
+
+    it("supports select inside transaction", async () => {
+      const rows = await db.transaction(async (tx) => {
+        return tx.select().from(users).where(eq(users.name, "Alice"));
+      });
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].name, "Alice");
+    });
+
+    it("supports update with returning() inside transaction", async () => {
+      // Insert a user to update inside the transaction
+      await db.insert(users).values({ name: "TxUpdate", email: "txupdate@example.com", age: 70 });
+
+      const result = await db.transaction(async (tx) => {
+        return tx
+          .update(users)
+          .set({ age: 71 })
+          .where(eq(users.name, "TxUpdate"))
+          .returning();
+      });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].age, 71);
+    });
+
+    it("supports delete with returning() inside transaction", async () => {
+      const result = await db.transaction(async (tx) => {
+        return tx.delete(users).where(eq(users.name, "TxUpdate")).returning();
+      });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, "TxUpdate");
+
+      const rows = await db.select().from(users).where(eq(users.name, "TxUpdate"));
+      assert.equal(rows.length, 0);
+    });
+  });
+
+  describe("returning() with specific columns", () => {
+    it("insert returning specific columns", async () => {
+      const result = await db
+        .insert(users)
+        .values({ name: "Partial", email: "partial@example.com", age: 42 })
+        .returning({ id: users.id, name: users.name });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, "Partial");
+      assert.equal(typeof result[0].id, "number");
+      assert.equal(result[0].email, undefined);
+      assert.equal(result[0].age, undefined);
+    });
+
+    it("update returning specific columns", async () => {
+      const result = await db
+        .update(users)
+        .set({ age: 43 })
+        .where(eq(users.name, "Partial"))
+        .returning({ name: users.name, age: users.age });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, "Partial");
+      assert.equal(result[0].age, 43);
+      assert.equal(result[0].id, undefined);
+    });
+
+    it("delete returning specific columns", async () => {
+      const result = await db
+        .delete(users)
+        .where(eq(users.name, "Partial"))
+        .returning({ email: users.email });
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].email, "partial@example.com");
+      assert.equal(result[0].name, undefined);
+    });
+  });
+
+  describe("orderBy and offset", () => {
+    before(async () => {
+      // Seed products via raw SQL (drizzle sends numeric as text params;
+      // PetraDB doesn't yet auto-convert text→numeric in parameterized inserts)
+      await session.execute(`
+        INSERT INTO products (name, price, quantity) VALUES
+          ('Apple', 1.50, 10),
+          ('Banana', 0.75, 20),
+          ('Cherry', 3.00, 5)
+      `);
+    });
+
+    it("orders by ascending", async () => {
+      const rows = await db.select().from(products).orderBy(asc(products.name));
+      assert.equal(rows[0].name, "Apple");
+      assert.equal(rows[1].name, "Banana");
+      assert.equal(rows[2].name, "Cherry");
+    });
+
+    it("orders by descending", async () => {
+      const rows = await db.select().from(products).orderBy(desc(products.price));
+      assert.equal(rows[0].name, "Cherry");
+      assert.equal(rows[rows.length - 1].name, "Banana");
+    });
+
+    it("supports offset", async () => {
+      const rows = await db
+        .select()
+        .from(products)
+        .orderBy(asc(products.name))
+        .limit(2)
+        .offset(1);
+
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0].name, "Banana");
+      assert.equal(rows[1].name, "Cherry");
+    });
+
+    it("orderBy with limit", async () => {
+      const rows = await db
+        .select()
+        .from(products)
+        .orderBy(asc(products.name))
+        .limit(1);
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].name, "Apple");
+    });
+  });
+
+  describe("joins", () => {
+    before(async () => {
+      await session.execute(`
+        CREATE TABLE orders (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          quantity INTEGER NOT NULL
+        )
+      `);
+    });
+
+    // Define the orders table for drizzle
+    const orders = pgTable("orders", {
+      id: serial("id").primaryKey(),
+      userId: integer("user_id").notNull(),
+      productId: integer("product_id").notNull(),
+      quantity: integer("quantity").notNull(),
+    });
+
+    it("inner join", async () => {
+      // Seed an order referencing existing users and products
+      const aliceRows = await db.select({ id: users.id }).from(users).where(eq(users.name, "Alice"));
+      const appleRows = await db.select({ id: products.id }).from(products).where(eq(products.name, "Apple"));
+      assert.ok(aliceRows.length > 0, "Alice should exist");
+      assert.ok(appleRows.length > 0, "Apple should exist");
+
+      await db.insert(orders).values({
+        userId: aliceRows[0].id,
+        productId: appleRows[0].id,
+        quantity: 3,
+      });
+
+      const rows = await db
+        .select({
+          userName: users.name,
+          productName: products.name,
+          orderQty: orders.quantity,
+        })
+        .from(orders)
+        .innerJoin(users, eq(orders.userId, users.id))
+        .innerJoin(products, eq(orders.productId, products.id));
+
+      assert.ok(rows.length >= 1);
+      const aliceOrder = rows.find((r) => r.userName === "Alice" && r.productName === "Apple");
+      assert.ok(aliceOrder);
+      assert.equal(aliceOrder.orderQty, 3);
+    });
+
+    it("left join returns null for non-matching rows", async () => {
+      // Bob has no orders
+      const rows = await db
+        .select({
+          userName: users.name,
+          orderId: orders.id,
+        })
+        .from(users)
+        .leftJoin(orders, eq(users.id, orders.userId))
+        .where(eq(users.name, "Bob"));
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].userName, "Bob");
+      assert.strictEqual(rows[0].orderId, null);
+    });
+  });
+
+  describe("$count", () => {
+    it("counts all rows in a table", async () => {
+      const count = await db.$count(users);
+      assert.equal(typeof count, "number");
+      assert.ok(count > 0);
+    });
+
+    it("counts with a filter", async () => {
+      const count = await db.$count(users, gt(users.age, 28));
+      assert.equal(typeof count, "number");
+      assert.ok(count > 0);
+    });
+  });
+
+  describe("numeric type mapping", () => {
+    it("returns string for NUMERIC columns", async () => {
+      const rows = await db.select().from(products).where(eq(products.name, "Apple"));
+      assert.equal(rows.length, 1);
+      assert.equal(typeof rows[0].price, "string");
+      assert.equal(Number(rows[0].price), 1.5);
+    });
+
+    it("returns number for INTEGER columns in products", async () => {
+      const rows = await db.select().from(products).where(eq(products.name, "Banana"));
+      assert.equal(typeof rows[0].quantity, "number");
+      assert.equal(rows[0].quantity, 20);
+    });
+
+    it("returns boolean for BOOLEAN columns in products", async () => {
+      const rows = await db.select().from(products).where(eq(products.name, "Cherry"));
+      assert.equal(typeof rows[0].inStock, "boolean");
+      assert.strictEqual(rows[0].inStock, true);
+    });
+  });
+
+  describe("parameterized raw SQL", () => {
+    it("interpolates values in sql template", async () => {
+      const name = "Alice";
+      const result = await db.execute(sql`SELECT * FROM users WHERE name = ${name}`);
+      assert.equal(result.rows.length, 1);
+      assert.equal(result.rows[0].name, "Alice");
+    });
+
+    it("interpolates multiple values", async () => {
+      const minAge = 20;
+      const maxAge = 40;
+      const result = await db.execute(
+        sql`SELECT * FROM users WHERE age >= ${minAge} AND age <= ${maxAge}`,
+      );
+      assert.ok(result.rows.length > 0);
+      for (const row of result.rows) {
+        assert.ok(row.age >= minAge && row.age <= maxAge);
+      }
+    });
+  });
+
+  describe("raw SQL via db.execute()", () => {
+    it("executes raw SQL and returns result", async () => {
+      const result = await db.execute(sql`SELECT count(*) as count FROM users`);
+      assert.ok(result.rows.length > 0);
+      assert.ok(Number(result.rows[0].count) > 0);
+    });
+  });
+
+  // Manual BEGIN/COMMIT/ROLLBACK still works via $session
+  describe("manual transactions via $session", () => {
     it("commits via manual BEGIN/COMMIT", async () => {
       await db.$session.execute("BEGIN");
       await db.insert(users).values({ name: "Eve", email: "eve@example.com", age: 22 });

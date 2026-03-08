@@ -2,6 +2,35 @@
 title: Changelog
 ---
 
+## v1.2-20260308
+
+### Drizzle ORM driver rewrite
+
+`@petradb/drizzle` rewritten from a `drizzle-orm/pg-proxy` wrapper to a custom PostgreSQL dialect driver extending `PgSession`/`PgPreparedQuery`/`PgTransaction` directly. This gives full feature parity with `drizzle-orm/node-postgres`:
+
+- `db.transaction()` with automatic commit/rollback
+- `tx.rollback()` for explicit rollback
+- `returning()` on insert/update/delete (including partial column selection)
+- Relational query support (pending engine support for `json_build_array`/`json_agg`)
+
+### Type coercion: text parameters to NUMERIC columns
+
+`NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
+
+### Version bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.2.3 | — |
+| engine | 1.2.8 | @petradb/engine 1.2.15 |
+| client | 1.2.5 | @petradb/client 1.2.5 |
+| server | 1.2.6 | @petradb/server 1.2.8 |
+| cli | 1.2.8 | @petradb/cli 1.2.8 |
+| jdbc | 1.2.12 | — |
+| knex | — | @petradb/knex 1.2.2 |
+| lucid | — | @petradb/lucid 1.2.1 |
+| drizzle | — | @petradb/drizzle 1.2.1 |
+
 ## v1.2-20260307
 
 ### SQL: `DEFAULT` keyword in INSERT VALUES
@@ -10,7 +39,7 @@ title: Changelog
 
 ### Drizzle ORM integration
 
-New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver via `drizzle-orm/pg-proxy`. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, and type-safe queries. Transactions use `db.$session` for manual `BEGIN`/`COMMIT`/`ROLLBACK`.
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver with a custom PostgreSQL dialect implementation. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and type-safe queries. Full feature parity with `drizzle-orm/node-postgres`.
 
 ### Version bumps for dependent packages
 
