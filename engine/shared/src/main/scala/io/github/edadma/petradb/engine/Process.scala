@@ -15,6 +15,27 @@ trait Process:
   def iterator(ctx: Seq[Row]): RowIterator
   def meta: Metadata
 
+  protected def validateColumns(expr: Expr, m: Metadata): Unit =
+    expr match
+      case ColumnExpr(table, id @ Ident(name)) =>
+        val lookupName = table.map(t => s"${t.name}.$name").getOrElse(name)
+        if !m.columnMap.contains(lookupName) then
+          // If qualified with a table not in our metadata, it may be a correlated outer reference — skip
+          val isOuterRef = table.exists(t => !m.columns.exists(c => c.table.contains(t.name)))
+          if !isOuterRef then
+            throw UndefinedReferenceException(id.pos, s"column '$lookupName' does not exist")
+      case UnaryExpr(_, e)                  => validateColumns(e, m)
+      case BinaryExpr(l, _, r)              => validateColumns(l, m); validateColumns(r, m)
+      case BetweenExpr(v, _, lo, hi)        => validateColumns(v, m); validateColumns(lo, m); validateColumns(hi, m)
+      case CaseExpr(whens, els)             => whens.foreach(w => { validateColumns(w.when, m); validateColumns(w.expr, m) }); els.foreach(e => validateColumns(e, m))
+      case InSeqExpr(v, _, es)              => validateColumns(v, m); es.foreach(e => validateColumns(e, m))
+      case InQueryExpr(v, _, _)             => validateColumns(v, m)
+      case AliasExpr(e, _)                  => validateColumns(e, m)
+      case CastExpr(e, _)                   => validateColumns(e, m)
+      case ScalarFunctionExpr(_, args)       => args.foreach(e => validateColumns(e, m))
+      case AggregateFunctionExpr(_, args)    => args.foreach(e => validateColumns(e, m))
+      case _                                => // literals, subqueries, etc.
+
 type RowIterator = Iterator[Row]
 
 case object SingleProcess extends Process:
@@ -26,6 +47,7 @@ case object SingleProcess extends Process:
 
 case class SeqScanProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
+  validateColumns(cond, meta)
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).filter(row => beval(cond, row +: ctx))
 
@@ -63,6 +85,7 @@ case class IndexScanProcess(table: Table, index: TableIndex, lookup: IndexLookup
 
 case class HavingProcess(input: Process, cond: Expr) extends Process:
   val meta: Metadata = input.meta
+  validateColumns(cond, meta)
 
   def iterator(ctx: Seq[Row]): RowIterator =
     input.iterator(ctx).filter(row => beval(cond, row +: ctx))
@@ -71,6 +94,7 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
   val meta: Metadata =
     val aggColumns = aggregates.map(spec => ColumnMetadata(None, spec.name, spec.typ))
     Metadata(input.meta.columns ++ aggColumns)
+  for expr <- groupBy do validateColumns(expr, input.meta)
 
   def iterator(ctx: Seq[Row]): RowIterator =
     val rows = input.iterator(ctx).toVector
@@ -201,6 +225,10 @@ case class SortProcess(input: Process, by: Seq[OrderBy]) extends Process:
   def iterator(ctx: Seq[Row]): RowIterator =
     val data      = input.iterator(ctx) to ArraySeq
     val fs        = by map { case OrderBy(f, _, _) => f }
+
+    // Validate ORDER BY column references eagerly (even on 0/1 rows)
+    for f <- fs do validateColumns(f, meta)
+
     val orderings =
       by map { case OrderBy(_, asc, nullsFirst) =>
         (asc, nullsFirst) match

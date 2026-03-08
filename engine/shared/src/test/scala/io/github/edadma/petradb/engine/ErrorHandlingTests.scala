@@ -116,12 +116,13 @@ class ErrorHandlingTests extends AnyFreeSpec with Matchers with Testing {
       }
     }
 
-    "ORDER BY nonexistent column fails" ignore { // BUG: ORDER BY doesn't validate column existence
+    "ORDER BY nonexistent column fails" in {
+      // Also test with multiple rows to ensure sort actually runs
       an[Exception] should be thrownBy {
         query(
           """
             |CREATE TABLE t (a INT);
-            |INSERT INTO t (a) VALUES (1);
+            |INSERT INTO t (a) VALUES (1), (2), (3);
             |SELECT a FROM t ORDER BY b;
             |""".trim.stripMargin
         )
