@@ -17,19 +17,46 @@ title: Changelog
 
 `NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
 
+### Three-valued NULL logic
+
+Full SQL three-valued logic for NULL handling:
+
+- Comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) return NULL when either operand is NULL
+- `AND`/`OR` implement proper three-valued truth tables (e.g., `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
+- `IN`/`NOT IN` propagate NULL correctly (e.g., `3 NOT IN (1, 2, NULL)` → unknown)
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) and string concatenation (`||`) propagate NULL
+- `LIKE` handles NULL operands
+
+### Unified expression grammar
+
+The SQL parser's separate `expression` and `booleanExpression` hierarchies have been merged into a single expression syntax. Boolean operators (`AND`, `OR`, `NOT`) are now regular operators in the precedence chain. This allows boolean expressions anywhere an expression is valid (e.g., `SELECT a > 5 AND b < 10`).
+
+### Eager column reference validation
+
+Column references in `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` are now validated eagerly at query plan construction time, catching nonexistent columns even on empty tables or single-row sorts. Previously, bad references were only detected at eval time per-row, so queries against empty tables silently succeeded.
+
+### Bug fixes
+
+- NOT NULL constraint not enforced on UPDATE
+- UNIQUE constraint rejected multiple NULLs (SQL standard: NULLs are distinct)
+- Duplicate columns in INSERT column list not detected
+- `SUM`/`AVG`/`MIN`/`MAX` on empty table returned 0 instead of NULL
+- `LIKE '_'` matched empty string
+- `LIMIT 0` threw an error
+
 ### Version bumps
 
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
-| engine | 1.2.8 | @petradb/engine 1.2.15 |
+| engine | 1.2.9 | @petradb/engine 1.2.16 |
 | client | 1.2.5 | @petradb/client 1.2.5 |
-| server | 1.2.6 | @petradb/server 1.2.8 |
-| cli | 1.2.8 | @petradb/cli 1.2.8 |
-| jdbc | 1.2.12 | — |
+| server | 1.2.6 | @petradb/server 1.2.9 |
+| cli | 1.2.8 | @petradb/cli 1.2.9 |
+| jdbc | 1.2.13 | — |
 | knex | — | @petradb/knex 1.2.2 |
 | lucid | — | @petradb/lucid 1.2.1 |
-| drizzle | — | @petradb/drizzle 1.2.1 |
+| drizzle | — | @petradb/drizzle 1.2.2 |
 
 ## v1.2-20260307
 
