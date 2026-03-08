@@ -60,15 +60,47 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       BooleanValue(if quantifier == "ANY" then arr.exists(cmp) else arr.forall(cmp))
     case InSeqExpr(value, op, exprs) =>
       val v = eval(value, ctx)
-
-      BooleanValue(op.contains("NOT") ^ (exprs exists (e => eval(e, ctx) == v)))
+      val vals = exprs.map(e => eval(e, ctx))
+      // SQL three-valued IN: TRUE if any match, NULL if any comparison is unknown, else FALSE
+      val result =
+        if v.isNull then NullValue()
+        else
+          var hasNull = false
+          var found = false
+          for elem <- vals if !found do
+            if elem.isNull then hasNull = true
+            else if v.compare(elem) == 0 then found = true
+          if found then BooleanValue(true)
+          else if hasNull then NullValue()
+          else BooleanValue(false)
+      op match
+        case "IN" => result
+        case "NOT IN" => result match
+          case BooleanValue(b) => BooleanValue(!b)
+          case _ => NullValue()
     case InQueryExpr(value, op, query) =>
       val v   = eval(value, ctx)
       val res = teval(query, ctx)
 
       if res.meta.width != 1 then throw ExecutionException(query.pos, "sub-query must return rows of one column")
 
-      BooleanValue(op.contains("NOT") ^ (res.data exists (_.data.head == v)))
+      val vals = res.data.map(_.data.head)
+      val result =
+        if v.isNull then NullValue()
+        else
+          var hasNull = false
+          var found = false
+          for elem <- vals if !found do
+            if elem.isNull then hasNull = true
+            else if v.compare(elem) == 0 then found = true
+          if found then BooleanValue(true)
+          else if hasNull then NullValue()
+          else BooleanValue(false)
+      op match
+        case "IN" => result
+        case "NOT IN" => result match
+          case BooleanValue(b) => BooleanValue(!b)
+          case _ => NullValue()
     case SubqueryExpr(query) =>
       val res = teval(query, ctx)
 

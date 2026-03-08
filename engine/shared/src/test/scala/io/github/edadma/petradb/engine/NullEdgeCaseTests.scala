@@ -381,7 +381,7 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
   // ── NULL in IN ────────────────────────────────────────────────────
 
   "NULL in IN" - {
-    "NULL IN (1, 2, NULL) returns no rows (unknown)" ignore { // BUG: needs three-valued logic for IN
+    "NULL IN (1, 2, NULL) returns no rows (unknown)" in {
       val table = query(
         """
           |CREATE TABLE t (val INT);
@@ -392,7 +392,7 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
       table.data.length shouldBe 0
     }
 
-    "value NOT IN list containing NULL returns no rows" ignore { // BUG: needs three-valued logic for NOT IN
+    "value NOT IN list containing NULL returns no rows" in {
       val table = query(
         """
           |CREATE TABLE t (val INT);
