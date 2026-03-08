@@ -269,7 +269,7 @@ object SQLParser:
   // ── Expression chain ───────────────────────────────────────────────
 
   // All binary chains: left ~ (op ~ right).rep → foldLeft
-  private def expression[p: P]: P[Expr] = P(concatenation)
+  private def expression[p: P]: P[Expr] = P(orExpression)
 
   private def concatenation[p: P]: P[Expr] =
     P(bitwise ~ ("||".! ~ bitwise).rep).map { case (first, rest) =>
@@ -470,10 +470,6 @@ object SQLParser:
       | (Idx ~ "-" ~ primary).map((loc, e) => pos(loc, UnaryExpr("-", e)))
     )
 
-  // ── Boolean expression chain ───────────────────────────────────────
-
-  private def booleanExpression[p: P]: P[Expr] = P(orExpression)
-
   private def orExpression[p: P]: P[Expr] =
     P(andExpression ~ (kw("or") ~ andExpression).rep).map { case (first, rest) =>
       rest.foldLeft(first) { case (l, r) => BinaryExpr(l, "OR", r).setPos(l.pos).asInstanceOf[Expr] }
@@ -486,14 +482,17 @@ object SQLParser:
 
   private def notExpression[p: P]: P[Expr] =
     P(
-      (Idx ~ kw("not") ~ booleanPrimary).map((loc, e) => pos(loc, UnaryExpr("NOT", e)))
-      | booleanPrimary
+      (Idx ~ kw("not") ~ notExpression).map((loc, e) => pos(loc, UnaryExpr("NOT", e)))
+      | comparisonExpression
     )
 
-  // ── Boolean primary ────────────────────────────────────────────────
+  // ── Comparison / suffix layer ────────────────────────────────────
 
-  private def booleanPrimary[p: P]: P[Expr] =
-    P(existsExpr | overlapsExpr | booleanLiteral | nullBoolExpr | parenBoolExpr | exprWithSuffix)
+  private def comparisonExpression[p: P]: P[Expr] =
+    P(existsExpr | overlapsExpr | (concatenation ~ booleanSuffix.?).map {
+      case (e, Some(f)) => f(e)
+      case (e, None) => e
+    })
 
   private def existsExpr[p: P]: P[Expr] =
     P(Idx ~ kw("exists") ~ "(" ~ query ~ ")").map((loc, q) => pos(loc, ExistsExpr(q)))
@@ -503,23 +502,13 @@ object SQLParser:
       (loc, s1, e1, s2, e2) => pos(loc, OverlapsExpr(s1, e1, s2, e2))
     }
 
-  private def nullBoolExpr[p: P]: P[Expr] =
-    P(Idx ~ kw("null")).map(loc => pos(loc, NullExpr()))
-
-  private def parenBoolExpr[p: P]: P[Expr] = P("(" ~ booleanExpression ~ ")")
-
-  private def exprWithSuffix[p: P]: P[Expr] =
-    P(expression ~ booleanSuffix.?).map {
-      case (e, Some(f)) => f(e)
-      case (e, None) => e
-    }
 
   private def booleanSuffix[p: P]: P[Expr => Expr] =
     P(jsonbOpSuffix | quantifiedSuffix | isDistinctSuffix | comparisonSuffix | betweenSuffix | isNullSuffix | inSuffix)
 
-  // @>, <@, &&, ?&, ?|, ? — operator ~ expression => (String, Expr)
+  // @>, <@, &&, ?&, ?|, ? — operator ~ concatenation => (String, Expr)
   private def jsonbOpSuffix[p: P]: P[Expr => Expr] =
-    P(("@>".! | "<@".! | "&&".! | "?&".! | "?|".! | "?".!) ~ expression).map { case (op, right) =>
+    P(("@>".! | "<@".! | "&&".! | "?&".! | "?|".! | "?".!) ~ concatenation).map { case (op, right) =>
       (left: Expr) => BinaryExpr(left, op, right).setPos(left.pos).asInstanceOf[Expr]
     }
 
@@ -540,29 +529,29 @@ object SQLParser:
 
   // comparison ANY/SOME/ALL(expr) => (String, String, Expr)
   private def cmpQuantifiedSuffix[p: P]: P[Expr => Expr] =
-    P(comparison ~ (kw("any") | kw("some") | kw("all")).!.map(_.toUpperCase) ~ "(" ~ expression ~ ")").map { case (cmp, quant, arr) =>
+    P(comparison ~ (kw("any") | kw("some") | kw("all")).!.map(_.toUpperCase) ~ "(" ~ concatenation ~ ")").map { case (cmp, quant, arr) =>
       val q = if quant == "SOME" then "ANY" else quant
       (left: Expr) => QuantifiedCompareExpr(left, cmp, q, arr).setPos(left.pos).asInstanceOf[Expr]
     }
 
   private def isDistinctSuffix[p: P]: P[Expr => Expr] =
     P(
-      (kw("is") ~ kw("not") ~ kw("distinct") ~ kw("from") ~ expression).map { right =>
+      (kw("is") ~ kw("not") ~ kw("distinct") ~ kw("from") ~ concatenation).map { right =>
         (left: Expr) => BinaryExpr(left, "IS NOT DISTINCT FROM", right).setPos(left.pos).asInstanceOf[Expr]
       }
-      | (kw("is") ~ kw("distinct") ~ kw("from") ~ expression).map { right =>
+      | (kw("is") ~ kw("distinct") ~ kw("from") ~ concatenation).map { right =>
           (left: Expr) => BinaryExpr(left, "IS DISTINCT FROM", right).setPos(left.pos).asInstanceOf[Expr]
         }
     )
 
-  // comparison ~ expression => (String, Expr)
+  // comparison ~ concatenation => (String, Expr)
   private def comparisonSuffix[p: P]: P[Expr => Expr] =
-    P(comparison ~ expression).map { case (op, right) =>
+    P(comparison ~ concatenation).map { case (op, right) =>
       (left: Expr) => BinaryExpr(left, op, right).setPos(left.pos).asInstanceOf[Expr]
     }
 
   private def betweenSuffix[p: P]: P[Expr => Expr] =
-    P(betweenOp ~ expression ~ kw("and") ~ expression).map { case (op, lower, upper) =>
+    P(betweenOp ~ concatenation ~ kw("and") ~ concatenation).map { case (op, lower, upper) =>
       (left: Expr) => BetweenExpr(left, op, lower, upper).setPos(left.pos).asInstanceOf[Expr]
     }
 
@@ -669,22 +658,18 @@ object SQLParser:
     P(kw("when") ~ expression ~ kw("then") ~ expression).map((v, r) => (v, r))
 
   private def when[p: P]: P[When] =
-    P(kw("when") ~ booleanExpression ~ kw("then") ~ expression).map((cond, e) => When(cond, e))
+    P(kw("when") ~ expression ~ kw("then") ~ expression).map((cond, e) => When(cond, e))
 
   // ── SELECT expressions ─────────────────────────────────────────────
 
-  // selectExpression: qualifiedStar | star | expression [IS [NOT] NULL|TRUE|FALSE|UNKNOWN] [AS alias]
+  // selectExpression: qualifiedStar | star | expression [AS alias]
   private def selectExpression[p: P]: P[Expr] =
     P(
       qualifiedStar
       | star
-      | (expression ~ isNull.? ~ (kw("as").? ~ identifier).?).map {
-          case (e, Some(n), None) => UnaryExpr(n, e).setPos(e.pos).asInstanceOf[Expr]
-          case (e, Some(n), Some(a)) =>
-            val unary = UnaryExpr(n, e).setPos(e.pos).asInstanceOf[Expr]
-            AliasExpr(unary, a).setPos(e.pos).asInstanceOf[Expr]
-          case (e, None, None) => e
-          case (e, None, Some(a)) => AliasExpr(e, a).setPos(e.pos).asInstanceOf[Expr]
+      | (expression ~ (kw("as").? ~ identifier).?).map {
+          case (e, None) => e
+          case (e, Some(a)) => AliasExpr(e, a).setPos(e.pos).asInstanceOf[Expr]
         }
     )
 
@@ -696,11 +681,11 @@ object SQLParser:
 
   private def fromClause[p: P]: P[Option[Seq[Expr]]] = P((kw("from") ~ sources.rep(1, sep = ",")).?)
 
-  private def whereClause[p: P]: P[Option[Expr]] = P((kw("where") ~ booleanExpression).?)
+  private def whereClause[p: P]: P[Option[Expr]] = P((kw("where") ~ expression).?)
 
   private def groupByClause[p: P]: P[Option[Seq[Expr]]] = P((kw("group") ~ kw("by") ~ expression.rep(1, sep = ",")).?)
 
-  private def havingClause[p: P]: P[Option[Expr]] = P((kw("having") ~ booleanExpression).?)
+  private def havingClause[p: P]: P[Option[Expr]] = P((kw("having") ~ expression).?)
 
   private def orderByClause[p: P]: P[Option[Seq[OrderBy]]] = P((kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?)
 
@@ -741,9 +726,9 @@ object SQLParser:
   private def crossJoinSuffix[p: P]: P[JoinOp] =
     P(kw("cross") ~ kw("join") ~ source).map(r => CrossJoin(r))
 
-  // joinType.? ~ kw("join") ~ source ~ kw("on") ~ booleanExpression => (Option[String], Expr, Expr)
+  // joinType.? ~ kw("join") ~ source ~ kw("on") ~ expression => (Option[String], Expr, Expr)
   private def condJoinSuffix[p: P]: P[JoinOp] =
-    P(joinType.? ~ kw("join") ~ source ~ kw("on") ~ booleanExpression).map((jt, r, c) => CondJoin(jt, r, c))
+    P(joinType.? ~ kw("join") ~ source ~ kw("on") ~ expression).map((jt, r, c) => CondJoin(jt, r, c))
 
   private def joinSuffix[p: P]: P[JoinOp] = P(crossJoinSuffix | condJoinSuffix)
 
@@ -883,7 +868,7 @@ object SQLParser:
   private def update[p: P]: P[Command] =
     P(kw("update") ~ identifier ~ kw("set") ~ set.rep(1, sep = ",") ~
       (kw("from") ~ sources.rep(1, sep = ",")).? ~
-      (kw("where") ~ booleanExpression).? ~
+      (kw("where") ~ expression).? ~
       returningClause.?).map { case (t, ss, f, c, ret) =>
       UpdateCommand(t, ss, f, c, ret)
     }
@@ -891,7 +876,7 @@ object SQLParser:
   // ── DML: DELETE ────────────────────────────────────────────────────
 
   private def delete[p: P]: P[Command] =
-    P(kw("delete") ~ kw("from") ~ identifier ~ (kw("where") ~ booleanExpression).? ~ returningClause.?).map {
+    P(kw("delete") ~ kw("from") ~ identifier ~ (kw("where") ~ expression).? ~ returningClause.?).map {
       case (t, c, ret) => DeleteCommand(t, c, ret)
     }
 
@@ -930,7 +915,7 @@ object SQLParser:
     }
 
   private def checkConstraint[p: P]: P[Option[String] => TableConstraint] =
-    P(kw("check") ~ "(" ~ booleanExpression ~ ")").map { expr =>
+    P(kw("check") ~ "(" ~ expression ~ ")").map { expr =>
       (name: Option[String]) => CheckConstraint(name, expr)
     }
 
@@ -961,7 +946,7 @@ object SQLParser:
       | kw("unique").map(_ => ColUnique)
       | (kw("default") ~ expression).map(ColDefault(_))
       | colReferences
-      | (kw("check") ~ "(" ~ booleanExpression ~ ")").map(ColCheck(_))
+      | (kw("check") ~ "(" ~ expression ~ ")").map(ColCheck(_))
     )
 
   // REFERENCES table(column) [ON DELETE ...] [ON UPDATE ...]
@@ -1246,4 +1231,4 @@ object SQLParser:
 
   def parseQuery(input: String): Expr = run(input, { implicit p => P(query ~ End) })
 
-  def parseBooleanExpression(input: String): Expr = run(input, { implicit p => P(booleanExpression ~ End) })
+  def parseBooleanExpression(input: String): Expr = run(input, { implicit p => P(expression ~ End) })

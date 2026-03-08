@@ -174,10 +174,23 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case _                  => _ => false
       BooleanValue(if op == "?|" then keys.exists(exists) else keys.forall(exists))
     case BinaryExpr(left, op @ ("AND" | "OR"), right) =>
-      val or = op == "OR"
-
-      if or ^ !beval(left, ctx) then BooleanValue(or)
-      else BooleanValue(beval(right, ctx))
+      val l = eval(left, ctx)
+      val r = eval(right, ctx)
+      val lNull = l.isNull
+      val rNull = r.isNull
+      val lBool = if lNull then false else l.asInstanceOf[BooleanValue].b
+      val rBool = if rNull then false else r.asInstanceOf[BooleanValue].b
+      op match
+        case "AND" =>
+          if !lNull && !lBool then BooleanValue(false)        // FALSE AND _ → FALSE
+          else if !rNull && !rBool then BooleanValue(false)    // _ AND FALSE → FALSE
+          else if lNull || rNull then NullValue()              // NULL AND TRUE/NULL → NULL
+          else BooleanValue(true)                              // TRUE AND TRUE → TRUE
+        case "OR" =>
+          if !lNull && lBool then BooleanValue(true)           // TRUE OR _ → TRUE
+          else if !rNull && rBool then BooleanValue(true)      // _ OR TRUE → TRUE
+          else if lNull || rNull then NullValue()              // NULL OR FALSE/NULL → NULL
+          else BooleanValue(false)                             // FALSE OR FALSE → FALSE
     case BinaryExpr(left, op @ ("LIKE" | "ILIKE" | "NOT LIKE" | "NOT ILIKE"), right) =>
       def like(s: String, pattern: String, casesensitive: Boolean = true): Boolean =
         var sp      = 0

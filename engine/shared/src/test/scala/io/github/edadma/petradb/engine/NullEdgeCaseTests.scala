@@ -203,6 +203,75 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  // ── NULL in AND/OR ─────────────────────────────────────────────────
+
+  "NULL in AND" - {
+    "TRUE AND NULL is NULL" in {
+      val table = query("SELECT TRUE AND NULL;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+
+    "NULL AND TRUE is NULL" in {
+      val table = query("SELECT NULL AND TRUE;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+
+    "FALSE AND NULL is FALSE" in {
+      val table = query("SELECT FALSE AND NULL;")
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "NULL AND FALSE is FALSE" in {
+      val table = query("SELECT NULL AND FALSE;")
+      table.data(0).data(0) shouldBe BooleanValue(false)
+    }
+
+    "NULL AND NULL is NULL" in {
+      val table = query("SELECT NULL AND NULL;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
+
+  "NULL in OR" - {
+    "TRUE OR NULL is TRUE" in {
+      val table = query("SELECT TRUE OR NULL;")
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "NULL OR TRUE is TRUE" in {
+      val table = query("SELECT NULL OR TRUE;")
+      table.data(0).data(0) shouldBe BooleanValue(true)
+    }
+
+    "FALSE OR NULL is NULL" in {
+      val table = query("SELECT FALSE OR NULL;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+
+    "NULL OR FALSE is NULL" in {
+      val table = query("SELECT NULL OR FALSE;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+
+    "NULL OR NULL is NULL" in {
+      val table = query("SELECT NULL OR NULL;")
+      table.data(0).data(0).isNull shouldBe true
+    }
+  }
+
+  "NULL AND/OR in WHERE" - {
+    "TRUE AND NULL excludes row" in {
+      val table = query(
+        """
+          |CREATE TABLE t (a BOOLEAN, b BOOLEAN);
+          |INSERT INTO t (a, b) VALUES (TRUE, NULL), (FALSE, NULL), (NULL, TRUE);
+          |SELECT COUNT(*) FROM t WHERE a AND b;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 0)
+    }
+  }
+
   // ── NULL in expressions ───────────────────────────────────────────
 
   "NULL in expressions" - {
