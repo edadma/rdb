@@ -83,7 +83,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-engine",
-    version := "1.2.6",
+    version := "1.2.7",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dllist"         % "0.0.6",
@@ -159,7 +159,7 @@ lazy val cli = crossProject(JSPlatform, NativePlatform)
   .dependsOn(engine, client)
   .settings(
     name    := "petradb-cli",
-    version := "1.2.6",
+    version := "1.2.7",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
@@ -182,7 +182,7 @@ lazy val server = crossProject(JVMPlatform, JSPlatform)
   .dependsOn(engine, shared)
   .settings(
     name    := "petradb-server",
-    version := "1.2.4",
+    version := "1.2.5",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "com.indoorvivants" %%% "toml"       % "0.3.0",
@@ -212,7 +212,7 @@ lazy val jdbc = project
   .dependsOn(client.jvm, engine.jvm, server.jvm % Test)
   .settings(
     name    := "petradb-jdbc",
-    version := "1.2.10",
+    version := "1.2.11",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     assembly / assemblyJarName := "petradb-jdbc.jar",

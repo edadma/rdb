@@ -12,14 +12,18 @@ title: Changelog
 
 New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver via `drizzle-orm/pg-proxy`. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, and type-safe queries. Transactions use `db.$session` for manual `BEGIN`/`COMMIT`/`ROLLBACK`.
 
+### Version bumps for dependent packages
+
+Engine, server, cli, and jdbc bumped to pick up the DEFAULT keyword fix.
+
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
-| engine | 1.2.6 | @petradb/engine 1.2.13 |
+| engine | 1.2.7 | @petradb/engine 1.2.14 |
 | client | 1.2.5 | @petradb/client 1.2.5 |
-| server | — | @petradb/server 1.2.5 |
-| cli | — | @petradb/cli 1.2.5 |
-| jdbc | 1.2.10 | — |
+| server | — | @petradb/server 1.2.7 |
+| cli | — | @petradb/cli 1.2.7 |
+| jdbc | 1.2.11 | — |
 | knex | — | @petradb/knex 1.2.2 |
 | lucid | — | @petradb/lucid 1.2.1 |
 | drizzle | — | @petradb/drizzle 1.2.0 |
