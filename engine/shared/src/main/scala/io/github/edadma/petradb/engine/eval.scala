@@ -298,7 +298,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val l = eval(left, ctx)
       val r = eval(right, ctx)
 
-      BooleanValue(
+      if l.isNull || r.isNull then NullValue()
+      else BooleanValue(
         op match
           case "<"  => l < r
           case ">"  => l > r
@@ -309,7 +310,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val l = eval(left, ctx)
       val r = eval(right, ctx)
 
-      BooleanValue(
+      if l.isNull || r.isNull then NullValue()
+      else BooleanValue(
         op match
           case "="  => l.compare(r) == 0
           case "!=" => l.compare(r) != 0,

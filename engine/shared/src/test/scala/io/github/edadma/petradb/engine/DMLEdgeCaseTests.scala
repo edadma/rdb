@@ -195,7 +195,7 @@ class DMLEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
       table.data(2).data(0) shouldBe NumberValue(DIntType, 5)
     }
 
-    "delete with NULL in WHERE condition" ignore { // BUG: NULL = NULL returns true (needs three-valued logic)
+    "delete with NULL in WHERE condition" in {
       val table = query(
         """
           |CREATE TABLE t (val INT);

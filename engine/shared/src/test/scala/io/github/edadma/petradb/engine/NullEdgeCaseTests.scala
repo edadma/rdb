@@ -11,7 +11,7 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
   // ── NULL comparisons ──────────────────────────────────────────────
 
   "NULL comparisons" - {
-    "NULL = NULL is not true (returns no rows)" ignore { // BUG: NULL = NULL returns true (needs three-valued logic)
+    "NULL = NULL is not true (returns no rows)" in {
       val table = query(
         """
           |CREATE TABLE t (val INT);
