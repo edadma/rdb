@@ -202,7 +202,13 @@ class MemoryTable(name: String, specs: Seq[Spec], private[engine] val db: Memory
         val midx = idx.asInstanceOf[MemoryTableIndex]
         val baseKey = midx.columnIndices.map(i => arr(i): Value)
         if midx.meta.unique then
-          if midx.tree.insertIfNotFound(baseKey, node) then
+          if baseKey.exists(_.isNull) then
+            // NULLs are always distinct for UNIQUE constraint purposes
+            val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
+            midx.nextRowId += 1
+            midx.tree.insert(key, node)
+            inserted += ((midx, key))
+          else if midx.tree.insertIfNotFound(baseKey, node) then
             sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
           else
             inserted += ((midx, baseKey))

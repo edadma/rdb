@@ -142,7 +142,7 @@ class LateralJoinTests extends AnyFreeSpec with Matchers with Testing {
       table.data(1).data(0) shouldBe TextValue("Bob")
       table.data(1).data(1) shouldBe NumberValue(150)
       table.data(2).data(0) shouldBe TextValue("Carol")
-      table.data(2).data(1) shouldBe NumberValue(0)
+      table.data(2).data(1).isNull shouldBe true // SUM over empty set returns NULL per SQL standard
     }
   }
 

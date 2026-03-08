@@ -92,7 +92,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case BinaryExpr(left, "||", right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)
-      (l, r) match
+      if l.isNull || r.isNull then NullValue()
+      else (l, r) match
         case (ObjectValue(lp), ObjectValue(rp)) =>
           ObjectValue(lp.filterNot { case (k, _) => rp.exists(_._1 == k) } ++ rp)
         case (ArrayValue(ld), ArrayValue(rd)) => ArrayValue(ld ++ rd)
@@ -212,7 +213,10 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
                   choices push ChoicePoint(sp + 1, pp)
 
                 pp += 1
-              case '_' => move()
+              case '_' =>
+                if (sp >= s.length) {
+                  if (!choice) return false
+                } else move()
               case c   =>
                 if (c == '\\')
                   pp += 1
@@ -230,11 +234,15 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
 
         true
 
-      val s   = seval(left, ctx)
-      val p   = seval(right, ctx)
-      val res = like(s, p, !op.contains("ILIKE"))
+      val lv = eval(left, ctx)
+      val rv = eval(right, ctx)
+      if lv.isNull || rv.isNull then NullValue()
+      else
+        val s   = lv.string
+        val p   = rv.string
+        val res = like(s, p, !op.contains("ILIKE"))
 
-      BooleanValue(op.contains("NOT") ^ res)
+        BooleanValue(op.contains("NOT") ^ res)
     case BinaryExpr(left, op @ ("&" | "|" | "#" | "<<" | ">>"), right) =>
       val l = neval(left, ctx).value.longValue
       val r = neval(right, ctx).value.longValue
@@ -250,6 +258,8 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case BinaryExpr(left, op @ ("+" | "-" | "*" | "/" | "%"), right) =>
       val l = eval(left, ctx)
       val r = eval(right, ctx)
+
+      if l.isNull || r.isNull then return NullValue()
 
       (l, op, r) match
         // number op number (existing behavior)
@@ -327,7 +337,10 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
         case Some(When(_, expr)) => eval(expr, ctx)
 
 def beval(expr: Expr, ctx: Seq[Row]): Boolean =
-  eval(expr, ctx).asInstanceOf[BooleanValue].b
+  eval(expr, ctx) match
+    case BooleanValue(b) => b
+    case v if v.isNull   => false // NULL in boolean context (WHERE, HAVING, CHECK) is treated as false
+    case v               => sys.error(s"expected boolean, got ${v.vtyp.name}")
 
 def neval(expr: Expr, ctx: Seq[Row]): NumberValue =
   val v = eval(expr, ctx)

@@ -208,6 +208,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             for (id @ Ident(c) <- resolvedColumns)
               if !t.hasColumn(c) then throw UndefinedReferenceException(id.pos, s"unknown column: $c")
 
+            // Check for duplicate columns in INSERT column list
+            val colNames = resolvedColumns.collect { case Ident(name) => name }
+            val dupes = colNames.groupBy(identity).collect { case (name, occurrences) if occurrences.size > 1 => name }
+            if dupes.nonEmpty then
+              throw ExecutionException(resolvedColumns.head.pos, s"column \"${dupes.head}\" specified more than once")
+
             val fks = db.foreignKeys(t)
             val fkCheck: Option[IndexedSeq[Value] => Unit] =
               if fks.isEmpty then None
@@ -535,8 +541,11 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             case Some(u) =>
               val updates = cols zip (exprs map (e => eval(e, Seq(evalRow))))
               for (col, value) <- updates do
-                if pkCols.contains(col) && value.isNull then
-                  sys.error(s"null value in column \"$col\" violates not-null constraint")
+                if value.isNull then
+                  if pkCols.contains(col) then
+                    sys.error(s"null value in column \"$col\" violates not-null constraint")
+                  else if t.columns(t.columnMap(col)).required then
+                    sys.error(s"null value in column \"$col\" violates not-null constraint")
               // Enforce CHECK constraints on the updated row
               if checkConstraints.nonEmpty then
                 val newRowData = targetRow.data.toArray

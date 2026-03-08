@@ -43,18 +43,20 @@ val aggregateFunction: Map[String, AggregateFunction] =
       def instantiate: (AggregateFunctionInstance, Type) =
         (
           new AggregateFunctionInstance("sum"):
-            var sum: NumberValue = NumberValue(0)
+            var sum: Value = NullValue()
 
             val acc: PartialFunction[Seq[Value], Value] =
               case Seq(v: NumberValue) =>
-                sum = BasicDAL.compute(PLUS, sum, v, NumberValue.from)
+                sum = sum match
+                  case _: NullValue => v
+                  case s: NumberValue => BasicDAL.compute(PLUS, s, v, NumberValue.from)
                 sum
               case Seq(v) if v.isNull => sum
               case Seq(v) => throw TypeException(v.pos, "only numbers can be summed")
 
-            def result: NumberValue = sum
+            def result: Value = sum
 
-            def init(): Unit = sum = NumberValue(0)
+            def init(): Unit = sum = NullValue()
           ,
           NumberType,
         )

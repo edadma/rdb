@@ -305,7 +305,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
         limit match
           case Some(Count(pos, expr)) =>
             val count = evalCountExpr(pos, expr, "limit")
-            if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
+            if count < 0 then throw ExecutionException(pos, s"limit should be non-negative: $count")
             LimitOperator(r5, count)
           case None => r5
 
@@ -336,7 +336,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
         limit match
           case Some(Count(pos, expr)) =>
             val count = evalCountExpr(pos, expr, "limit")
-            if count < 1 then throw ExecutionException(pos, s"limit should be positive: $count")
+            if count < 0 then throw ExecutionException(pos, s"limit should be non-negative: $count")
             LimitOperator(r2, count)
           case None => r2
       rewrite(r3)
