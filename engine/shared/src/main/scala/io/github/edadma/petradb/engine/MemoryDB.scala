@@ -75,6 +75,14 @@ class MemoryDB extends DB:
     table.primaryKey.foreach { pk =>
       createIndex(s"${name}_pkey", name, pk.columns, unique = true)
     }
+    for spec <- specs do
+      spec match
+        case UniqueSpec(cols, cname) =>
+          val indexName = cname.getOrElse(s"${name}_${cols.mkString("_")}_key")
+          createIndex(indexName, name, cols, unique = true)
+        case cs: ColumnSpec if cs.unique =>
+          createIndex(s"${name}_${cs.name}_key", name, Seq(cs.name), unique = true)
+        case _ =>
     table
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =

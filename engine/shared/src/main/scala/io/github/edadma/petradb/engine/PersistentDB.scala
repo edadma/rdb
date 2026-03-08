@@ -65,6 +65,14 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       table.primaryKey.foreach { pk =>
         createPersistentIndex(s"${name}_pkey", name, pk.columns, unique = true, batch)
       }
+      for spec <- specs do
+        spec match
+          case UniqueSpec(cols, cname) =>
+            val indexName = cname.getOrElse(s"${table.name}_${cols.mkString("_")}_key")
+            createPersistentIndex(indexName, table.name, cols, unique = true, batch)
+          case cs: ColumnSpec if cs.unique =>
+            createPersistentIndex(s"${table.name}_${cs.name}_key", table.name, Seq(cs.name), unique = true, batch)
+          case _ =>
       writeCatalogInBatch(batch)
     }
     table

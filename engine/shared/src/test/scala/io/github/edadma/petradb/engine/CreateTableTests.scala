@@ -82,7 +82,7 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
       ) should include("CreateTableResult(\"products\")")
     }
 
-    "unique constraints" in {
+    "unique constraints parse and allow distinct values" in {
       test(
         """
           |CREATE TABLE customers (
@@ -93,10 +93,130 @@ class CreateTableTests extends AnyFreeSpec with Matchers with Testing {
           | UNIQUE (email),
           | CONSTRAINT uk_customers_username UNIQUE (username)
           |);
-          |INSERT INTO customers (email, username) VALUES ('test@example.com', 'testuser');
-          |SELECT * FROM customers;
+          |INSERT INTO customers (email, username) VALUES ('a@example.com', 'alice');
+          |INSERT INTO customers (email, username) VALUES ('b@example.com', 'bob');
+          |SELECT count(*) AS n FROM customers;
           |""".trim.stripMargin
-      ) should include("CreateTableResult(\"customers\")")
+      ) should include("2")
+    }
+
+    "unique constraint on email rejects duplicate" in {
+      intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE customers2 (
+            | id SERIAL,
+            | email TEXT NOT NULL,
+            | username TEXT,
+            | PRIMARY KEY (id),
+            | UNIQUE (email)
+            |);
+            |INSERT INTO customers2 (email, username) VALUES ('a@example.com', 'alice');
+            |INSERT INTO customers2 (email, username) VALUES ('a@example.com', 'bob');
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "named unique constraint on username rejects duplicate" in {
+      intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE customers3 (
+            | id SERIAL,
+            | email TEXT NOT NULL,
+            | username TEXT,
+            | PRIMARY KEY (id),
+            | CONSTRAINT uk_username UNIQUE (username)
+            |);
+            |INSERT INTO customers3 (email, username) VALUES ('a@example.com', 'alice');
+            |INSERT INTO customers3 (email, username) VALUES ('b@example.com', 'alice');
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "composite unique constraint allows different combinations" in {
+      test(
+        """
+          |CREATE TABLE workspace_users (
+          | id SERIAL PRIMARY KEY,
+          | workspace_id INT NOT NULL,
+          | email TEXT NOT NULL,
+          | UNIQUE (workspace_id, email)
+          |);
+          |INSERT INTO workspace_users (workspace_id, email) VALUES (1, 'alice@example.com');
+          |INSERT INTO workspace_users (workspace_id, email) VALUES (2, 'alice@example.com');
+          |INSERT INTO workspace_users (workspace_id, email) VALUES (1, 'bob@example.com');
+          |SELECT count(*) AS n FROM workspace_users;
+          |""".trim.stripMargin
+      ) should include("3")
+    }
+
+    "composite unique constraint rejects duplicates" in {
+      intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE workspace_users2 (
+            | id SERIAL PRIMARY KEY,
+            | workspace_id INT NOT NULL,
+            | email TEXT NOT NULL,
+            | UNIQUE (workspace_id, email)
+            |);
+            |INSERT INTO workspace_users2 (workspace_id, email) VALUES (1, 'alice@example.com');
+            |INSERT INTO workspace_users2 (workspace_id, email) VALUES (1, 'alice@example.com');
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "named composite unique constraint allows different combinations" in {
+      test(
+        """
+          |CREATE TABLE team_members (
+          | id SERIAL PRIMARY KEY,
+          | team_id INT NOT NULL,
+          | username TEXT NOT NULL,
+          | CONSTRAINT uk_team_username UNIQUE (team_id, username)
+          |);
+          |INSERT INTO team_members (team_id, username) VALUES (1, 'alice');
+          |INSERT INTO team_members (team_id, username) VALUES (1, 'bob');
+          |INSERT INTO team_members (team_id, username) VALUES (2, 'alice');
+          |SELECT count(*) AS n FROM team_members;
+          |""".trim.stripMargin
+      ) should include("3")
+    }
+
+    "named composite unique constraint rejects duplicates" in {
+      intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE team_members2 (
+            | id SERIAL PRIMARY KEY,
+            | team_id INT NOT NULL,
+            | username TEXT NOT NULL,
+            | CONSTRAINT uk_team_username2 UNIQUE (team_id, username)
+            |);
+            |INSERT INTO team_members2 (team_id, username) VALUES (1, 'alice');
+            |INSERT INTO team_members2 (team_id, username) VALUES (1, 'alice');
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "column-level unique constraint enforced" in {
+      intercept[Exception] {
+        test(
+          """
+            |CREATE TABLE emails (
+            | id SERIAL PRIMARY KEY,
+            | email TEXT UNIQUE NOT NULL
+            |);
+            |INSERT INTO emails (email) VALUES ('alice@example.com');
+            |INSERT INTO emails (email) VALUES ('alice@example.com');
+            |""".trim.stripMargin
+        )
+      }
     }
 
     "foreign key constraints" in {
