@@ -3,6 +3,53 @@ title: DDL
 description: Data Definition Language — CREATE, ALTER, DROP, and TRUNCATE statements.
 ---
 
+## Schemas
+
+PetraDB supports PostgreSQL-style schema namespaces. Every database has a `public` schema by default. Unqualified table names resolve to `public`.
+
+### CREATE SCHEMA
+
+```sql
+CREATE SCHEMA inventory;
+CREATE SCHEMA IF NOT EXISTS inventory;
+```
+
+### Schema-qualified tables
+
+Use `schema.table` syntax in any DDL or DML statement:
+
+```sql
+CREATE TABLE inventory.products (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  price NUMERIC(10,2)
+);
+
+INSERT INTO inventory.products (name, price) VALUES ('Widget', 9.99);
+SELECT * FROM inventory.products;
+```
+
+Tables with the same name can exist in different schemas:
+
+```sql
+CREATE SCHEMA staging;
+CREATE TABLE staging.products (id SERIAL, name TEXT);
+CREATE TABLE public.products (id SERIAL, name TEXT);
+-- These are separate tables
+```
+
+### information_schema
+
+PetraDB provides `information_schema` virtual tables for introspecting database structure:
+
+```sql
+SELECT * FROM information_schema.schemata;
+SELECT * FROM information_schema.tables;
+SELECT * FROM information_schema.columns WHERE table_name = 'products';
+```
+
+Available views: `schemata`, `tables`, `columns`.
+
 ## Tables
 
 ### CREATE TABLE

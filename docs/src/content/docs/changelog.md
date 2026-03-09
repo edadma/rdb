@@ -2,6 +2,52 @@
 title: Changelog
 ---
 
+## v1.3.0
+
+### Schema support
+
+PostgreSQL-style schema namespaces. Every database has a `public` schema by default; unqualified table names resolve to `public`. Schema-qualified names (`schema.table`) work in all DDL and DML statements — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, and COPY.
+
+```sql
+CREATE SCHEMA inventory;
+CREATE TABLE inventory.products (id SERIAL PRIMARY KEY, name TEXT);
+INSERT INTO inventory.products (name) VALUES ('Widget');
+SELECT * FROM inventory.products;
+```
+
+### information_schema virtual tables
+
+`information_schema.schemata`, `information_schema.tables`, and `information_schema.columns` are now queryable. Schema-qualified tables report their correct `table_schema`. These views are generated dynamically from database metadata.
+
+### Drizzle ORM migrations
+
+New `migrate()` function in `@petradb/drizzle` applies Drizzle Kit migration files. Reads the `meta/_journal.json` and executes SQL migration files in order, tracking applied migrations in `drizzle.__drizzle_migrations`.
+
+```typescript
+import { migrate } from "@petradb/drizzle";
+await migrate(db, { migrationsFolder: "./drizzle" });
+```
+
+### JDBC metadata improvements
+
+`DatabaseMetaData.getColumns()` now returns accurate `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` values based on column type and precision/scale declarations.
+
+### Version bumps
+
+All components bumped to 1.3.0:
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.3.0 | — |
+| engine | 1.3.0 | @petradb/engine 1.3.0 |
+| client | 1.3.0 | @petradb/client 1.3.0 |
+| server | 1.3.0 | @petradb/server 1.3.0 |
+| cli | 1.3.0 | @petradb/cli 1.3.0 |
+| jdbc | 1.3.0 | — |
+| knex | — | @petradb/knex 1.3.0 |
+| lucid | — | @petradb/lucid 1.3.0 |
+| drizzle | — | @petradb/drizzle 1.3.0 |
+
 ## v1.2-20260308
 
 ### Drizzle ORM driver rewrite

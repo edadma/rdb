@@ -43,6 +43,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
     case BeginCommand    => session.beginTransaction(); BeginResult
     case CommitCommand   => session.commitTransaction(); CommitResult
     case RollbackCommand => session.rollbackTransaction(); RollbackResult
+    case DoBlockCommand(body) =>
+      try executeCommands(Seq(body)).head
+      catch
+        case _: SchemaException         => AlterTableResult()
+        case _: ConstraintException     => AlterTableResult()
+        case e: IllegalArgumentException if e.getMessage != null && e.getMessage.contains("already exists") => AlterTableResult()
     case CreateSchemaCommand(Ident(name), ifNotExists) =>
       if ifNotExists && db.hasSchema(name) then CreateSchemaResult(name)
       else

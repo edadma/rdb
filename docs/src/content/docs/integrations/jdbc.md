@@ -12,18 +12,18 @@ PetraDB includes a JDBC 4 driver for JVM applications. The driver registers itse
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.2.13</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.2.13'
+implementation 'io.github.edadma:petradb-jdbc:1.3.0'
 ```
 
 **sbt:**
 ```scala
-libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.2.13"
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.3.0"
 ```
 
 Or download the jar directly from [Maven Central](https://central.sonatype.com/artifact/io.github.edadma/petradb-jdbc).
@@ -199,6 +199,17 @@ ResultSet fks = meta.getImportedKeys(null, null, "orders");
 // Indexes
 ResultSet idxs = meta.getIndexInfo(null, null, "users", false, false);
 ```
+
+`getColumns()` returns `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` based on each column's type and precision/scale:
+
+| Column Type | COLUMN_SIZE | DECIMAL_DIGITS | CHAR_OCTET_LENGTH |
+|------------|-------------|----------------|-------------------|
+| `VARCHAR(n)` / `CHAR(n)` | n | null | n * 4 |
+| `TEXT` | 2147483647 | null | 2147483647 |
+| `INT` / `SERIAL` | 10 | 0 | null |
+| `BIGINT` / `BIGSERIAL` | 19 | 0 | null |
+| `NUMERIC(p,s)` | p | s | null |
+| `BOOLEAN` | 1 | null | null |
 
 ## Type Mapping
 

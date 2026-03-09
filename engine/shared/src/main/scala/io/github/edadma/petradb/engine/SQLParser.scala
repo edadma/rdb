@@ -933,7 +933,7 @@ object SQLParser:
     }
 
   private def fkConstraint[p: P]: P[Option[String] => TableConstraint] =
-    P(kw("foreign") ~ kw("key") ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ kw("references") ~ identifier ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ onDeleteClause.? ~ onUpdateClause.?).map {
+    P(kw("foreign") ~ kw("key") ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ kw("references") ~ tableIdent ~ "(" ~ identifier.rep(1, sep = ",") ~ ")" ~ onDeleteClause.? ~ onUpdateClause.?).map {
       case (cols, tbl, refCols, onDel, onUpd) =>
         (name: Option[String]) => ForeignKeyConstraint(name, cols, tbl, refCols, onDel.getOrElse(ReferentialAction.NoAction), onUpd.getOrElse(ReferentialAction.NoAction))
     }
@@ -1233,8 +1233,17 @@ object SQLParser:
       case (ine, name) => CreateSchemaCommand(name, ine.isDefined)
     }
 
+  private def dollarQuote[p: P]: P[Unit] = {
+    import NoWhitespace._
+    P("$$")
+  }
+
+  private def doBlock[p: P]: P[Command] =
+    P(kw("do") ~ dollarQuote ~ kw("begin") ~ command ~ ";" ~ kw("exception") ~ kw("when") ~ ident ~ kw("then") ~ kw("null") ~ ";" ~ kw("end") ~ dollarQuote)
+      .map { case (cmd, _) => DoBlockCommand(cmd) }
+
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)
+    P(createSchema | createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
     P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))

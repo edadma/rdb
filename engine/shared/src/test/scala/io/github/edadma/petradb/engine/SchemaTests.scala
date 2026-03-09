@@ -286,6 +286,86 @@ class SchemaTests extends AnyFreeSpec with Matchers with Testing:
     }
   }
 
+  "DO $$ blocks" - {
+    "DO block with ALTER TABLE ADD CONSTRAINT FOREIGN KEY" in {
+      results(
+        """CREATE TABLE "users" (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+          |CREATE TABLE "posts" (id SERIAL PRIMARY KEY, user_id INTEGER, title TEXT);
+          |DO $$ BEGIN
+          |  ALTER TABLE "posts" ADD CONSTRAINT "posts_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |""".stripMargin
+      )
+    }
+
+    "DO block idempotent — runs twice without error" in {
+      results(
+        """CREATE TABLE "users" (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+          |CREATE TABLE "posts" (id SERIAL PRIMARY KEY, user_id INTEGER, title TEXT);
+          |DO $$ BEGIN
+          |  ALTER TABLE "posts" ADD CONSTRAINT "posts_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |DO $$ BEGIN
+          |  ALTER TABLE "posts" ADD CONSTRAINT "posts_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |""".stripMargin
+      )
+    }
+
+    "DO block with schema-qualified REFERENCES" in {
+      results(
+        """CREATE SCHEMA app;
+          |CREATE TABLE app."users" (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+          |CREATE TABLE app."posts" (id SERIAL PRIMARY KEY, user_id INTEGER, title TEXT);
+          |DO $$ BEGIN
+          |  ALTER TABLE app."posts" ADD CONSTRAINT "posts_user_id_fk" FOREIGN KEY ("user_id") REFERENCES app."users"("id") ON DELETE no action ON UPDATE no action;
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |""".stripMargin
+      )
+    }
+
+    "DO block with CREATE TYPE idempotent" in {
+      results(
+        """DO $$ BEGIN
+          |  CREATE TYPE status AS ENUM ('active', 'inactive');
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |DO $$ BEGIN
+          |  CREATE TYPE status AS ENUM ('active', 'inactive');
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |""".stripMargin
+      )
+    }
+
+    "DO block FK constraint is enforced" in {
+      val table = query(
+        """CREATE TABLE "users" (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+          |CREATE TABLE "posts" (id SERIAL PRIMARY KEY, user_id INTEGER, title TEXT);
+          |DO $$ BEGIN
+          |  ALTER TABLE "posts" ADD CONSTRAINT "posts_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;
+          |EXCEPTION
+          |  WHEN duplicate_object THEN null;
+          |END $$;
+          |INSERT INTO "users" (name) VALUES ('Alice');
+          |INSERT INTO "posts" (user_id, title) VALUES (1, 'Hello');
+          |SELECT title FROM "posts";
+          |""".stripMargin
+      )
+      table.data.head.data(0).string shouldBe "Hello"
+    }
+  }
+
   "SHOW commands with schema qualifier" - {
     "SHOW COLUMNS from schema-qualified table" in {
       val table = query(
