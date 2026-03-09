@@ -15,6 +15,7 @@ private def orderByToSQL(ob: OrderBy): String =
 private def relToSQL(expr: Expr): String =
   expr match
     case TableOperator(Ident(name)) => name
+    case InformationSchemaOperator(Ident(name)) => s"information_schema.$name"
     case AliasOperator(rel, Ident(alias)) =>
       val inner = relToSQL(rel)
       rel match
@@ -140,6 +141,7 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       (s"${exprToSQLInner(left)._1} $op ${exprToSQLInner(right)._1}", 99)
     // ── Relational nodes (Operators) ─────────────────────────────────
     case TableOperator(Ident(name)) => (name, 99)
+    case InformationSchemaOperator(Ident(name)) => (s"information_schema.$name", 99)
     case AliasOperator(rel, Ident(alias)) =>
       val inner = relToSQL(rel)
       rel match

@@ -257,6 +257,9 @@ class DropProcess(input: Process, n: Int) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx) drop n
 
+case class StaticProcess(data: ArraySeq[Row], meta: Metadata) extends Process:
+  def iterator(ctx: Seq[Row]): RowIterator = data.iterator
+
 case class UnionProcess(input1: Process, input2: Process, all: Boolean) extends Process:
   val meta: Metadata = input1.meta
 

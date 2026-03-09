@@ -151,6 +151,13 @@ object SQLParser:
   // ident returns P[String]
   private def ident[p: P]: P[String] = P(quotedIdent | identRaw)
 
+  // anyIdent: like identRaw but allows reserved words (for schema-qualified names)
+  private def anyIdent[p: P]: P[String] = {
+    import NoWhitespace._
+    P((CharPred(identStartChar) ~ CharsWhile(identChar, 0)).!)
+      .map(_.toLowerCase)
+  }
+
   // identifier returns P[Ident] with position
   private def identifier[p: P]: P[Ident] =
     P(Idx ~ ident).map((loc, name) => pos(loc, Ident(name)))
@@ -767,7 +774,14 @@ object SQLParser:
     P(application | table | valuesClause | ("(" ~ query ~ ")"))
 
   private def table[p: P]: P[Expr] =
-    P(Idx ~ identifier).map((loc, name) => pos(loc, TableOperator(name)))
+    P(Idx ~ identifier ~ ("." ~ Idx ~ anyIdent).?).map {
+      case (loc, schema, Some((loc2, name))) if schema.name == "information_schema" =>
+        pos(loc, InformationSchemaOperator(pos(loc2, Ident(name))))
+      case (loc, _, Some((loc2, name))) =>
+        pos(loc, TableOperator(pos(loc2, Ident(name)))) // ignore non-information_schema qualifiers
+      case (loc, name, None) =>
+        pos(loc, TableOperator(name))
+    }
 
   // ── VALUES clause ──────────────────────────────────────────────────
 
