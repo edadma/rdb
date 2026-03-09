@@ -7,12 +7,8 @@ import io.github.edadma.stow.{FilePageStore, PageId, NoPage, WriteBatch, Transac
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-private case class TransactionSnapshot(
-    tablesSnap: Map[String, Table],
-    indexesSnap: Map[String, IndexMeta],
-    viewsSnap: Map[String, String],
-    typesSnap: Map[String, Type],
-    schemasSnap: Set[String],
+private case class PersistentSnapshot(
+    catalog: CatalogSnapshot,
     tableState: Map[String, (PageId, PageId, Map[String, Value], Map[String, (TableIndex, Long)])],
 )
 
@@ -22,7 +18,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
   private var pendingTxnHandle: Option[PersistentTransactionHandle] = None
   private var activeTxn: Option[Transaction] = None
 
-  private class PersistentTransactionHandle(val snap: TransactionSnapshot) extends TransactionHandle
+  private class PersistentTransactionHandle(val snap: PersistentSnapshot) extends TransactionHandle
 
   override def snapshot(): TransactionHandle =
     if pendingTxnHandle.isDefined then sys.error("PersistentDB supports only one active transaction at a time")
@@ -34,12 +30,8 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       }.toMap
       n -> (pt.firstDataPage, pt.headerPage, pt.autoMap.toMap, idxSnap)
     }.toMap
-    val snap = TransactionSnapshot(
-      tablesSnap = tables.toMap,
-      indexesSnap = indexes.toMap,
-      viewsSnap = views.toMap,
-      typesSnap = types.toMap,
-      schemasSnap = schemas.toSet,
+    val snap = PersistentSnapshot(
+      catalog = takeCatalogSnapshot(),
       tableState = tableStatSnap,
     )
     val handle = new PersistentTransactionHandle(snap)
@@ -64,18 +56,8 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     activeTxn.foreach(_.rollback())
     activeTxn = None
 
-    // Restore in-memory catalog state
     val snap = h.snap
-    tables.clear()
-    tables ++= snap.tablesSnap
-    indexes.clear()
-    indexes ++= snap.indexesSnap
-    views.clear()
-    views ++= snap.viewsSnap
-    types.clear()
-    types ++= snap.typesSnap
-    schemas.clear()
-    schemas ++= snap.schemasSnap
+    restoreCatalog(snap.catalog)
 
     // Restore per-table mutable state
     for (n, (fdp, hp, autoState, idxSnap)) <- snap.tableState do

@@ -2,7 +2,27 @@
 title: Changelog
 ---
 
-## v1.3.0
+## v1.3-20260309
+
+### Transactional DDL
+
+DDL statements (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) are now fully supported inside transactions and roll back atomically with DML. DDL and DML can be freely interleaved within a single BEGIN/COMMIT block. Both MemoryDB and PersistentDB capture a full catalog snapshot at BEGIN time and restore it on ROLLBACK.
+
+### Drizzle relational queries
+
+Full support for Drizzle ORM relational queries (`db.query.*.findMany()`, `db.query.*.findFirst()`). Added `json_build_array` and `json_build_object` scalar functions, and fixed parameter substitution in LATERAL subqueries.
+
+### Version bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| engine | 1.3.1 | @petradb/engine 1.3.3 |
+| server | 1.3.1 | @petradb/server 1.3.1 |
+| cli | 1.3.1 | @petradb/cli 1.3.1 |
+| jdbc | 1.3.1 | — |
+| drizzle | — | @petradb/drizzle 1.3.1 |
+
+## v1.3-20260308
 
 ### Schema support
 

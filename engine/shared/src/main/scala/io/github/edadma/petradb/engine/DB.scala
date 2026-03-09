@@ -11,6 +11,14 @@ import scala.concurrent.{Future, ExecutionContext}
 trait TransactionHandle
 object NoOpTransactionHandle extends TransactionHandle
 
+case class CatalogSnapshot(
+    tablesSnap: Map[String, Table],
+    indexesSnap: Map[String, IndexMeta],
+    viewsSnap: Map[String, String],
+    typesSnap: Map[String, Type],
+    schemasSnap: Set[String],
+)
+
 abstract class DB:
 
   val name: String
@@ -214,6 +222,24 @@ abstract class DB:
     onMutation()
 
   def hasIndex(name: String): Boolean = indexes contains name
+
+  // ── Catalog snapshot for transactional DDL rollback ────────────────
+
+  protected def takeCatalogSnapshot(): CatalogSnapshot =
+    CatalogSnapshot(
+      tablesSnap = tables.toMap,
+      indexesSnap = indexes.toMap,
+      viewsSnap = views.toMap,
+      typesSnap = types.toMap,
+      schemasSnap = schemas.toSet,
+    )
+
+  protected def restoreCatalog(snap: CatalogSnapshot): Unit =
+    tables.clear(); tables ++= snap.tablesSnap
+    indexes.clear(); indexes ++= snap.indexesSnap
+    views.clear(); views ++= snap.viewsSnap
+    types.clear(); types ++= snap.typesSnap
+    schemas.clear(); schemas ++= snap.schemasSnap
 
   def snapshot(): TransactionHandle = NoOpTransactionHandle
   def commitSnapshot(handle: TransactionHandle): Unit = ()

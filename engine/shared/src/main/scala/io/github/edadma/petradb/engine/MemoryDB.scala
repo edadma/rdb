@@ -23,10 +23,19 @@ class MemoryDB extends DB:
 
   private class MemoryTransactionHandle(
       val undoLog: mutable.ArrayBuffer[UndoEntry],
+      val catalogSnap: CatalogSnapshot,
+      val autoMapSnap: Map[String, Map[String, Value]],
+      val indexStateSnap: Map[String, Map[String, Long]],
   ) extends TransactionHandle
 
   override def snapshot(): TransactionHandle =
-    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry])
+    val autoSnap = tables.map { (n, t) => n -> t.autoMap.toMap }.toMap
+    val idxSnap = tables.map { (n, t) =>
+      n -> t.tableIndexes.map { (iName, idx) =>
+        iName -> idx.asInstanceOf[MemoryTableIndex].nextRowId
+      }.toMap
+    }.toMap
+    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry], takeCatalogSnapshot(), autoSnap, idxSnap)
 
   override def commitSnapshot(handle: TransactionHandle): Unit = ()
 
@@ -35,12 +44,29 @@ class MemoryDB extends DB:
     val savedUndoLog = currentUndoLog
     currentUndoLog = None // Prevent recording undo entries during rollback
 
-    // Replay undo log in reverse to undo this transaction's changes
+    // Replay undo log in reverse to undo DML for tables that existed before the transaction
     for entry <- h.undoLog.reverseIterator do
       entry match
         case UndoInsert(table, node) => table.undoInsert(node)
         case UndoDelete(table, data) => table.undoDelete(data)
         case UndoUpdate(table, node, oldData) => table.undoUpdate(node, oldData)
+
+    // Restore catalog (tables, indexes, views, types, schemas)
+    restoreCatalog(h.catalogSnap)
+
+    // Restore per-table mutable state
+    for (n, autoState) <- h.autoMapSnap do
+      tables.get(n).foreach { t =>
+        t.autoMap.clear()
+        t.autoMap ++= autoState
+      }
+    for (n, idxState) <- h.indexStateSnap do
+      tables.get(n).foreach { t =>
+        for (iName, nextRowId) <- idxState do
+          t.tableIndexes.get(iName).foreach { idx =>
+            idx.asInstanceOf[MemoryTableIndex].nextRowId = nextRowId
+          }
+      }
 
     currentUndoLog = savedUndoLog
 

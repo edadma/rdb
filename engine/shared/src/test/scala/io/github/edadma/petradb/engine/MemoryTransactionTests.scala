@@ -63,21 +63,6 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       table.data(0).data(1) shouldBe TextValue("Alice")
     }
 
-    "ROLLBACK does not reset auto-increment (PostgreSQL semantics)" in withDB { db =>
-      given Session = db
-      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
-      executeSQL("INSERT INTO t (name) VALUES ('first');")
-      executeSQL("BEGIN;")
-      executeSQL("INSERT INTO t (name) VALUES ('second');")
-      executeSQL("ROLLBACK;")
-
-      executeSQL("INSERT INTO t (name) VALUES ('actual_second');")
-      val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
-      table.data.length shouldBe 2
-      table.data(0).data(0) shouldBe NumberValue(1)
-      table.data(1).data(0) shouldBe NumberValue(3)
-    }
-
     "ROLLBACK restores unique index" in withDB { db =>
       given Session = db
       executeSQL("CREATE TABLE t (id INTEGER, PRIMARY KEY (id));")
@@ -222,15 +207,93 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
     }
 
-    "DDL then DML then ROLLBACK — DDL persists, DML is undone" in withDB { db =>
+    "DDL then DML then ROLLBACK — everything is rolled back" in withDB { db =>
       given Session = db
       executeSQL("BEGIN;")
       executeSQL("CREATE TABLE t (id INTEGER);")
       executeSQL("INSERT INTO t VALUES (1);")
       executeSQL("ROLLBACK;")
 
-      // MemoryDB: DDL persists (undo log doesn't cover DDL), DML is rolled back
+      assertThrows[Exception] { executeSQL("SELECT * FROM t;") }
+    }
+
+    "DML then DDL then ROLLBACK — everything is rolled back" in withDB { db =>
+      given Session = db
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
+      executeSQL("ROLLBACK;")
+
       val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 0
+      assertThrows[Exception] { executeSQL("SELECT * FROM t2;") }
+    }
+
+    "interleaved DDL and DML commits atomically" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id SERIAL, name TEXT);")
+      executeSQL("INSERT INTO t1 (name) VALUES ('Alice');")
+      executeSQL("CREATE TABLE t2 (id SERIAL, title TEXT);")
+      executeSQL("INSERT INTO t2 (title) VALUES ('Hello');")
+      executeSQL("COMMIT;")
+
+      val t1 = executeSQL("SELECT name FROM t1;").collect { case QueryResult(t) => t }.head
+      t1.data.length shouldBe 1
+      t1.data(0).data(0) shouldBe TextValue("Alice")
+      val t2 = executeSQL("SELECT title FROM t2;").collect { case QueryResult(t) => t }.head
+      t2.data.length shouldBe 1
+      t2.data(0).data(0) shouldBe TextValue("Hello")
+    }
+
+    "interleaved DDL and DML rolls back atomically" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id INTEGER);")
+      executeSQL("INSERT INTO t1 VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
+      executeSQL("INSERT INTO t2 VALUES (2);")
+      executeSQL("ROLLBACK;")
+
+      assertThrows[Exception] { executeSQL("SELECT * FROM t1;") }
+      assertThrows[Exception] { executeSQL("SELECT * FROM t2;") }
+    }
+
+    "CREATE INDEX inside transaction with DML" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT * FROM t WHERE name = 'Alice';").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+    }
+
+    "ROLLBACK after CREATE INDEX undoes index and table" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("ROLLBACK;")
+
+      assertThrows[Exception] { executeSQL("SELECT * FROM t;") }
+    }
+
+    "ROLLBACK resets auto-increment" in withDB { db =>
+      given Session = db
+      executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
+      executeSQL("INSERT INTO t (name) VALUES ('first');")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t (name) VALUES ('second');")
+      executeSQL("ROLLBACK;")
+
+      executeSQL("INSERT INTO t (name) VALUES ('actual_second');")
+      val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 2
+      table.data(0).data(0) shouldBe NumberValue(1)
+      table.data(1).data(0) shouldBe NumberValue(2)
     }
   }

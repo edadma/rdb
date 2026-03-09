@@ -198,10 +198,6 @@ export default class CreateUsersTable extends BaseSchema {
 }
 ```
 
-## Migrations
-
-PetraDB does not support DDL inside transactions (same as SQLite). The driver automatically sets `disableTransactions: true` for migrations, so no extra configuration is needed — migrations run without wrapping each file in a transaction.
-
 ## Dialect features
 
 The PetraDB dialect supports:
@@ -210,13 +206,12 @@ The PetraDB dialect supports:
 - `RETURNING` statements
 - Table truncation
 - Drop all tables/views/types
-- Automatic `disableTransactions` for migrations
+- DDL inside transactions (fully atomic with DML rollback)
 
 Not supported:
 
 - Advisory locks (not needed for an embeddable engine)
 - Domains
-- DDL inside transactions
 
 ## Clean up
 
