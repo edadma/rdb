@@ -107,7 +107,21 @@ val jsonScalarFunctions: Map[String, ScalarFunction] =
       ObjectType,
     ),
     ScalarFunction(
+      "json_build_object",
+      { case pairs =>
+        if pairs.length % 2 != 0 then sys.error("json_build_object requires even number of arguments")
+        val props = pairs.grouped(2).map { case Seq(k, v) => (k.string, v) }.toSeq
+        ObjectValue(props)
+      },
+      ObjectType,
+    ),
+    ScalarFunction(
       "jsonb_build_array",
+      { case elems => ArrayValue(elems.toIndexedSeq) },
+      ArrayType,
+    ),
+    ScalarFunction(
+      "json_build_array",
       { case elems => ArrayValue(elems.toIndexedSeq) },
       ArrayType,
     ),

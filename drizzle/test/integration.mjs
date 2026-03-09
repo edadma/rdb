@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { Session } from "@petradb/engine";
 import { drizzle, migrate } from "../dist/index.js";
 import { pgTable, serial, text, integer, boolean, numeric } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { eq, gt, asc, desc, sql } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -604,5 +605,190 @@ describe("migrate()", () => {
       { rowMode: "object" },
     );
     assert.ok(result.rows.length >= 2, "Should have at least 2 migration records");
+  });
+});
+
+// ── Relational queries ─────────────────────────────────────────────
+
+const authors = pgTable("authors", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+});
+
+const posts = pgTable("posts", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  authorId: integer("author_id").notNull(),
+});
+
+const comments = pgTable("comments", {
+  id: serial("id").primaryKey(),
+  body: text("body").notNull(),
+  postId: integer("post_id").notNull(),
+});
+
+const authorsRelations = relations(authors, ({ many }) => ({
+  posts: many(posts),
+}));
+
+const postsRelations = relations(posts, ({ one, many }) => ({
+  author: one(authors, { fields: [posts.authorId], references: [authors.id] }),
+  comments: many(comments),
+}));
+
+const commentsRelations = relations(comments, ({ one }) => ({
+  post: one(posts, { fields: [comments.postId], references: [posts.id] }),
+}));
+
+describe("relational queries", () => {
+  let session;
+  let db;
+
+  before(async () => {
+    session = new Session({ storage: "memory" });
+    db = drizzle(session, {
+      schema: { authors, posts, comments, authorsRelations, postsRelations, commentsRelations },
+      logger: true,
+    });
+
+    await session.execute(`
+      CREATE TABLE authors (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE posts (id SERIAL PRIMARY KEY, title TEXT NOT NULL, author_id INTEGER NOT NULL);
+      CREATE TABLE comments (id SERIAL PRIMARY KEY, body TEXT NOT NULL, post_id INTEGER NOT NULL);
+    `);
+
+    // Seed data
+    await db.insert(authors).values([
+      { name: "Alice" },
+      { name: "Bob" },
+    ]);
+    await db.insert(posts).values([
+      { title: "Alice Post 1", authorId: 1 },
+      { title: "Alice Post 2", authorId: 1 },
+      { title: "Bob Post 1", authorId: 2 },
+    ]);
+    await db.insert(comments).values([
+      { body: "Great!", postId: 1 },
+      { body: "Nice!", postId: 1 },
+      { body: "Cool!", postId: 3 },
+    ]);
+  });
+
+  after(async () => {
+    await session.close();
+  });
+
+  it("findMany — all authors", async () => {
+    const result = await db.query.authors.findMany();
+    assert.equal(result.length, 2);
+    assert.equal(result[0].name, "Alice");
+    assert.equal(result[1].name, "Bob");
+  });
+
+  it("findFirst — single author", async () => {
+    const result = await db.query.authors.findFirst();
+    assert.ok(result);
+    assert.equal(result.name, "Alice");
+  });
+
+  it("findMany with one-level relation (authors → posts)", async () => {
+    const result = await db.query.authors.findMany({
+      with: { posts: true },
+    });
+    assert.equal(result.length, 2);
+
+    const alice = result.find((a) => a.name === "Alice");
+    assert.ok(alice);
+    assert.equal(alice.posts.length, 2);
+
+    const bob = result.find((a) => a.name === "Bob");
+    assert.ok(bob);
+    assert.equal(bob.posts.length, 1);
+  });
+
+  it("findMany with reverse relation (posts → author)", async () => {
+    const result = await db.query.posts.findMany({
+      with: { author: true },
+    });
+    assert.equal(result.length, 3);
+    assert.equal(result[0].author.name, "Alice");
+    assert.equal(result[2].author.name, "Bob");
+  });
+
+  it("findMany with nested relations (authors → posts → comments)", async () => {
+    const result = await db.query.authors.findMany({
+      with: {
+        posts: {
+          with: { comments: true },
+        },
+      },
+    });
+    assert.equal(result.length, 2);
+
+    const alice = result.find((a) => a.name === "Alice");
+    const alicePost1 = alice.posts.find((p) => p.title === "Alice Post 1");
+    assert.equal(alicePost1.comments.length, 2);
+
+    const alicePost2 = alice.posts.find((p) => p.title === "Alice Post 2");
+    assert.equal(alicePost2.comments.length, 0);
+  });
+
+  it("findMany with where filter", async () => {
+    const result = await db.query.authors.findMany({
+      where: eq(authors.name, "Alice"),
+      with: { posts: true },
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].name, "Alice");
+    assert.equal(result[0].posts.length, 2);
+  });
+
+  it("findMany with columns selection", async () => {
+    const result = await db.query.authors.findMany({
+      columns: { name: true },
+    });
+    assert.equal(result.length, 2);
+    assert.equal(result[0].name, "Alice");
+    assert.equal(result[0].id, undefined);
+  });
+
+  it("findMany with orderBy", async () => {
+    const result = await db.query.authors.findMany({
+      orderBy: [desc(authors.name)],
+    });
+    assert.equal(result[0].name, "Bob");
+    assert.equal(result[1].name, "Alice");
+  });
+
+  it("findMany with limit", async () => {
+    const result = await db.query.posts.findMany({
+      limit: 2,
+    });
+    assert.equal(result.length, 2);
+  });
+
+  it("findFirst returns null when no match", async () => {
+    const result = await db.query.authors.findFirst({
+      where: eq(authors.name, "Nobody"),
+    });
+    assert.equal(result, undefined);
+  });
+
+  it("relation with empty result returns empty array", async () => {
+    // Bob's post has 1 comment, Alice's Post 2 has 0 comments
+    const result = await db.query.posts.findMany({
+      where: eq(posts.title, "Alice Post 2"),
+      with: { comments: true },
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].comments.length, 0);
+  });
+
+  it("findMany — comments with post relation", async () => {
+    const result = await db.query.comments.findMany({
+      with: { post: true },
+    });
+    assert.equal(result.length, 3);
+    assert.equal(result[0].post.title, "Alice Post 1");
   });
 });

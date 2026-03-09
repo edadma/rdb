@@ -868,7 +868,15 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
         limit.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         distinct,
       )
+    case AliasOperator(r, a) => AliasOperator(deepCopyExpr(r, params), a)
     case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r, params), a, cs)
+    case CrossOperator(r1, r2) => CrossOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params))
+    case InnerJoinOperator(r1, r2, on) => InnerJoinOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params), deepCopyExpr(on, params))
+    case LeftJoinOperator(r1, r2, on) => LeftJoinOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params), deepCopyExpr(on, params))
+    case RightJoinOperator(r1, r2, on) => RightJoinOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params), deepCopyExpr(on, params))
+    case FullJoinOperator(r1, r2, on) => FullJoinOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params), deepCopyExpr(on, params))
+    case LateralCrossOperator(r1, r2) => LateralCrossOperator(deepCopyExpr(r1, params), deepCopyExpr(r2, params))
+    case TableOperator(t) => TableOperator(t)
     case other => other // ProcessOperator, etc. — should not appear in parsed AST
   if expr.pos != null then copied.setPos(expr.pos)
   copied
