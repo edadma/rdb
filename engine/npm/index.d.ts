@@ -95,6 +95,11 @@ export interface CopyResult {
     rowCount: number;
 }
 
+export interface CreateSchemaResult {
+    command: 'create schema';
+    schema: string;
+}
+
 export interface InsertResult {
     command: 'insert';
     result: Record<string, any>;
@@ -139,7 +144,8 @@ export type ExecuteResult =
     | CommitResult
     | RollbackResult
     | ExplainResult
-    | CopyResult;
+    | CopyResult
+    | CreateSchemaResult;
 
 export interface PreparedStatement {
     execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>;
