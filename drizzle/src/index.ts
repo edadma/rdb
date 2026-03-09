@@ -1,5 +1,6 @@
 import { entityKind } from "drizzle-orm/entity";
 import { DefaultLogger, NoopLogger, type Logger } from "drizzle-orm/logger";
+import { readMigrationFiles, type MigrationConfig } from "drizzle-orm/migrator";
 import { PgDatabase } from "drizzle-orm/pg-core/db";
 import { PgDialect } from "drizzle-orm/pg-core/dialect";
 import {
@@ -111,6 +112,22 @@ class PetraDbPreparedQuery<
     return rows.map((row: unknown[]) =>
       mapResultRow(fields!, row, joinsNotNullableMap),
     ) as T["execute"];
+  }
+
+  async all(
+    placeholderValues: Record<string, unknown> = {},
+  ): Promise<T["all"]> {
+    const params = fillPlaceholders(this.params, placeholderValues);
+    this.logger.logQuery(this.queryString, params);
+
+    const results = await this._exec(this.queryString, params, "object");
+    const resultSet = results[0];
+    return (resultSet?.rows ?? []) as T["all"];
+  }
+
+  /** @internal */
+  isResponseInArrayMode(): boolean {
+    return this._isResponseInArrayMode;
   }
 
   private async _exec(
@@ -285,4 +302,17 @@ export function drizzle<
   db.$session = session;
 
   return db;
+}
+
+export async function migrate<
+  TSchema extends Record<string, unknown> = Record<string, never>,
+>(
+  db: PetraDbDatabase<TSchema>,
+  config: string | MigrationConfig,
+): Promise<void> {
+  const migrations = readMigrationFiles(
+    typeof config === "string" ? { migrationsFolder: config } : config,
+  );
+  const session = (db as any).session as PetraDbSession<any, any>;
+  await (db as any).dialect.migrate(migrations, session, config);
 }
