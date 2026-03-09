@@ -21,7 +21,7 @@
   },
   "peerDependencies": {
     "@adonisjs/lucid": ">=22.0.0",
-    "@petradb/engine": ">=1.3.0",
+    "@petradb/engine": ">=1.3.4",
     "@petradb/knex": ">=1.3.0"
   },
   "devDependencies": {
