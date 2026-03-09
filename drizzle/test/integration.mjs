@@ -1,9 +1,13 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { Session } from "@petradb/engine";
-import { drizzle } from "../dist/index.js";
+import { drizzle, migrate } from "../dist/index.js";
 import { pgTable, serial, text, integer, boolean, numeric } from "drizzle-orm/pg-core";
 import { eq, gt, asc, desc, sql } from "drizzle-orm";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -516,5 +520,89 @@ describe("@petradb/drizzle", () => {
       const rows = await db.select().from(users).where(eq(users.name, "Frank"));
       assert.equal(rows.length, 0);
     });
+  });
+});
+
+describe("migrate()", () => {
+  let session;
+  let db;
+
+  before(async () => {
+    session = new Session({ storage: "memory" });
+    db = drizzle(session);
+  });
+
+  after(async () => {
+    await session.close();
+  });
+
+  it("applies migration files and creates tables", async () => {
+    await migrate(db, { migrationsFolder: join(__dirname, "migrations") });
+
+    // Verify users table was created by migration 0000
+    const [result] = await session.execute("SELECT * FROM users", { rowMode: "object" });
+    assert.ok(result);
+
+    // Verify posts table was created by migration 0001
+    const [postsResult] = await session.execute("SELECT * FROM posts", { rowMode: "object" });
+    assert.ok(postsResult);
+  });
+
+  it("created tables are usable via drizzle", async () => {
+    const migratedUsers = pgTable("users", {
+      id: serial("id").primaryKey(),
+      name: text("name").notNull(),
+      email: text("email").notNull(),
+    });
+
+    const migratedPosts = pgTable("posts", {
+      id: serial("id").primaryKey(),
+      userId: integer("user_id").notNull(),
+      title: text("title").notNull(),
+    });
+
+    // Insert via drizzle
+    const [user] = await db
+      .insert(migratedUsers)
+      .values({ name: "Alice", email: "alice@example.com" })
+      .returning();
+    assert.equal(user.name, "Alice");
+
+    const [post] = await db
+      .insert(migratedPosts)
+      .values({ userId: user.id, title: "Hello World" })
+      .returning();
+    assert.equal(post.title, "Hello World");
+
+    // Query via drizzle
+    const rows = await db.select().from(migratedPosts);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].title, "Hello World");
+  });
+
+  it("foreign key constraint is enforced after migration", async () => {
+    const migratedPosts = pgTable("posts", {
+      id: serial("id").primaryKey(),
+      userId: integer("user_id").notNull(),
+      title: text("title").notNull(),
+    });
+
+    // Should fail — no user with id 9999
+    await assert.rejects(async () => {
+      await db.insert(migratedPosts).values({ userId: 9999, title: "Bad" });
+    });
+  });
+
+  it("is idempotent — running twice does not error", async () => {
+    // Running migrate again should be a no-op (migrations already applied)
+    await migrate(db, { migrationsFolder: join(__dirname, "migrations") });
+  });
+
+  it("tracks migrations in drizzle.__drizzle_migrations", async () => {
+    const [result] = await session.execute(
+      'SELECT hash, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at',
+      { rowMode: "object" },
+    );
+    assert.ok(result.rows.length >= 2, "Should have at least 2 migration records");
   });
 });

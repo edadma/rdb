@@ -36,9 +36,6 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         session.deactivateHandle()
     else fn
 
-  def guardDDL(): Unit =
-    if session.inTransaction then sys.error("DDL not allowed inside a transaction")
-
   cs map {
     case BeginCommand    => session.beginTransaction(); BeginResult
     case CommitCommand   => session.commitTransaction(); CommitResult
@@ -186,6 +183,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         case _ => ExplainResult("(non-query command)")
     case cmd             => guardTransaction { cmd match
       case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
+
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val resolvedColumns0 = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns0.length
@@ -309,6 +307,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                               t.columnMap.get(col).foreach(idx => lastResult += (col -> updatedData(idx)))
                 buildInsertResult(lastResult)
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
+
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
@@ -416,7 +415,6 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             buildSelectInsertResult(lastResult)
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists, temporary) =>
-        if !temporary then guardDDL()
         val alreadyExists = if temporary then session.hasTempTable(table) else session.hasTable(table)
         if alreadyExists && ifNotExists then CreateTableResult(table)
         else
@@ -508,7 +506,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           session.tempDB.dropTable(table)
           DropTableResult(table)
         else
-          guardDDL()
+  
           if (!db.hasTable(table)) {
             if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown table: $table")
             else DropTableResult(table) // IF EXISTS allows missing table
@@ -522,12 +520,13 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             DropTableResult(table)
           }
       case CreateEnumCommand(id @ Ident(name), labels) =>
-        guardDDL()
+
         if db hasType name then throw SchemaException(id.pos, s"duplicate type '$name'")
 
         db.createEnum(name, labels)
         CreateTypeResult(name)
       case UpdateCommand(id @ Ident(table), sets, from, cond, returning) =>
+
         val t             = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
@@ -625,6 +624,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           case None =>
             UpdateResult(count)
       case DeleteCommand(id @ Ident(table), cond, returning) =>
+
         val t    = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val rows =
           cond match
@@ -665,6 +665,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           case None =>
             DeleteResult(count)
       case TruncateCommand(id @ Ident(table)) =>
+
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         // Enforce FK constraints: fail if any child table has rows referencing this table
         val childFKs = db.childForeignKeys(table)
@@ -676,7 +677,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         t.truncate()
         TruncateResult(table)
       case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
-        guardDDL()
+
         if !session.hasTable(tableName) then throw UndefinedReferenceException(tid.pos, s"unknown table: $tableName")
         if db.hasIndex(indexName) then throw SchemaException(id.pos, s"index '$indexName' already exists")
         val t = db.getTable(tableName).get
@@ -685,7 +686,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         db.createIndex(indexName, tableName, columns.map(_.name), unique)
         CreateIndexResult(indexName)
       case DropIndexCommand(id @ Ident(name), ifExists) =>
-        guardDDL()
+
         if !db.hasIndex(name) then
           if !ifExists then throw UndefinedReferenceException(id.pos, s"index '$name' not found")
           DropIndexResult(name)
@@ -693,7 +694,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           db.dropIndex(name)
           DropIndexResult(name)
       case DropTypeCommand(id @ Ident(name), ifExists, cascade) =>
-        guardDDL()
+
         if (!db.hasType(name)) {
           if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown type: $name")
           else DropTypeResult(name)
@@ -702,19 +703,19 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           DropTypeResult(name)
         }
       case AlterTableCommand(id @ Ident(table), alter) =>
-        guardDDL()
+
         if !session.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
         db.alterTable(table, alter)
         AlterTableResult()
       case CreateViewCommand(id @ Ident(name), queryExpr, orReplace) =>
-        guardDDL()
+
         if session.hasTable(name) then throw SchemaException(id.pos, s"'$name' is already a table")
         if !orReplace && db.hasView(name) then throw SchemaException(id.pos, s"view '$name' already exists")
         val sql = exprToSQL(queryExpr)
         db.createView(name, sql, orReplace)
         CreateViewResult(name)
       case DropViewCommand(id @ Ident(name), ifExists) =>
-        guardDDL()
+
         if !db.hasView(name) then
           if !ifExists then throw UndefinedReferenceException(id.pos, s"view '$name' not found")
           DropViewResult(name)
@@ -722,6 +723,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           db.dropView(name)
           DropViewResult(name)
       case CopyFromCommand(id @ Ident(table), columns, file, header, delimiter) =>
+
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
 

@@ -188,15 +188,49 @@ class MemoryTransactionTests extends AnyFreeSpec with Matchers:
       } should have message "no active transaction"
     }
 
-    "DDL inside transaction fails" in withDB { db =>
+    "DDL-only transaction succeeds" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 0
+    }
+
+    "DDL after DDL in same transaction succeeds" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id INTEGER);")
+      executeSQL("CREATE TABLE t2 (name TEXT);")
+      executeSQL("COMMIT;")
+
+      executeSQL("SELECT * FROM t1;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+      executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+    }
+
+    "DML then DDL in same transaction succeeds" in withDB { db =>
       given Session = db
       executeSQL("CREATE TABLE t (id INTEGER);")
       executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
+      executeSQL("COMMIT;")
 
-      the[RuntimeException] thrownBy {
-        executeSQL("CREATE TABLE t2 (id INTEGER);")
-      } should have message "DDL not allowed inside a transaction"
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+    }
 
+    "DDL then DML then ROLLBACK — DDL persists, DML is undone" in withDB { db =>
+      given Session = db
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("INSERT INTO t VALUES (1);")
       executeSQL("ROLLBACK;")
+
+      // MemoryDB: DDL persists (undo log doesn't cover DDL), DML is rolled back
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 0
     }
   }

@@ -34,6 +34,7 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
     if _inTransaction then sys.error("already in a transaction")
     _inTransaction = true
     _aborted = false
+
     txnHandle = Some(db.snapshot())
 
   def commitTransaction(): Unit =
@@ -44,12 +45,14 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
     _inTransaction = false
     _aborted = false
 
+
   def rollbackTransaction(): Unit =
     if !_inTransaction then sys.error("no active transaction")
     db.rollbackSnapshot(txnHandle.get)
     txnHandle = None
     _inTransaction = false
     _aborted = false
+
 
   private[engine] def activateHandle(): Unit =
     txnHandle.foreach(h => db.activateHandle(h))

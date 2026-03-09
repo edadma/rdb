@@ -8,45 +8,96 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 private case class TransactionSnapshot(
-    firstDataPages: Map[String, PageId],
+    tablesSnap: Map[String, Table],
+    indexesSnap: Map[String, IndexMeta],
+    viewsSnap: Map[String, String],
+    typesSnap: Map[String, Type],
+    schemasSnap: Set[String],
+    tableState: Map[String, (PageId, PageId, Map[String, Value], Map[String, (TableIndex, Long)])],
 )
 
 class PersistentDB private (val store: FilePageStore) extends DB:
   val name = "persistent DB"
 
+  private var pendingTxnHandle: Option[PersistentTransactionHandle] = None
   private var activeTxn: Option[Transaction] = None
 
-  private class PersistentTransactionHandle(val txn: Transaction, val snap: TransactionSnapshot) extends TransactionHandle
+  private class PersistentTransactionHandle(val snap: TransactionSnapshot) extends TransactionHandle
 
   override def snapshot(): TransactionHandle =
-    if activeTxn.isDefined then sys.error("PersistentDB supports only one active transaction at a time")
-    val fdpSnap = tables.map { (n, t) =>
-      n -> t.asInstanceOf[PersistentTable].firstDataPage
+    if pendingTxnHandle.isDefined then sys.error("PersistentDB supports only one active transaction at a time")
+    val tableStatSnap = tables.map { (n, t) =>
+      val pt = t.asInstanceOf[PersistentTable]
+      val idxSnap = t.tableIndexes.map { (iName, idx) =>
+        val pidx = idx.asInstanceOf[PersistentTableIndex]
+        iName -> (idx, pidx.nextRowId)
+      }.toMap
+      n -> (pt.firstDataPage, pt.headerPage, pt.autoMap.toMap, idxSnap)
     }.toMap
-    val txn = store.beginTransaction()
-    activeTxn = Some(txn)
-    new PersistentTransactionHandle(txn, TransactionSnapshot(fdpSnap))
+    val snap = TransactionSnapshot(
+      tablesSnap = tables.toMap,
+      indexesSnap = indexes.toMap,
+      viewsSnap = views.toMap,
+      typesSnap = types.toMap,
+      schemasSnap = schemas.toSet,
+      tableState = tableStatSnap,
+    )
+    val handle = new PersistentTransactionHandle(snap)
+    pendingTxnHandle = Some(handle)
+    handle
+
+  private def ensureStowTransaction(): Transaction =
+    activeTxn match
+      case Some(txn) => txn
+      case None =>
+        val txn = store.beginTransaction()
+        activeTxn = Some(txn)
+        txn
 
   override def commitSnapshot(handle: TransactionHandle): Unit =
-    val h = handle.asInstanceOf[PersistentTransactionHandle]
-    h.txn.commit()
+    activeTxn.foreach(_.commit())
     activeTxn = None
+    pendingTxnHandle = None
 
   override def rollbackSnapshot(handle: TransactionHandle): Unit =
     val h = handle.asInstanceOf[PersistentTransactionHandle]
-    h.txn.rollback()
+    activeTxn.foreach(_.rollback())
+    activeTxn = None
+
+    // Restore in-memory catalog state
     val snap = h.snap
-    for (n, fdp) <- snap.firstDataPages do
+    tables.clear()
+    tables ++= snap.tablesSnap
+    indexes.clear()
+    indexes ++= snap.indexesSnap
+    views.clear()
+    views ++= snap.viewsSnap
+    types.clear()
+    types ++= snap.typesSnap
+    schemas.clear()
+    schemas ++= snap.schemasSnap
+
+    // Restore per-table mutable state
+    for (n, (fdp, hp, autoState, idxSnap)) <- snap.tableState do
       tables.get(n).foreach { t =>
         val pt = t.asInstanceOf[PersistentTable]
         pt.firstDataPage = fdp
+        pt.headerPage = hp
+        pt.autoMap.clear()
+        pt.autoMap ++= autoState
+        t.tableIndexes.clear()
+        for (iName, (idx, nextRowId)) <- idxSnap do
+          val pidx = idx.asInstanceOf[PersistentTableIndex]
+          pidx.nextRowId = nextRowId
+          t.tableIndexes(iName) = idx
       }
-    activeTxn = None
+
+    pendingTxnHandle = None
 
   private[engine] def withBatch(fn: WriteBatch => Unit): Unit =
-    activeTxn match
-      case Some(txn) => fn(txn)
-      case None      => store.modify(fn)
+    pendingTxnHandle match
+      case Some(_) => fn(ensureStowTransaction())
+      case None    => store.modify(fn)
 
   private[engine] def readPage(id: PageId): Array[Byte] =
     activeTxn match
@@ -58,7 +109,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
 
   override def createTable(name: String, specs: Seq[Spec]): Table =
     val table = super.createTable(name, specs)
-    store.modify { batch =>
+    withBatch { batch =>
       val pt = table.asInstanceOf[PersistentTable]
       pt.headerPage = batch.allocate()
       pt.writeHeaderPage(batch)
@@ -103,7 +154,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     persistCatalog()
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
-    store.modify { batch =>
+    withBatch { batch =>
       createPersistentIndex(indexName, tableName, columnNames, unique, batch)
       writeCatalogInBatch(batch)
     }
@@ -165,7 +216,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     table.tableIndexes(indexName) = idx
 
   private[engine] def persistCatalog(): Unit =
-    store.modify { batch =>
+    withBatch { batch =>
       writeCatalogInBatch(batch)
     }
 
@@ -564,7 +615,7 @@ class PersistentTable(
         }
       currentPageId = page.nextPage
 
-    store.modify { batch =>
+    db.withBatch { batch =>
       // Free all old data pages and their chains
       freeAllDataPages(batch)
 
@@ -578,7 +629,7 @@ class PersistentTable(
     }
 
   private[engine] def freeAllPages(): Unit =
-    store.modify { batch =>
+    db.withBatch { batch =>
       freeAllDataPages(batch)
       if headerPage != NoPage then
         batch.free(headerPage)
@@ -610,7 +661,7 @@ class PersistentTable(
     firstDataPage = NoPage
 
   def truncate(): Unit =
-    store.modify { batch =>
+    db.withBatch { batch =>
       freeAllDataPages(batch)
       // Clear and rebuild index trees
       for (idxName, idx) <- tableIndexes do

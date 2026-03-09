@@ -2,7 +2,7 @@ package io.github.edadma.petradb.engine
 
 import io.github.edadma.petradb.{Session as _, *}
 
-import io.github.edadma.dal.{IntType => DIntType, DoubleType => DDoubleType, BigDecType}
+import io.github.edadma.dal.{IntType => DIntType, LongType => DLongType, DoubleType => DDoubleType, BigDecType}
 
 import io.github.edadma.cross_platform.exists
 
@@ -41,6 +41,7 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
   private def toJS(v: Value): js.Any =
     v match
       case NumberValue(DIntType, n)    => n.intValue
+      case NumberValue(DLongType, n)   => n.doubleValue
       case NumberValue(DDoubleType, n) => n.doubleValue
       case NumberValue(BigDecType, n)  => n.doubleValue
       case TextValue(s)                => s

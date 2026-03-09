@@ -66,7 +66,7 @@ class PersistentTransactionTests extends PersistentTestBase:
       db.close()
     }
 
-    "ROLLBACK does not reset auto-increment (PostgreSQL semantics)" in {
+    "ROLLBACK resets auto-increment" in {
       val db = PersistentDB.create(tmpFile, pageSize)
       given Session = db.connect()
       executeSQL("CREATE TABLE t (id SERIAL, name TEXT);")
@@ -79,7 +79,7 @@ class PersistentTransactionTests extends PersistentTestBase:
       val table = executeSQL("SELECT id, name FROM t ORDER BY id;").collect { case QueryResult(t) => t }.head
       table.data.length shouldBe 2
       table.data(0).data(0) shouldBe NumberValue(1)
-      table.data(1).data(0) shouldBe NumberValue(3)
+      table.data(1).data(0) shouldBe NumberValue(2)
       db.close()
     }
 
@@ -140,17 +140,153 @@ class PersistentTransactionTests extends PersistentTestBase:
       }
     }
 
-    "DDL inside transaction fails" in {
+    "DDL-only transaction succeeds" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 0
+      db.close()
+    }
+
+    "DDL after DDL in same transaction succeeds" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id INTEGER);")
+      executeSQL("CREATE TABLE t2 (name TEXT);")
+      executeSQL("COMMIT;")
+
+      executeSQL("SELECT * FROM t1;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+      executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+      db.close()
+    }
+
+    "DML then DDL in same transaction succeeds" in {
       val db = PersistentDB.create(tmpFile, pageSize)
       given Session = db.connect()
       executeSQL("CREATE TABLE t (id INTEGER);")
       executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
+      executeSQL("COMMIT;")
 
-      the[RuntimeException] thrownBy {
-        executeSQL("CREATE TABLE t2 (id INTEGER);")
-      } should have message "DDL not allowed inside a transaction"
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+      db.close()
+    }
 
+    "DML then DDL then ROLLBACK — everything is rolled back" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("BEGIN;")
+      executeSQL("INSERT INTO t VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
       executeSQL("ROLLBACK;")
+
+      val table = executeSQL("SELECT * FROM t;").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 0
+      assertThrows[Exception] { executeSQL("SELECT * FROM t2;") }
+      db.close()
+    }
+
+    "DDL then DML then ROLLBACK — everything is rolled back" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER);")
+      executeSQL("INSERT INTO t VALUES (1);")
+      executeSQL("ROLLBACK;")
+
+      assertThrows[Exception] { executeSQL("SELECT * FROM t;") }
+      db.close()
+    }
+
+    "interleaved DDL and DML commits atomically" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id SERIAL, name TEXT);")
+      executeSQL("INSERT INTO t1 (name) VALUES ('Alice');")
+      executeSQL("CREATE TABLE t2 (id SERIAL, title TEXT);")
+      executeSQL("INSERT INTO t2 (title) VALUES ('Hello');")
+      executeSQL("COMMIT;")
+
+      val t1 = executeSQL("SELECT name FROM t1;").collect { case QueryResult(t) => t }.head
+      t1.data.length shouldBe 1
+      t1.data(0).data(0) shouldBe TextValue("Alice")
+      val t2 = executeSQL("SELECT title FROM t2;").collect { case QueryResult(t) => t }.head
+      t2.data.length shouldBe 1
+      t2.data(0).data(0) shouldBe TextValue("Hello")
+      db.close()
+    }
+
+    "interleaved DDL and DML rolls back atomically" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t1 (id INTEGER);")
+      executeSQL("INSERT INTO t1 VALUES (1);")
+      executeSQL("CREATE TABLE t2 (id INTEGER);")
+      executeSQL("INSERT INTO t2 VALUES (2);")
+      executeSQL("ROLLBACK;")
+
+      assertThrows[Exception] { executeSQL("SELECT * FROM t1;") }
+      assertThrows[Exception] { executeSQL("SELECT * FROM t2;") }
+      db.close()
+    }
+
+    "interleaved DDL/DML survives reopen after commit" in {
+      locally {
+        val db = PersistentDB.create(tmpFile, pageSize)
+        given Session = db.connect()
+        executeSQL("BEGIN;")
+        executeSQL("CREATE TABLE t1 (id SERIAL, name TEXT);")
+        executeSQL("INSERT INTO t1 (name) VALUES ('persisted');")
+        executeSQL("CREATE TABLE t2 (id INTEGER);")
+        executeSQL("COMMIT;")
+        db.close()
+      }
+
+      locally {
+        val db = PersistentDB.open(tmpFile)
+        given Session = db.connect()
+        val t1 = executeSQL("SELECT name FROM t1;").collect { case QueryResult(t) => t }.head
+        t1.data.length shouldBe 1
+        t1.data(0).data(0) shouldBe TextValue("persisted")
+        executeSQL("SELECT * FROM t2;").collect { case QueryResult(t) => t }.head.data.length shouldBe 0
+        db.close()
+      }
+    }
+
+    "CREATE INDEX inside transaction with DML" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("INSERT INTO t (id, name) VALUES (1, 'Alice');")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("COMMIT;")
+
+      val table = executeSQL("SELECT * FROM t WHERE name = 'Alice';").collect { case QueryResult(t) => t }.head
+      table.data.length shouldBe 1
+      db.close()
+    }
+
+    "ROLLBACK after CREATE INDEX undoes index and table" in {
+      val db = PersistentDB.create(tmpFile, pageSize)
+      given Session = db.connect()
+      executeSQL("BEGIN;")
+      executeSQL("CREATE TABLE t (id INTEGER, name TEXT);")
+      executeSQL("CREATE INDEX idx ON t (name);")
+      executeSQL("ROLLBACK;")
+
+      assertThrows[Exception] { executeSQL("SELECT * FROM t;") }
       db.close()
     }
 
