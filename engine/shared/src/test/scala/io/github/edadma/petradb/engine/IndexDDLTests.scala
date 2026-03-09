@@ -149,6 +149,91 @@ class IndexDDLTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "CREATE INDEX ... USING" - {
+    "USING btree succeeds" in {
+      val results = exec(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE INDEX idx ON t USING btree (name);
+          |""".trim.stripMargin
+      )
+      results should contain(CreateIndexResult("idx"))
+    }
+
+    "USING BTREE (case insensitive) succeeds" in {
+      val results = exec(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE INDEX idx ON t USING BTREE (name);
+          |""".trim.stripMargin
+      )
+      results should contain(CreateIndexResult("idx"))
+    }
+
+    "USING with unique index succeeds" in {
+      val results = exec(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE UNIQUE INDEX idx ON t USING btree (id);
+          |""".trim.stripMargin
+      )
+      results should contain(CreateIndexResult("idx"))
+    }
+
+    "USING hash fails" in {
+      assertThrows[SchemaException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |CREATE INDEX idx ON t USING hash (id);
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "USING gin fails" in {
+      assertThrows[SchemaException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |CREATE INDEX idx ON t USING gin (id);
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "USING gist fails" in {
+      assertThrows[SchemaException] {
+        exec(
+          """
+            |CREATE TABLE t (id INTEGER);
+            |CREATE INDEX idx ON t USING gist (id);
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "omitting USING defaults to btree (existing behavior)" in {
+      val (_, db) = execDB(
+        """
+          |CREATE TABLE t (id INTEGER, name TEXT);
+          |CREATE INDEX idx ON t (name);
+          |""".trim.stripMargin
+      )
+      db.hasIndex("idx") shouldBe true
+    }
+
+    "USING btree multi-column index" in {
+      val results = exec(
+        """
+          |CREATE TABLE t (a INTEGER, b INTEGER, c TEXT);
+          |CREATE INDEX idx ON t USING btree (a, b);
+          |""".trim.stripMargin
+      )
+      results should contain(CreateIndexResult("idx"))
+    }
+  }
+
   "DROP INDEX" - {
     "drops an existing index" in {
       val (results, db) = execDB(
