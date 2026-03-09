@@ -60,6 +60,7 @@ case class CopyToCommand(
 case object BeginCommand    extends Command
 case object CommitCommand   extends Command
 case object RollbackCommand extends Command
+case class CreateSchemaCommand(name: Ident, ifNotExists: Boolean) extends Command
 case object ShowTablesCommand                    extends Command
 case object ShowViewsCommand                     extends Command
 case class ShowColumnsCommand(table: Ident)      extends Command

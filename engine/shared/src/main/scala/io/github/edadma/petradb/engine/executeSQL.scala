@@ -43,6 +43,11 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
     case BeginCommand    => session.beginTransaction(); BeginResult
     case CommitCommand   => session.commitTransaction(); CommitResult
     case RollbackCommand => session.rollbackTransaction(); RollbackResult
+    case CreateSchemaCommand(Ident(name), ifNotExists) =>
+      if ifNotExists && db.hasSchema(name) then CreateSchemaResult(name)
+      else
+        db.createSchema(name)
+        CreateSchemaResult(name)
     case ShowTablesCommand =>
       val names = db.tableNames.toSeq.sorted
       val meta = Metadata(IndexedSeq(ColumnMetadata(None, "table_name", TextType)))

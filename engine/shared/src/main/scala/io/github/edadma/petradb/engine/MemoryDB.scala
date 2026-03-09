@@ -86,7 +86,7 @@ class MemoryDB extends DB:
     table
 
   override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
-    val table = tables(tableName).asInstanceOf[MemoryTable]
+    val table = tables(resolveKey(tableName)).asInstanceOf[MemoryTable]
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
 
     given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
@@ -103,7 +103,7 @@ class MemoryDB extends DB:
         tree.insert(key, node)
       rowId += 1
 
-    val meta = IndexMeta(indexName, tableName, columnNames, unique, nextRowId = rowId)
+    val meta = IndexMeta(indexName, resolveKey(tableName), columnNames, unique, nextRowId = rowId)
     val idx = MemoryTableIndex(meta, colIndices, tree, rowId)
     indexes(indexName) = meta
     table.tableIndexes(indexName) = idx

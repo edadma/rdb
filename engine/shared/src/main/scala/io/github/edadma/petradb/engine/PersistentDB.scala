@@ -87,7 +87,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
 
   override def dropTable(name: String): Unit =
     // Free all data pages and header page for this table
-    tables.get(name).foreach { table =>
+    tables.get(resolveKey(name)).foreach { table =>
       val pt = table.asInstanceOf[PersistentTable]
       pt.freeAllPages()
     }
@@ -127,7 +127,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     persistCatalog()
 
   private def createPersistentIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, batch: WriteBatch): Unit =
-    val table = tables(tableName)
+    val table = tables(resolveKey(tableName))
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
 
     given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
@@ -159,7 +159,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
         }
       currentPageId = page.nextPage
 
-    val meta = IndexMeta(indexName, tableName, columnNames, unique, tree.treeRecordPage, rowId)
+    val meta = IndexMeta(indexName, resolveKey(tableName), columnNames, unique, tree.treeRecordPage, rowId)
     val idx = PersistentTableIndex(meta, colIndices, rowId)
     indexes(indexName) = meta
     table.tableIndexes(indexName) = idx

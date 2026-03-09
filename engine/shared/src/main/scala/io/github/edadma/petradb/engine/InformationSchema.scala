@@ -7,7 +7,6 @@ import scala.collection.immutable.ArraySeq
 object InformationSchema:
 
   private val catalog = "petradb"
-  private val schema  = "public"
 
   private def tv(s: String): Value  = TextValue(s)
   private def nv(): Value           = NullValue()
@@ -73,7 +72,7 @@ object InformationSchema:
       ColumnMetadata(Some("tables"), "table_name", TextType),
       ColumnMetadata(Some("tables"), "table_type", TextType),
     ))
-    val rows = db.tableNames.toVector.sorted.map { name =>
+    val rows = db.allQualifiedTableNames.toVector.sortBy((s, n) => (s, n)).map { (schema, name) =>
       Row(Vector(tv(catalog), tv(schema), tv(name), tv("BASE TABLE")), meta, None, None)
     }
     StaticProcess(rows.to(ArraySeq), meta)
@@ -94,13 +93,13 @@ object InformationSchema:
     ))
     val rows = Vector.newBuilder[Row]
     for
-      tableName <- db.tableNames.toVector.sorted
-      table <- db.getTable(tableName)
+      (schemaName, tableName) <- db.allQualifiedTableNames.toVector.sortBy((s, n) => (s, n))
+      table <- db.getTable(schemaName, tableName)
       (col, idx) <- table.columns.zipWithIndex
     do rows += Row(
       Vector(
         tv(catalog),
-        tv(schema),
+        tv(schemaName),
         tv(tableName),
         tv(col.name),
         iv(idx + 1),
@@ -127,38 +126,38 @@ object InformationSchema:
     ))
     val rows = Vector.newBuilder[Row]
     for
-      tableName <- db.tableNames.toVector.sorted
-      table <- db.getTable(tableName)
+      (schemaName, tableName) <- db.allQualifiedTableNames.toVector.sortBy((s, n) => (s, n))
+      table <- db.getTable(schemaName, tableName)
     do
-      for row <- constraintRows(tableName, table) do
+      for row <- constraintRows(schemaName, tableName, table) do
         rows += Row(row, meta, None, None)
     StaticProcess(rows.result().to(ArraySeq), meta)
 
-  private def constraintRows(tableName: String, table: Table): Vector[Vector[Value]] =
+  private def constraintRows(schemaName: String, tableName: String, table: Table): Vector[Vector[Value]] =
     val result = Vector.newBuilder[Vector[Value]]
     table.primaryKey.foreach { pk =>
       val name = pk.name.getOrElse(s"${tableName}_pkey")
-      result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv("PRIMARY KEY"))
+      result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv("PRIMARY KEY"))
     }
     for c <- table.constraints do c match
       case _: PrimaryKeySpec => // already handled above
       case u: UniqueSpec =>
         val name = u.name.getOrElse(s"${tableName}_${u.columns.mkString("_")}_key")
-        result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv("UNIQUE"))
+        result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv("UNIQUE"))
       case fk: ForeignKeySpec =>
         val name = fk.name.getOrElse(s"${tableName}_${fk.columns.mkString("_")}_fkey")
-        result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv("FOREIGN KEY"))
+        result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv("FOREIGN KEY"))
       case ch: CheckSpec =>
         val name = ch.name.getOrElse(s"${tableName}_check")
-        result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv("CHECK"))
+        result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv("CHECK"))
     // Column-level unique constraints
     for col <- table.columns if col.unique do
-      result += Vector(tv(catalog), tv(schema), tv(s"${tableName}_${col.name}_key"), tv(catalog), tv(schema), tv(tableName), tv("UNIQUE"))
+      result += Vector(tv(catalog), tv(schemaName), tv(s"${tableName}_${col.name}_key"), tv(catalog), tv(schemaName), tv(tableName), tv("UNIQUE"))
     // Column-level FK constraints
     val constraintFKCols = table.constraints.collect { case fk: ForeignKeySpec => fk.columns }.toSet
     for col <- table.columns if col.fk.isDefined do
       if !constraintFKCols.contains(Seq(col.name)) then
-        result += Vector(tv(catalog), tv(schema), tv(s"${tableName}_${col.name}_fkey"), tv(catalog), tv(schema), tv(tableName), tv("FOREIGN KEY"))
+        result += Vector(tv(catalog), tv(schemaName), tv(s"${tableName}_${col.name}_fkey"), tv(catalog), tv(schemaName), tv(tableName), tv("FOREIGN KEY"))
     result.result()
 
   private def generateKeyColumnUsage(db: DB): Process =
@@ -174,39 +173,39 @@ object InformationSchema:
     ))
     val rows = Vector.newBuilder[Row]
     for
-      tableName <- db.tableNames.toVector.sorted
-      table <- db.getTable(tableName)
+      (schemaName, tableName) <- db.allQualifiedTableNames.toVector.sortBy((s, n) => (s, n))
+      table <- db.getTable(schemaName, tableName)
     do
-      for row <- keyColumnRows(tableName, table) do
+      for row <- keyColumnRows(schemaName, tableName, table) do
         rows += Row(row, meta, None, None)
     StaticProcess(rows.result().to(ArraySeq), meta)
 
-  private def keyColumnRows(tableName: String, table: Table): Vector[Vector[Value]] =
+  private def keyColumnRows(schemaName: String, tableName: String, table: Table): Vector[Vector[Value]] =
     val result = Vector.newBuilder[Vector[Value]]
     table.primaryKey.foreach { pk =>
       val name = pk.name.getOrElse(s"${tableName}_pkey")
       for (col, idx) <- pk.columns.zipWithIndex do
-        result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv(col), iv(idx + 1))
+        result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv(col), iv(idx + 1))
     }
     for c <- table.constraints do c match
       case _: PrimaryKeySpec => // already handled above
       case u: UniqueSpec =>
         val name = u.name.getOrElse(s"${tableName}_${u.columns.mkString("_")}_key")
         for (col, idx) <- u.columns.zipWithIndex do
-          result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv(col), iv(idx + 1))
+          result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv(col), iv(idx + 1))
       case fk: ForeignKeySpec =>
         val name = fk.name.getOrElse(s"${tableName}_${fk.columns.mkString("_")}_fkey")
         for (col, idx) <- fk.columns.zipWithIndex do
-          result += Vector(tv(catalog), tv(schema), tv(name), tv(catalog), tv(schema), tv(tableName), tv(col), iv(idx + 1))
+          result += Vector(tv(catalog), tv(schemaName), tv(name), tv(catalog), tv(schemaName), tv(tableName), tv(col), iv(idx + 1))
       case _ =>
     // Column-level unique
     for col <- table.columns if col.unique do
-      result += Vector(tv(catalog), tv(schema), tv(s"${tableName}_${col.name}_key"), tv(catalog), tv(schema), tv(tableName), tv(col.name), iv(1))
+      result += Vector(tv(catalog), tv(schemaName), tv(s"${tableName}_${col.name}_key"), tv(catalog), tv(schemaName), tv(tableName), tv(col.name), iv(1))
     // Column-level FK
     val constraintFKCols = table.constraints.collect { case fk: ForeignKeySpec => fk.columns }.toSet
     for col <- table.columns if col.fk.isDefined do
       if !constraintFKCols.contains(Seq(col.name)) then
-        result += Vector(tv(catalog), tv(schema), tv(s"${tableName}_${col.name}_fkey"), tv(catalog), tv(schema), tv(tableName), tv(col.name), iv(1))
+        result += Vector(tv(catalog), tv(schemaName), tv(s"${tableName}_${col.name}_fkey"), tv(catalog), tv(schemaName), tv(tableName), tv(col.name), iv(1))
     result.result()
 
   private def generateReferentialConstraints(db: DB): Process =
@@ -222,15 +221,15 @@ object InformationSchema:
     ))
     val rows = Vector.newBuilder[Row]
     for
-      tableName <- db.tableNames.toVector.sorted
-      table <- db.getTable(tableName)
+      (schemaName, tableName) <- db.allQualifiedTableNames.toVector.sortBy((s, n) => (s, n))
+      table <- db.getTable(schemaName, tableName)
       fk <- db.foreignKeys(table)
     do
       val name = fk.name.getOrElse(s"${tableName}_${fk.columns.mkString("_")}_fkey")
       val refName = s"${fk.referencedTable}_pkey"
       rows += Row(Vector(
-        tv(catalog), tv(schema), tv(name),
-        tv(catalog), tv(schema), tv(refName),
+        tv(catalog), tv(schemaName), tv(name),
+        tv(catalog), tv(schemaName), tv(refName),
         tv(actionString(fk.onUpdate)),
         tv(actionString(fk.onDelete)),
       ), meta, None, None)
@@ -242,11 +241,11 @@ object InformationSchema:
       ColumnMetadata(Some("schemata"), "schema_name", TextType),
       ColumnMetadata(Some("schemata"), "schema_owner", TextType),
     ))
-    val rows = ArraySeq(
-      Row(Vector(tv(catalog), tv("public"), tv("petradb")), meta, None, None),
-      Row(Vector(tv(catalog), tv("information_schema"), tv("petradb")), meta, None, None),
-    )
-    StaticProcess(rows, meta)
+    val rows = Vector.newBuilder[Row]
+    for name <- db.schemaNames do
+      rows += Row(Vector(tv(catalog), tv(name), tv("petradb")), meta, None, None)
+    rows += Row(Vector(tv(catalog), tv("information_schema"), tv("petradb")), meta, None, None)
+    StaticProcess(rows.result().to(ArraySeq), meta)
 
   private def actionString(a: ReferentialAction): String = a match
     case ReferentialAction.NoAction => "NO ACTION"

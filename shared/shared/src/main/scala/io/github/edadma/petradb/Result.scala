@@ -20,6 +20,7 @@ case class DropViewResult(name: String)                             extends Resu
 case class PrepareResult(name: String)    extends Result
 case class DeallocateResult(name: String) extends Result
 case class CopyResult(rows: Int)              extends Result
+case class CreateSchemaResult(name: String)  extends Result
 case object BeginResult    extends Result
 case object CommitResult   extends Result
 case object RollbackResult extends Result

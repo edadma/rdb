@@ -643,3 +643,78 @@ class JdbcFileTests extends AnyFreeSpec with Matchers with BeforeAndAfterEach:
     finally
       conn1.close()
       conn2.close()
+
+  "getColumns COLUMN_SIZE for VARCHAR" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (name VARCHAR(100))")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "name")
+      rs.next() shouldBe true
+      rs.getInt("COLUMN_SIZE") shouldBe 100
+    finally conn.close()
+
+  "getColumns COLUMN_SIZE for NUMERIC" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (price NUMERIC(10, 2))")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "price")
+      rs.next() shouldBe true
+      rs.getInt("COLUMN_SIZE") shouldBe 10
+    finally conn.close()
+
+  "getColumns COLUMN_SIZE for INT types" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (a SMALLINT, b INT, c BIGINT)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", null)
+      val sizes = collection.mutable.Map[String, Int]()
+      while rs.next() do sizes(rs.getString("COLUMN_NAME")) = rs.getInt("COLUMN_SIZE")
+      sizes("a") shouldBe 5
+      sizes("b") shouldBe 10
+      sizes("c") shouldBe 19
+    finally conn.close()
+
+  "getColumns DECIMAL_DIGITS for NUMERIC" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (price NUMERIC(8, 3))")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "price")
+      rs.next() shouldBe true
+      rs.getInt("DECIMAL_DIGITS") shouldBe 3
+    finally conn.close()
+
+  "getColumns DECIMAL_DIGITS is 0 for INT" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "id")
+      rs.next() shouldBe true
+      rs.getInt("DECIMAL_DIGITS") shouldBe 0
+    finally conn.close()
+
+  "getColumns DECIMAL_DIGITS is NULL for TEXT" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (name TEXT)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "name")
+      rs.next() shouldBe true
+      rs.getObject("DECIMAL_DIGITS") shouldBe null
+    finally conn.close()
+
+  "getColumns CHAR_OCTET_LENGTH for VARCHAR" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (name VARCHAR(50))")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "name")
+      rs.next() shouldBe true
+      rs.getInt("CHAR_OCTET_LENGTH") shouldBe 200  // 50 * 4 bytes (UTF-8 max)
+    finally conn.close()
+
+  "getColumns CHAR_OCTET_LENGTH is NULL for numeric" in:
+    val conn = memConn()
+    try
+      conn.createStatement().executeUpdate("CREATE TABLE t (id INT)")
+      val rs = conn.getMetaData.getColumns(null, null, "t", "id")
+      rs.next() shouldBe true
+      rs.getObject("CHAR_OCTET_LENGTH") shouldBe null
+    finally conn.close()

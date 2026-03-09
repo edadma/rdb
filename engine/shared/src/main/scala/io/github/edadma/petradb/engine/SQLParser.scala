@@ -158,9 +158,19 @@ object SQLParser:
       .map(_.toLowerCase)
   }
 
+  // anyIdentOrQuoted: like anyIdent but also allows double-quoted identifiers
+  private def anyIdentOrQuoted[p: P]: P[String] = P(quotedIdent | anyIdent)
+
   // identifier returns P[Ident] with position
   private def identifier[p: P]: P[Ident] =
     P(Idx ~ ident).map((loc, name) => pos(loc, Ident(name)))
+
+  // tableIdent: schema-qualified table name — preserves schema prefix as "schema.table"
+  private def tableIdent[p: P]: P[Ident] =
+    P(Idx ~ ident ~ ("." ~ anyIdentOrQuoted).?).map {
+      case (loc, schema, Some(name)) => pos(loc, Ident(s"$schema.$name"))
+      case (loc, name, None)         => pos(loc, Ident(name))
+    }
 
   // ── Literals ───────────────────────────────────────────────────────
 
@@ -774,13 +784,13 @@ object SQLParser:
     P(application | table | valuesClause | ("(" ~ query ~ ")"))
 
   private def table[p: P]: P[Expr] =
-    P(Idx ~ identifier ~ ("." ~ Idx ~ anyIdent).?).map {
-      case (loc, schema, Some((loc2, name))) if schema.name == "information_schema" =>
-        pos(loc, InformationSchemaOperator(pos(loc2, Ident(name))))
-      case (loc, _, Some((loc2, name))) =>
-        pos(loc, TableOperator(pos(loc2, Ident(name)))) // ignore non-information_schema qualifiers
+    P(Idx ~ ident ~ ("." ~ anyIdentOrQuoted).?).map {
+      case (loc, schema, Some(name)) if schema == "information_schema" =>
+        pos(loc, InformationSchemaOperator(pos(loc, Ident(name))))
+      case (loc, schema, Some(name)) =>
+        pos(loc, TableOperator(pos(loc, Ident(s"$schema.$name"))))
       case (loc, name, None) =>
-        pos(loc, TableOperator(name))
+        pos(loc, TableOperator(pos(loc, Ident(name))))
     }
 
   // ── VALUES clause ──────────────────────────────────────────────────
@@ -866,12 +876,12 @@ object SQLParser:
   // INSERT INTO table [(cols)] VALUES (row), ... [ON CONFLICT ...] [RETURNING ...]
   // INSERT INTO table [(cols)] query [ON CONFLICT ...] [RETURNING ...]
   private def insertValues[p: P]: P[Command] =
-    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("values") ~ row.rep(1, sep = ",") ~ onConflictClause.? ~ returningClause.?).map {
+    P(kw("insert") ~ kw("into") ~ tableIdent ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("values") ~ row.rep(1, sep = ",") ~ onConflictClause.? ~ returningClause.?).map {
       case (t, cs, rows, oc, ret) => InsertCommand(t, cs, rows, ret, oc)
     }
 
   private def insertSelect[p: P]: P[Command] =
-    P(kw("insert") ~ kw("into") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ query ~ onConflictClause.? ~ returningClause.?).map {
+    P(kw("insert") ~ kw("into") ~ tableIdent ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ query ~ onConflictClause.? ~ returningClause.?).map {
       case (t, cs, q, oc, ret) => InsertSelectCommand(t, cs, q, ret, oc)
     }
 
@@ -880,7 +890,7 @@ object SQLParser:
   // ── DML: UPDATE ────────────────────────────────────────────────────
 
   private def update[p: P]: P[Command] =
-    P(kw("update") ~ identifier ~ kw("set") ~ set.rep(1, sep = ",") ~
+    P(kw("update") ~ tableIdent ~ kw("set") ~ set.rep(1, sep = ",") ~
       (kw("from") ~ sources.rep(1, sep = ",")).? ~
       (kw("where") ~ expression).? ~
       returningClause.?).map { case (t, ss, f, c, ret) =>
@@ -890,14 +900,14 @@ object SQLParser:
   // ── DML: DELETE ────────────────────────────────────────────────────
 
   private def delete[p: P]: P[Command] =
-    P(kw("delete") ~ kw("from") ~ identifier ~ (kw("where") ~ expression).? ~ returningClause.?).map {
+    P(kw("delete") ~ kw("from") ~ tableIdent ~ (kw("where") ~ expression).? ~ returningClause.?).map {
       case (t, c, ret) => DeleteCommand(t, c, ret)
     }
 
   // ── DML: TRUNCATE ──────────────────────────────────────────────────
 
   private def truncate[p: P]: P[Command] =
-    P(kw("truncate") ~ kw("table").? ~ identifier).map(TruncateCommand(_))
+    P(kw("truncate") ~ kw("table").? ~ tableIdent).map(TruncateCommand(_))
 
   // ── DDL: Constraints ───────────────────────────────────────────────
 
@@ -1024,7 +1034,7 @@ object SQLParser:
     P(columnDesc.map(_.asInstanceOf[ColumnDesc | TableConstraint]) | tableConstraint.map(_.asInstanceOf[ColumnDesc | TableConstraint]))
 
   private def createTable[p: P]: P[Command] =
-    P(kw("create") ~ (kw("temp") | kw("temporary")).!.? ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
+    P(kw("create") ~ (kw("temp") | kw("temporary")).!.? ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ tableIdent ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
       case (temp, ine, t, items) =>
         val columns = items.collect { case c: ColumnDesc => c }
         val constraints = items.collect { case c: TableConstraint => c }
@@ -1035,8 +1045,8 @@ object SQLParser:
 
   private def dropTable[p: P]: P[Command] =
     P(
-      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ identifier).map(t => DropTableCommand(t, true, false))
-      | (kw("drop") ~ kw("table") ~ identifier ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ tableIdent).map(t => DropTableCommand(t, true, false))
+      | (kw("drop") ~ kw("table") ~ tableIdent ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
           case (t, cascade) => DropTableCommand(t, false, cascade.getOrElse(false))
         }
     )
@@ -1045,7 +1055,7 @@ object SQLParser:
 
   // CREATE [UNIQUE] INDEX name ON table (cols)
   private def createIndex[p: P]: P[Command] =
-    P(kw("create") ~ kw("unique").!.? ~ kw("index") ~ identifier ~ kw("on") ~ identifier ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map {
+    P(kw("create") ~ kw("unique").!.? ~ kw("index") ~ identifier ~ kw("on") ~ tableIdent ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map {
       case (u, name, table, cols) => CreateIndexCommand(name, table, cols, u.isDefined)
     }
 
@@ -1076,7 +1086,7 @@ object SQLParser:
   // ── DDL: ALTER TABLE ───────────────────────────────────────────────
 
   private def alterTable[p: P]: P[Command] =
-    P(kw("alter") ~ kw("table") ~ identifier ~ tableAlteration).map((t, a) => AlterTableCommand(t, a))
+    P(kw("alter") ~ kw("table") ~ tableIdent ~ tableAlteration).map((t, a) => AlterTableCommand(t, a))
 
   private def tableAlteration[p: P]: P[TableAlteration] =
     P(
@@ -1169,7 +1179,7 @@ object SQLParser:
     }
 
   private def copyFrom[p: P]: P[Command] =
-    P(kw("copy") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("from") ~ stringLit ~ copyOptions.?)
+    P(kw("copy") ~ tableIdent ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").? ~ kw("from") ~ stringLit ~ copyOptions.?)
       .map { case (table, cols, file, opts) =>
         val (header, delim) = opts.getOrElse((false, ','))
         CopyFromCommand(table, cols, file, header, delim)
@@ -1204,13 +1214,13 @@ object SQLParser:
   private def showViews[p: P]: P[Command] =
     P(kw("show") ~ kw("views")).map(_ => ShowViewsCommand)
   private def showColumns[p: P]: P[Command] =
-    P(kw("show") ~ kw("columns") ~ kw("from").? ~ identifier).map(ShowColumnsCommand(_))
+    P(kw("show") ~ kw("columns") ~ kw("from").? ~ tableIdent).map(ShowColumnsCommand(_))
   private def showPrimaryKey[p: P]: P[Command] =
-    P(kw("show") ~ kw("primary") ~ kw("key") ~ identifier).map(ShowPrimaryKeyCommand(_))
+    P(kw("show") ~ kw("primary") ~ kw("key") ~ tableIdent).map(ShowPrimaryKeyCommand(_))
   private def showForeignKeys[p: P]: P[Command] =
-    P(kw("show") ~ kw("foreign") ~ kw("keys") ~ identifier).map(ShowForeignKeysCommand(_))
+    P(kw("show") ~ kw("foreign") ~ kw("keys") ~ tableIdent).map(ShowForeignKeysCommand(_))
   private def showIndexes[p: P]: P[Command] =
-    P(kw("show") ~ kw("indexes") ~ identifier).map(ShowIndexesCommand(_))
+    P(kw("show") ~ kw("indexes") ~ tableIdent).map(ShowIndexesCommand(_))
   private def showCmd[p: P]: P[Command] = P(showTables | showViews | showPrimaryKey | showForeignKeys | showIndexes | showColumns)
 
   // ── Top-level command ──────────────────────────────────────────────
@@ -1218,8 +1228,13 @@ object SQLParser:
   private def commandTxn[p: P]: P[Command] =
     P(explain | showCmd | beginCmd | commitCmd | rollbackCmd | prepare | executeCmd | deallocate)
 
+  private def createSchema[p: P]: P[Command] =
+    P(kw("create") ~ kw("schema") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier).map {
+      case (ine, name) => CreateSchemaCommand(name, ine.isDefined)
+    }
+
   private def commandDDL[p: P]: P[Command] =
-    P(createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)
+    P(createSchema | createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable)
 
   private def commandDML[p: P]: P[Command] =
     P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))

@@ -16,10 +16,13 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
   private[engine] lazy val tempDB = new MemoryDB
 
   def getTable(name: String): Option[Table] =
-    tempTables.get(name).orElse(db.getTable(name))
+    // Temp tables are unqualified — strip schema prefix for lookup
+    val shortName = if name.contains('.') then name.substring(name.indexOf('.') + 1) else name
+    tempTables.get(shortName).orElse(db.getTable(name))
 
   def hasTable(name: String): Boolean =
-    tempTables.contains(name) || db.hasTable(name)
+    val shortName = if name.contains('.') then name.substring(name.indexOf('.') + 1) else name
+    tempTables.contains(shortName) || db.hasTable(name)
 
   def hasTempTable(name: String): Boolean = tempTables.contains(name)
 

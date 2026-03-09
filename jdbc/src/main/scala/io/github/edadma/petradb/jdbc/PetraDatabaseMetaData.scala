@@ -6,9 +6,9 @@ import io.github.edadma.petradb.engine.*
 class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMetaData:
 
   override def getDatabaseProductName(): String    = "PetraDB"
-  override def getDatabaseProductVersion(): String = "1.2.7"
+  override def getDatabaseProductVersion(): String = "1.2.9"
   override def getDriverName(): String             = "PetraDB JDBC Driver"
-  override def getDriverVersion(): String          = "1.2.7"
+  override def getDriverVersion(): String          = "1.2.9"
   override def getDriverMajorVersion(): Int        = 1
   override def getDriverMinorVersion(): Int        = 2
   override def getDatabaseMajorVersion(): Int      = 1
@@ -105,6 +105,25 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
             val defaultStr = col.default match
               case Some(v) if !isSerial => TextValue(sqlLiteral(v))
               case _                    => NullValue()
+            val columnSize: Value = col.typ match
+              case v: VarcharType                                     => NumberValue(v.length)
+              case c: CharType                                        => NumberValue(c.length)
+              case n: NumericType                                     => NumberValue(n.precision)
+              case IntegerType | SerialType                            => NumberValue(10)
+              case SmallintType | SmallSerialType                      => NumberValue(5)
+              case BigintType | BigSerialType                          => NumberValue(19)
+              case DoubleType                                          => NumberValue(15)
+              case _                                                   => NumberValue(0)
+            val decimalDigits: Value = col.typ match
+              case n: NumericType                                      => NumberValue(n.scale)
+              case IntegerType | SmallintType | BigintType |
+                   SerialType | SmallSerialType | BigSerialType        => NumberValue(0)
+              case _                                                   => NullValue()
+            val charOctetLength: Value = col.typ match
+              case v: VarcharType => NumberValue(v.length * 4)
+              case c: CharType    => NumberValue(c.length * 4)
+              case TextType       => NumberValue(1073741824)
+              case _              => NullValue()
             Some(Row(
               IndexedSeq(
                 NullValue(),                                        // TABLE_CAT
@@ -113,16 +132,16 @@ class PetraDatabaseMetaData(conn: AbstractConnection) extends AbstractDatabaseMe
                 TextValue(col.name),                                // COLUMN_NAME
                 NumberValue(jdbcType(col.typ)),                     // DATA_TYPE
                 TextValue(col.typ.name),                            // TYPE_NAME
-                NumberValue(0),                                     // COLUMN_SIZE
+                columnSize,                                         // COLUMN_SIZE
                 NullValue(),                                        // BUFFER_LENGTH
-                NullValue(),                                        // DECIMAL_DIGITS
+                decimalDigits,                                      // DECIMAL_DIGITS
                 NumberValue(10),                                    // NUM_PREC_RADIX
                 NumberValue(nullable),                              // NULLABLE
                 TextValue(""),                                      // REMARKS
                 defaultStr,                                         // COLUMN_DEF
                 NumberValue(0),                                     // SQL_DATA_TYPE
                 NullValue(),                                        // SQL_DATETIME_SUB
-                NullValue(),                                        // CHAR_OCTET_LENGTH
+                charOctetLength,                                    // CHAR_OCTET_LENGTH
                 NumberValue(idx + 1),                               // ORDINAL_POSITION
                 TextValue(isNullStr),                               // IS_NULLABLE
                 TextValue(if isAuto then "YES" else "NO"),          // IS_AUTOINCREMENT

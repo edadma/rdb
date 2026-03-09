@@ -19,12 +19,65 @@ abstract class DB:
   protected[petradb] val types = new mutable.HashMap[String, Type]
   protected[petradb] val indexes = new mutable.HashMap[String, IndexMeta]
   protected val views = new mutable.HashMap[String, String] // name -> SQL
+  protected[petradb] val schemas = new mutable.LinkedHashSet[String]
+  schemas += "public"
 
-  def tableNames: Iterable[String] = tables.keys
+  // ── Schema management ──────────────────────────────────────────────
 
-  infix def hasTable(name: String): Boolean = tables contains name
+  def hasSchema(name: String): Boolean = schemas.contains(name)
 
-  infix def getTable(name: String): Option[Table] = tables get name
+  def createSchema(name: String): Unit =
+    schemas += name
+    onMutation()
+
+  def dropSchema(name: String, cascade: Boolean): Unit =
+    if cascade then
+      val prefix = s"$name."
+      val toRemove = tables.keys.filter(_.startsWith(prefix)).toSeq
+      for key <- toRemove do
+        val idx2Remove = indexes.filter(_._2.tableName == key).keys.toSeq
+        for idx <- idx2Remove do indexes.remove(idx)
+        tables.get(key).foreach(_.tableIndexes.clear())
+        tables.remove(key)
+      val viewsToRemove = views.keys.filter(_.startsWith(prefix)).toSeq
+      for key <- viewsToRemove do views.remove(key)
+    else
+      val prefix = s"$name."
+      if tables.keys.exists(_.startsWith(prefix)) || views.keys.exists(_.startsWith(prefix)) then
+        sys.error(s"cannot drop schema '$name' because it is not empty")
+    schemas -= name
+    onMutation()
+
+  def schemaNames: Iterable[String] = schemas
+
+  // ── Internal key helpers ───────────────────────────────────────────
+
+  private[petradb] def qualifiedKey(schema: String, name: String): String = s"$schema.$name"
+  private[petradb] def qualifiedKey(schema: Option[String], name: String): String = s"${schema.getOrElse("public")}.$name"
+
+  // ── Table accessors (schema-aware) ─────────────────────────────────
+
+  def tableNames: Iterable[String] = tables.keys.map(_.split('.').last)
+
+  def tableNamesInSchema(schema: String): Iterable[String] =
+    val prefix = s"$schema."
+    tables.keys.filter(_.startsWith(prefix)).map(_.stripPrefix(prefix))
+
+  def allQualifiedTableNames: Iterable[(String, String)] =
+    tables.keys.map { key =>
+      val dot = key.indexOf('.')
+      (key.substring(0, dot), key.substring(dot + 1))
+    }
+
+  // Resolve a possibly-qualified name ("schema.table" or just "table")
+  private[petradb] def resolveKey(name: String): String =
+    if name.contains('.') then name else qualifiedKey("public", name)
+
+  infix def hasTable(name: String): Boolean = tables contains resolveKey(name)
+  def hasTable(schema: String, name: String): Boolean = tables contains qualifiedKey(schema, name)
+
+  infix def getTable(name: String): Option[Table] = tables get resolveKey(name)
+  def getTable(schema: String, name: String): Option[Table] = tables get qualifiedKey(schema, name)
 
   protected def addTable(name: String, specs: Seq[Spec]): Table
 
@@ -32,29 +85,38 @@ abstract class DB:
 
   protected def registerTable(name: String, table: Table): Unit = tables(name) = table
 
+  // Extract the short (unqualified) table name from a possibly-qualified name
+  private[petradb] def shortName(name: String): String =
+    val dot = name.indexOf('.')
+    if dot >= 0 then name.substring(dot + 1) else name
+
   def createTable(name: String, specs: Seq[Spec]): Table =
-    require(!(tables contains name), s"table '$name' already exists")
+    val key = resolveKey(name)
+    require(!(tables contains key), s"table '${shortName(name)}' already exists")
 
-    val table = addTable(name, specs)
+    val table = addTable(shortName(name), specs)
 
-    registerTable(name, table)
+    registerTable(key, table)
     onMutation()
     table
 
   def dropTable(name: String): Unit =
+    val key = resolveKey(name)
     // Remove indexes for this table
-    val toRemove = indexes.filter(_._2.tableName == name).keys.toSeq
+    val toRemove = indexes.filter(_._2.tableName == key).keys.toSeq
     for idx <- toRemove do indexes.remove(idx)
-    tables.get(name).foreach { t =>
+    tables.get(key).foreach { t =>
       t.tableIndexes.clear()
     }
-    tables.remove(name)
+    tables.remove(key)
     onMutation()
 
   def renameTable(oldName: String, newName: String): Unit =
-    val table = tables.remove(oldName).getOrElse(sys.error(s"table '$oldName' not found"))
-    table.name = newName
-    tables(newName) = table
+    val oldKey = resolveKey(oldName)
+    val newKey = resolveKey(newName)
+    val table = tables.remove(oldKey).getOrElse(sys.error(s"table '$oldName' not found"))
+    table.name = shortName(newName)
+    tables(newKey) = table
     onMutation()
 
   protected def addEnum(name: String, labels: Seq[String]): EnumType
@@ -74,24 +136,25 @@ abstract class DB:
   infix def getType(name: String): Option[Type] = types get name
 
   def createView(name: String, sql: String, orReplace: Boolean): Unit =
-    if !orReplace then require(!views.contains(name), s"view '$name' already exists")
-    views(name) = sql
+    val key = resolveKey(name)
+    if !orReplace then require(!views.contains(key), s"view '$name' already exists")
+    views(key) = sql
     onMutation()
 
   def dropView(name: String): Unit =
-    views.remove(name)
+    views.remove(resolveKey(name))
     onMutation()
 
-  def hasView(name: String): Boolean = views contains name
+  def hasView(name: String): Boolean = views contains resolveKey(name)
 
-  def getView(name: String): Option[String] = views get name
+  def getView(name: String): Option[String] = views get resolveKey(name)
 
-  def viewNames: Iterable[String] = views.keys
+  def viewNames: Iterable[String] = views.keys.map(_.split('.').last)
 
   def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
 
   def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
-    val t = tables(name)
+    val t = tables(resolveKey(name))
     alteration match
       case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _)) =>
         if t.hasColumn(colName) then throw SchemaException(cid.pos, s"column '$colName' already exists")
@@ -186,7 +249,7 @@ abstract class DB:
     val fkValues = fk.columns.map(c => row(colMap(c)))
     if fkValues.exists(_.isNull) then return
 
-    val parentTable = tables.getOrElse(fk.referencedTable,
+    val parentTable = tables.getOrElse(resolveKey(fk.referencedTable),
       sys.error(s"foreign key references non-existent table '${fk.referencedTable}'"))
 
     val parentKey = fkValues.toIndexedSeq
