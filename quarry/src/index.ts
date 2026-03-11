@@ -1,6 +1,6 @@
 export type { ASTExpr, ASTCommand, ASTOrderBy } from './ast.js'
 export { serial, text, integer, boolean, table } from './schema.js'
-export type { ColumnDef, TableDef, ColumnsConfig, InferSelect, InferInsert } from './schema.js'
+export type { ColumnDef, TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 export {
   col,
   eq,

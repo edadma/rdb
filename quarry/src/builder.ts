@@ -8,7 +8,7 @@ import type {
   ASTOrderBy,
   ASTUpdateSet,
 } from './ast.js'
-import type { TableDef, ColumnsConfig, InferSelect, InferInsert } from './schema.js'
+import type { TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 
 // ── Session interface ──
 
@@ -18,106 +18,105 @@ export interface QuarrySession {
 
 // ── Select builder ──
 
-export class SelectBuilder<T extends TableDef<any, any>, TResult = InferSelect<T>> {
-  private _table: T
+interface SelectState {
+  tableName: string
+  columns: ASTExpr[]
+  where?: ASTExpr
+  orderBy?: ASTOrderBy[]
+  limit?: number
+  offset?: number
+  groupBy?: ASTExpr[]
+  having?: ASTExpr
+  distinct: boolean
+  joins: { kind: 'joinInner' | 'joinLeft'; right: ASTExpr; on: ASTExpr }[]
+}
+
+export class SelectBuilder<TResult> {
   private _session: QuarrySession
-  private _columns: ASTExpr[] = [{ kind: 'star' }]
-  private _where?: ASTExpr
-  private _orderBy?: ASTOrderBy[]
-  private _limit?: number
-  private _offset?: number
-  private _groupBy?: ASTExpr[]
-  private _having?: ASTExpr
-  private _distinct = false
-  private _joins: ASTExpr[] = []
+  private _state: SelectState
 
-  constructor(session: QuarrySession, table: T) {
+  /** @internal */
+  constructor(session: QuarrySession, state: SelectState) {
     this._session = session
-    this._table = table
+    this._state = state
   }
 
-  columns(...cols: ASTExpr[]): this {
-    this._columns = cols
-    return this
+  columns(...cols: ASTExpr[]): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, columns: cols })
   }
 
-  where(condition: ASTExpr): this {
-    this._where = condition
-    return this
+  where(condition: ASTExpr): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, where: condition })
   }
 
-  orderBy(...orders: ASTOrderBy[]): this {
-    this._orderBy = orders
-    return this
+  orderBy(...orders: ASTOrderBy[]): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, orderBy: orders })
   }
 
-  limit(n: number): this {
-    this._limit = n
-    return this
+  limit(n: number): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, limit: n })
   }
 
-  offset(n: number): this {
-    this._offset = n
-    return this
+  offset(n: number): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, offset: n })
   }
 
-  groupBy(...exprs: ASTExpr[]): this {
-    this._groupBy = exprs
-    return this
+  groupBy(...exprs: ASTExpr[]): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, groupBy: exprs })
   }
 
-  having(condition: ASTExpr): this {
-    this._having = condition
-    return this
+  having(condition: ASTExpr): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, having: condition })
   }
 
-  distinct(): this {
-    this._distinct = true
-    return this
+  distinct(): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, distinct: true })
   }
 
-  innerJoin<U extends TableDef<any, any>>(table: U, on: ASTExpr): this {
-    this._joins.push({
-      kind: 'joinInner',
-      left: { kind: 'table', name: '' }, // placeholder, resolved in toAST
-      right: { kind: 'table', name: table._name },
-      on,
+  innerJoin<U extends TableDef<any, any>>(
+    table: U,
+    on: ASTExpr,
+  ): SelectBuilder<TResult & InferSelect<U>> {
+    return new SelectBuilder(this._session, {
+      ...this._state,
+      joins: [
+        ...this._state.joins,
+        { kind: 'joinInner', right: { kind: 'table', name: table._name }, on },
+      ],
     })
-    return this
   }
 
-  leftJoin<U extends TableDef<any, any>>(table: U, on: ASTExpr): this {
-    this._joins.push({
-      kind: 'joinLeft',
-      left: { kind: 'table', name: '' },
-      right: { kind: 'table', name: table._name },
-      on,
+  leftJoin<U extends TableDef<any, any>>(
+    table: U,
+    on: ASTExpr,
+  ): SelectBuilder<TResult & Nullable<InferSelect<U>>> {
+    return new SelectBuilder(this._session, {
+      ...this._state,
+      joins: [
+        ...this._state.joins,
+        { kind: 'joinLeft', right: { kind: 'table', name: table._name }, on },
+      ],
     })
-    return this
   }
 
   toAST(): ASTQueryCommand {
-    let from: ASTExpr = { kind: 'table', name: this._table._name }
+    let from: ASTExpr = { kind: 'table', name: this._state.tableName }
 
-    for (const join of this._joins) {
-      if (join.kind === 'joinInner') {
-        from = { kind: 'joinInner', left: from, right: join.right, on: join.on }
-      } else if (join.kind === 'joinLeft') {
-        from = { kind: 'joinLeft', left: from, right: join.right, on: join.on }
-      }
+    for (const join of this._state.joins) {
+      from = { kind: join.kind, left: from, right: join.right, on: join.on }
     }
 
     const select: ASTExpr = {
       kind: 'select',
-      exprs: this._columns,
+      exprs: this._state.columns,
       from: [from],
-      where: this._where,
-      orderBy: this._orderBy,
-      offset: this._offset,
-      limit: this._limit,
-      groupBy: this._groupBy,
-      having: this._having,
-      distinct: this._distinct || undefined,
+      where: this._state.where,
+      orderBy: this._state.orderBy,
+      offset: this._state.offset,
+      limit: this._state.limit,
+      groupBy: this._state.groupBy,
+      having: this._state.having,
+      distinct: this._state.distinct || undefined,
     }
 
     return { kind: 'query', query: select }
@@ -308,8 +307,13 @@ export class QuarryDB {
     this._session = session
   }
 
-  select<T extends TableDef<any, any>>(table: T): SelectBuilder<T> {
-    return new SelectBuilder(this._session, table)
+  select<T extends TableDef<any, any>>(table: T): SelectBuilder<InferSelect<T>> {
+    return new SelectBuilder<InferSelect<T>>(this._session, {
+      tableName: table._name,
+      columns: [{ kind: 'star' }],
+      distinct: false,
+      joins: [],
+    })
   }
 
   insert<T extends TableDef<any, any>>(table: T): InsertBuilder<T> {

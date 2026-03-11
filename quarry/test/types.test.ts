@@ -22,8 +22,9 @@ import {
   between,
   fn,
   like,
+  quarry,
 } from '@petradb/quarry'
-import type { InferSelect, InferInsert, TableDef, ColumnDef } from '@petradb/quarry'
+import type { InferSelect, InferInsert, Nullable, TableDef, ColumnDef, QuarrySession } from '@petradb/quarry'
 
 // ── Schema definition ──
 
@@ -191,3 +192,160 @@ const postIns2: PostInsert = { userId: 1, title: 'Hello', body: 'World' }
 
 // @ts-expect-error — userId is required
 const badPostIns: PostInsert = { title: 'Hello' }
+
+// ── Join result types ──
+
+// Third table for multi-join tests
+const comments = table('comments', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id').notNull(),
+  authorId: integer('author_id'),
+  content: text('content').notNull(),
+})
+
+declare const mockSession: QuarrySession
+const db = quarry(mockSession)
+
+// -- Inner join: result is intersection of both tables --
+
+const innerJoinQuery = db
+  .select(users)
+  .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+
+// Positive: inner join result has all columns from both tables
+type InnerJoinResult = Awaited<ReturnType<typeof innerJoinQuery.execute>>[number]
+
+const ijRow: InnerJoinResult = {
+  // users columns
+  id: 1, name: 'Alice', email: 'a@b.com', age: 30, bio: null, active: true,
+  // posts columns
+  userId: 1, title: 'Hello', body: 'World',
+}
+
+// Positive: users.age is still nullable in inner join
+const _ijAge: InnerJoinResult['age'] = null
+
+// Positive: posts.body is still nullable in inner join
+const _ijBody: InnerJoinResult['body'] = null
+
+// Positive: posts.title is string (notNull)
+const _ijTitle: string = ijRow.title
+
+// Positive: users.name is string (notNull)
+const _ijName: string = ijRow.name
+
+// Negative: posts.title cannot be null in inner join (notNull in posts)
+// @ts-expect-error — title is string, not string | null
+const _badIjTitle: InnerJoinResult['title'] = null as null
+
+// Negative: users.name cannot be null in inner join
+// @ts-expect-error — name is string, not string | null
+const _badIjName: InnerJoinResult['name'] = null as null
+
+// -- Left join: joined table columns become nullable --
+
+const leftJoinQuery = db
+  .select(users)
+  .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+
+type LeftJoinResult = Awaited<ReturnType<typeof leftJoinQuery.execute>>[number]
+
+// Positive: users columns retain their original nullability
+const ljRow: LeftJoinResult = {
+  id: 1, name: 'Alice', email: 'a@b.com', age: 30, bio: null, active: true,
+  userId: 1, title: 'Hello', body: 'World',
+}
+
+// Positive: left join — ALL joined table columns become nullable (even notNull ones)
+const ljRowNulls: LeftJoinResult = {
+  id: 1, name: 'Alice', email: 'a@b.com', age: null, bio: null, active: true,
+  userId: null, title: null, body: null, // posts columns all null (no match)
+}
+
+// Positive: posts.title is now string | null (was notNull, but left join makes it nullable)
+const _ljTitle: string | null = ljRowNulls.title
+
+// Positive: posts.userId is now number | null
+const _ljUserId: number | null = ljRowNulls.userId
+
+// Negative: users.name is still notNull (base table, not affected by left join)
+// @ts-expect-error — name is string, not string | null
+const _badLjName: LeftJoinResult['name'] = null as null
+
+// -- Chaining: inner join then left join --
+
+const multiJoinQuery = db
+  .select(users)
+  .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+  .leftJoin(comments, eq(col(posts, 'id'), col(comments, 'postId')))
+
+type MultiJoinResult = Awaited<ReturnType<typeof multiJoinQuery.execute>>[number]
+
+// Positive: has columns from all three tables
+const mjRow: MultiJoinResult = {
+  id: 1, name: 'Alice', email: 'a@b.com', age: 30, bio: null, active: true,
+  userId: 1, title: 'Hello', body: 'World',
+  postId: 1, authorId: 5, content: 'Nice!',
+}
+
+// Positive: comments columns are nullable (left join)
+const mjRowNoComment: MultiJoinResult = {
+  id: 1, name: 'Alice', email: 'a@b.com', age: null, bio: null, active: true,
+  userId: 1, title: 'Hello', body: null,
+  postId: null, authorId: null, content: null,
+}
+
+// Positive: comments.content is string | null (left join)
+const _mjContent: string | null = mjRowNoComment.content
+
+// Positive: posts.title is string (inner join, stays notNull)
+const _mjTitle: string = mjRow.title
+
+// Negative: posts.title is still notNull (inner join)
+// @ts-expect-error — title is string (inner join keeps notNull)
+const _badMjTitle: MultiJoinResult['title'] = null as null
+
+// -- Where/orderBy/limit preserve join types --
+
+const chainedQuery = db
+  .select(users)
+  .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+  .where(eq(col(users, 'name'), 'Alice'))
+  .orderBy(asc(col(posts, 'title')))
+  .limit(10)
+
+type ChainedResult = Awaited<ReturnType<typeof chainedQuery.execute>>[number]
+
+// Positive: chained methods preserve the join result type
+const _chainedName: string = undefined as unknown as ChainedResult['name']
+const _chainedTitle: string = undefined as unknown as ChainedResult['title']
+
+// -- Nullable utility type --
+
+type NullablePosts = Nullable<InferSelect<typeof posts>>
+
+// Positive: all fields become nullable
+const np: NullablePosts = { id: null, userId: null, title: null, body: null }
+
+// Positive: non-null values still work
+const np2: NullablePosts = { id: 1, userId: 1, title: 'Hello', body: null }
+
+// -- Two left joins: both tables fully nullable --
+
+const doubleLeftQuery = db
+  .select(users)
+  .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+  .leftJoin(comments, eq(col(posts, 'id'), col(comments, 'postId')))
+
+type DoubleLeftResult = Awaited<ReturnType<typeof doubleLeftQuery.execute>>[number]
+
+// Positive: both joined tables' columns are nullable
+const dlRow: DoubleLeftResult = {
+  id: 1, name: 'Alice', email: 'a@b.com', age: null, bio: null, active: true,
+  userId: null, title: null, body: null,
+  postId: null, authorId: null, content: null,
+}
+
+// Negative: base table name still not nullable
+// @ts-expect-error — name is string, not string | null
+const _badDlName: DoubleLeftResult['name'] = null as null

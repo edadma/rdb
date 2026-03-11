@@ -156,6 +156,8 @@ function columnDefToAST(key: string, col: ColumnDef<any, any, any, any>): ASTCol
   return def_
 }
 
+export type Nullable<T> = { [K in keyof T]: T[K] | null }
+
 export function table<TName extends string, TColumns extends ColumnsConfig>(
   name: TName,
   columns: TColumns,
