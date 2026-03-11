@@ -163,6 +163,15 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "create schema", schema = name)
 
   @JSExport
+  def executeAST(ast: js.Dynamic, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
+    val rowMode = options.toOption
+      .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
+      .getOrElse(defaultRowMode)
+    val command = ASTConverter.toCommand(ast)
+    val results = executeCommands(Seq(command))
+    js.Promise.resolve((results map (r => resultToJS(r, rowMode))).toJSArray)
+
+  @JSExport
   def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =
     val rowMode = options.toOption
       .flatMap(o => o.selectDynamic("rowMode").asInstanceOf[js.UndefOr[String]].toOption)
