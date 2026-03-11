@@ -131,7 +131,7 @@ export default function Playground() {
     setResults(entries)
   }, [getDb, resultLabel])
 
-  const handleTerminalLine = useCallback((line: string) => {
+  const handleTerminalLine = useCallback(async (line: string) => {
     const trimmed = line.trim()
     if (!trimmed) return
     const term = terminalRef.current
@@ -143,7 +143,8 @@ export default function Playground() {
     const db = getDb()
     const start = performance.now()
 
-    return db.execute(trimmed).then((rawResults: any[]) => {
+    try {
+      const rawResults = await db.execute(trimmed)
       for (const r of rawResults) {
         if (r.command === 'select') {
           for (const line of formatTableText(r.fields, r.rows).split('\n')) {
@@ -155,9 +156,9 @@ export default function Playground() {
         }
       }
       term.writeln(`\x1b[90m(${(performance.now() - start).toFixed(1)}ms)\x1b[0m`)
-    }).catch((e: any) => {
+    } catch (e: any) {
       term.writeln(`\x1b[31mERROR: ${e.message || String(e)}\x1b[0m`)
-    })
+    }
   }, [getDb, resetDb, resultLabel])
 
   return (
