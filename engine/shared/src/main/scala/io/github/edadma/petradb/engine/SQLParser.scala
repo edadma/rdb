@@ -437,11 +437,11 @@ object SQLParser:
       case (loc, s, repl, start, None) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
     }
 
-  // func(args...) — identifier ~ "(" ~ args ~ ")" => (Int, Ident, Seq[Expr])
+  // func(args...) FILTER (WHERE ...) — identifier ~ "(" ~ args ~ ")" ~ filter? => (Int, Ident, Seq[Expr], Option[Expr])
   private def application[p: P]: P[Expr] =
-    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")").map((loc, f, as) =>
-      pos(loc, ApplyExpr(f, as))
-    )
+    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")" ~ (kw("filter") ~ "(" ~ kw("where") ~ expression ~ ")").?).map {
+      case (loc, f, as, filter) => pos(loc, ApplyExpr(f, as, filter))
+    }
 
   // table.column or just column — identifier ~ ("." ~ identifier).? => (Int, Ident, Option[Ident])
   private def column[p: P]: P[ColumnExpr] =

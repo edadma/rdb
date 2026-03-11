@@ -52,9 +52,10 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
     case NullExpr()     => ("NULL", 99)
     case ColumnExpr(Some(table), col) => (s"${table.name}.${col.name}", 99)
     case ColumnExpr(None, col)        => (col.name, 99)
-    case ApplyExpr(func, args) =>
+    case ApplyExpr(func, args, filter) =>
       val argStrs = args.map(a => exprToSQLInner(a)._1)
-      (s"${func.name}(${argStrs.mkString(", ")})", 99)
+      val filterStr = filter.map(f => s" FILTER (WHERE ${exprToSQLInner(f)._1})").getOrElse("")
+      (s"${func.name}(${argStrs.mkString(", ")})$filterStr", 99)
     case UnaryExpr("NOT", e) =>
       val (s, p) = exprToSQLInner(e)
       val child = if p < 3 then s"($s)" else s

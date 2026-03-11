@@ -713,7 +713,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
         case OverlapsExpr(a, b, c, d)          => countInExpr(a) ++ countInExpr(b) ++ countInExpr(c) ++ countInExpr(d)
         case CaseExpr(whens, els) =>
           whens.flatMap { case When(w, e) => countInExpr(w) ++ countInExpr(e) } ++ els.toSeq.flatMap(countInExpr)
-        case ApplyExpr(_, args)                => args.flatMap(countInExpr)
+        case ApplyExpr(_, args, filter)        => args.flatMap(countInExpr) ++ filter.toSeq.flatMap(countInExpr)
         case InSeqExpr(v, _, es)               => countInExpr(v) ++ es.flatMap(countInExpr)
         case InQueryExpr(v, _, q)              => countInExpr(v) ++ countInExpr(q)
         case SubqueryExpr(q)                   => countInExpr(q)

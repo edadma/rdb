@@ -24,7 +24,7 @@ case class OffsetOperator(rel: Expr, offset: Int) extends Operator
 case class LimitOperator(rel: Expr, limit: Int) extends Operator
 case class DistinctOperator(rel: Expr) extends Operator
 
-case class AggregateSpec(name: String, func: AggregateFunctionInstance, args: Seq[Expr], typ: Type)
+case class AggregateSpec(name: String, func: AggregateFunctionInstance, args: Seq[Expr], typ: Type, filter: Option[Expr] = None)
 case class AggregateOperator(rel: Expr, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Operator
 
 case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator

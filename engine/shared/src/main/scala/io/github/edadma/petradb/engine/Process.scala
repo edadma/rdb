@@ -33,7 +33,7 @@ trait Process:
       case AliasExpr(e, _)                  => validateColumns(e, m)
       case CastExpr(e, _)                   => validateColumns(e, m)
       case ScalarFunctionExpr(_, args)       => args.foreach(e => validateColumns(e, m))
-      case AggregateFunctionExpr(_, args)    => args.foreach(e => validateColumns(e, m))
+      case AggregateFunctionExpr(_, args, filter) => args.foreach(e => validateColumns(e, m)); filter.foreach(f => validateColumns(f, m))
       case _                                => // literals, subqueries, etc.
 
 type RowIterator = Iterator[Row]
@@ -105,7 +105,9 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
       for row <- rows do
         val rowCtx = row +: ctx
-        for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
+        for spec <- aggregates do
+          if spec.filter.forall(f => beval(f, rowCtx)) then
+            spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
       val aggValues = aggregates.map(_.func.result).toVector
       // Even if rows is empty, emit one row (COUNT→0, SUM→0, etc.)
@@ -124,7 +126,9 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
         for row <- group do
           val rowCtx = row +: ctx
-          for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
+          for spec <- aggregates do
+            if spec.filter.forall(f => beval(f, rowCtx)) then
+              spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
         val aggValues = aggregates.map(_.func.result).toVector
         Row(group.last.data ++ aggValues, meta, None, None)

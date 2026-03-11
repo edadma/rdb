@@ -10,17 +10,18 @@ class AggregateCollector:
   private val seen = mutable.Map[String, String]() // canonical key → column name
   private var counter = 0
 
-  private def canonicalKey(funcName: String, args: Seq[Expr]): String =
-    s"$funcName(${args.mkString(", ")})"
+  private def canonicalKey(funcName: String, args: Seq[Expr], filter: Option[Expr]): String =
+    val filterStr = filter.map(f => s" FILTER($f)").getOrElse("")
+    s"$funcName(${args.mkString(", ")})$filterStr"
 
   def collect(expr: Expr): Expr =
     expr match
-      case AggregateFunctionExpr(f, args) =>
-        val key = canonicalKey(f.name, args)
+      case AggregateFunctionExpr(f, args, filter) =>
+        val key = canonicalKey(f.name, args, filter)
         val colName = seen.getOrElseUpdate(key, {
           counter += 1
           val name = s"_agg_$counter"
-          specs += AggregateSpec(name, f, args, expr.typ.asInstanceOf[Type])
+          specs += AggregateSpec(name, f, args, expr.typ.asInstanceOf[Type], filter)
           name
         })
         ColumnExpr(None, Ident(colName)) setType expr.typ
@@ -88,12 +89,14 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case QuantifiedCompareExpr(value, op, quantifier, expr) =>
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
-    case ApplyExpr(id @ Ident(func), args) =>
+    case ApplyExpr(id @ Ident(func), args, filter) =>
       func.toLowerCase match
         case "generate_series" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on generate_series")
           val rwArgs = args map rewrite
           ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
         case "nextval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
           ScalarFunctionExpr(
             ScalarFunction("nextval", { case Seq(nameVal) =>
               val seqName = nameVal.string
@@ -106,6 +109,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             args map rewrite,
           )
         case "currval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
           ScalarFunctionExpr(
             ScalarFunction("currval", { case Seq(nameVal) =>
               val seqName = nameVal.string
@@ -116,6 +120,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             args map rewrite,
           )
         case "setval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
           ScalarFunctionExpr(
             ScalarFunction("setval", { case params =>
               val seqName = params.head.string
@@ -130,6 +135,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             args map rewrite,
           )
         case "lastval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
           ScalarFunctionExpr(
             ScalarFunction("lastval", { case Seq() =>
               val seqName = session.lastSequenceUsed.getOrElse(sys.error("lastval is not yet defined in this session"))
@@ -144,8 +150,10 @@ def rewrite(expr: Expr)(using session: Session): Expr =
                 case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
                 case Some(f) =>
                   val (instance, typ) = f.instantiate
-                  AggregateFunctionExpr(instance, args map rewrite) setType typ
-            case Some(f) => ScalarFunctionExpr(f, args map rewrite)
+                  AggregateFunctionExpr(instance, args map rewrite, filter map rewrite) setType typ
+            case Some(f) =>
+              if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+              ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
         case None    => throw UndefinedReferenceException(id.pos, s"unknown variable '$name'")

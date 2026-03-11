@@ -26,9 +26,9 @@ case class NullExpr()                                                     extend
 case class ExistsExpr(subquery: Expr)                                     extends Expr
 case class BetweenExpr(value: Expr, op: String, lower: Expr, upper: Expr) extends Expr
 case class CaseExpr(whens: Seq[When], els: Option[Expr])                  extends Expr
-case class ApplyExpr(func: Ident, args: Seq[Expr])                        extends Expr
+case class ApplyExpr(func: Ident, args: Seq[Expr], filter: Option[Expr] = None) extends Expr
 case class ScalarFunctionExpr(f: ScalarFunction, args: Seq[Expr])         extends Expr
-case class AggregateFunctionExpr(f: AggregateFunctionInstance, args: Seq[Expr]) extends Expr
+case class AggregateFunctionExpr(f: AggregateFunctionInstance, args: Seq[Expr], filter: Option[Expr] = None) extends Expr
 case class VariableInstanceExpr(v: VariableInstance)                      extends Expr
 case class InSeqExpr(value: Expr, op: String, exprs: Seq[Expr])           extends Expr
 case class InQueryExpr(value: Expr, op: String, query: Expr)              extends Expr
