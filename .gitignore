@@ -36,3 +36,4 @@ node_modules/
 */npm/dist/
 knex/dist/
 lucid/dist/
+quarry/dist/
