@@ -90,6 +90,8 @@ case class CreateTypeResult(typ: String)                            extends Resu
 case class DropTypeResult(name: String)                             extends Result
 case class CreateViewResult(name: String)                           extends Result
 case class DropViewResult(name: String)                             extends Result
+case class CreateSequenceResult(name: String)                       extends Result
+case class DropSequenceResult(name: String)                         extends Result
 case class UpdateResult(rows: Int)                                  extends Result
 case class DeleteResult(rows: Int)                                  extends Result
 case class TruncateResult(table: String)                            extends Result

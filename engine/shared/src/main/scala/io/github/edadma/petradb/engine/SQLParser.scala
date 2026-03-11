@@ -1097,6 +1097,56 @@ object SQLParser:
         }
     )
 
+  // ── DDL: CREATE/DROP SEQUENCE ─────────────────────────────────────
+
+  private sealed trait SeqOption
+  private case class SeqIncrement(v: Long) extends SeqOption
+  private case class SeqMinValue(v: Option[Long]) extends SeqOption
+  private case class SeqMaxValue(v: Option[Long]) extends SeqOption
+  private case class SeqStart(v: Long) extends SeqOption
+  private case class SeqCycle(v: Boolean) extends SeqOption
+
+  private def seqOption[p: P]: P[SeqOption] =
+    P(
+      (kw("increment") ~ kw("by").? ~ signedLongLit).map(n => SeqIncrement(n))
+      | (kw("minvalue") ~ signedLongLit).map(n => SeqMinValue(Some(n)))
+      | (kw("no") ~ kw("minvalue")).map(_ => SeqMinValue(None))
+      | (kw("maxvalue") ~ signedLongLit).map(n => SeqMaxValue(Some(n)))
+      | (kw("no") ~ kw("maxvalue")).map(_ => SeqMaxValue(None))
+      | (kw("start") ~ kw("with").? ~ signedLongLit).map(n => SeqStart(n))
+      | kw("cycle").map(_ => SeqCycle(true))
+      | (kw("no") ~ kw("cycle")).map(_ => SeqCycle(false))
+    )
+
+  private def signedLongLit[p: P]: P[Long] =
+    P(("-".!.? ~ CharIn("0-9").rep(1).!).map { case (neg, digits) =>
+      val v = digits.toLong
+      if neg.isDefined then -v else v
+    })
+
+  private def createSequence[p: P]: P[Command] =
+    P(kw("create") ~ kw("sequence") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ seqOption.rep).map {
+      case (ine, name, opts) =>
+        var increment = 1L
+        var minValue: Option[Long] = None
+        var maxValue: Option[Long] = None
+        var startValue: Option[Long] = None
+        var cycle = false
+        for opt <- opts do opt match
+          case SeqIncrement(v) => increment = v
+          case SeqMinValue(v)  => minValue = v
+          case SeqMaxValue(v)  => maxValue = v
+          case SeqStart(v)     => startValue = Some(v)
+          case SeqCycle(v)     => cycle = v
+        CreateSequenceCommand(name, increment, minValue, maxValue, startValue, cycle, ine.isDefined)
+    }
+
+  private def dropSequence[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("sequence") ~ kw("if") ~ kw("exists") ~ identifier).map(name => DropSequenceCommand(name, true))
+      | (kw("drop") ~ kw("sequence") ~ identifier).map(name => DropSequenceCommand(name, false))
+    )
+
   // ── DDL: ALTER TABLE ───────────────────────────────────────────────
 
   private def alterTable[p: P]: P[Command] =
@@ -1235,7 +1285,11 @@ object SQLParser:
     P(kw("show") ~ kw("foreign") ~ kw("keys") ~ tableIdent).map(ShowForeignKeysCommand(_))
   private def showIndexes[p: P]: P[Command] =
     P(kw("show") ~ kw("indexes") ~ tableIdent).map(ShowIndexesCommand(_))
-  private def showCmd[p: P]: P[Command] = P(showTables | showViews | showPrimaryKey | showForeignKeys | showIndexes | showColumns)
+  private def showSequences[p: P]: P[Command] =
+    P(kw("show") ~ kw("sequences")).map(_ => ShowSequencesCommand)
+  private def showAllIndexes[p: P]: P[Command] =
+    P(kw("show") ~ kw("indexes")).map(_ => ShowAllIndexesCommand)
+  private def showCmd[p: P]: P[Command] = P(showTables | showViews | showSequences | showPrimaryKey | showForeignKeys | showIndexes | showAllIndexes | showColumns)
 
   // ── Top-level command ──────────────────────────────────────────────
 
@@ -1257,7 +1311,7 @@ object SQLParser:
       .map { case (cmd, _) => DoBlockCommand(cmd) }
 
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
+    P(createSchema | createSequence | createView | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
     P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))

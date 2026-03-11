@@ -89,19 +89,63 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
     case ApplyExpr(id @ Ident(func), args) =>
-      if func.toLowerCase == "generate_series" then
-        val rwArgs = args map rewrite
-        ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
-      else
-        scalarFunction get func.toLowerCase match
-          case None =>
-            aggregateFunction get func.toLowerCase match
-              case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
-              case Some(f) =>
-                val (instance, typ) = f.instantiate
-
-                AggregateFunctionExpr(instance, args map rewrite) setType typ
-          case Some(f) => ScalarFunctionExpr(f, args map rewrite)
+      func.toLowerCase match
+        case "generate_series" =>
+          val rwArgs = args map rewrite
+          ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
+        case "nextval" =>
+          ScalarFunctionExpr(
+            ScalarFunction("nextval", { case Seq(nameVal) =>
+              val seqName = nameVal.string
+              val seq = session.db.getSequence(seqName).getOrElse(sys.error(s"relation \"$seqName\" does not exist"))
+              val v = seq.nextval()
+              session.sequenceValues(seqName) = v
+              session.lastSequenceUsed = Some(seqName)
+              NumberValue(v.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "currval" =>
+          ScalarFunctionExpr(
+            ScalarFunction("currval", { case Seq(nameVal) =>
+              val seqName = nameVal.string
+              if !session.db.hasSequence(seqName) then sys.error(s"relation \"$seqName\" does not exist")
+              val v = session.sequenceValues.getOrElse(seqName, sys.error(s"currval of sequence \"$seqName\" is not yet defined in this session"))
+              NumberValue(v.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "setval" =>
+          ScalarFunctionExpr(
+            ScalarFunction("setval", { case params =>
+              val seqName = params.head.string
+              val value = params(1).longValue
+              val isCalled = if params.length > 2 then params(2).asInstanceOf[BooleanValue].b else true
+              val seq = session.db.getSequence(seqName).getOrElse(sys.error(s"relation \"$seqName\" does not exist"))
+              seq.setval(value, isCalled)
+              session.sequenceValues(seqName) = value
+              session.lastSequenceUsed = Some(seqName)
+              NumberValue(value.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "lastval" =>
+          ScalarFunctionExpr(
+            ScalarFunction("lastval", { case Seq() =>
+              val seqName = session.lastSequenceUsed.getOrElse(sys.error("lastval is not yet defined in this session"))
+              NumberValue(session.sequenceValues(seqName).toInt)
+            }, NumberType),
+            Seq.empty,
+          )
+        case _ =>
+          scalarFunction get func.toLowerCase match
+            case None =>
+              aggregateFunction get func.toLowerCase match
+                case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
+                case Some(f) =>
+                  val (instance, typ) = f.instantiate
+                  AggregateFunctionExpr(instance, args map rewrite) setType typ
+            case Some(f) => ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
         case None    => throw UndefinedReferenceException(id.pos, s"unknown variable '$name'")

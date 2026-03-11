@@ -357,8 +357,8 @@ class DataTypeTests extends AnyFreeSpec with Matchers with Testing {
       )
 
       table.data.length shouldBe 2
-      table.data(0).data(0) shouldBe NumberValue(1)
-      table.data(1).data(0) shouldBe NumberValue(2)
+      table.data(0).data(0) shouldBe NumberValue(io.github.edadma.dal.LongType, 1L: java.lang.Long)
+      table.data(1).data(0) shouldBe NumberValue(io.github.edadma.dal.LongType, 2L: java.lang.Long)
     }
   }
 

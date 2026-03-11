@@ -68,6 +68,18 @@ case class ShowColumnsCommand(table: Ident)      extends Command
 case class ShowPrimaryKeyCommand(table: Ident)   extends Command
 case class ShowForeignKeysCommand(table: Ident)  extends Command
 case class ShowIndexesCommand(table: Ident)      extends Command
+case object ShowSequencesCommand                 extends Command
+case object ShowAllIndexesCommand                extends Command
+case class CreateSequenceCommand(
+    name: Ident,
+    increment: Long = 1,
+    minValue: Option[Long] = None,
+    maxValue: Option[Long] = None,
+    startValue: Option[Long] = None,
+    cycle: Boolean = false,
+    ifNotExists: Boolean = false,
+) extends Command
+case class DropSequenceCommand(name: Ident, ifExists: Boolean = false) extends Command
 
 case class UpdateSet(col: Ident, value: Expr)
 case class ColumnDesc(

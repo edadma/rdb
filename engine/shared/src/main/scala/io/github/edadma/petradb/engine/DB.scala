@@ -11,12 +11,51 @@ import scala.concurrent.{Future, ExecutionContext}
 trait TransactionHandle
 object NoOpTransactionHandle extends TransactionHandle
 
+class Sequence(
+    val name: String,
+    var currentValue: Long,
+    val increment: Long = 1,
+    val minValue: Long = 1,
+    val maxValue: Long = Long.MaxValue / 2,
+    val startValue: Long = 1,
+    val cycle: Boolean = false,
+    var called: Boolean = false,
+    val ownedByTable: Option[String] = None,
+    val ownedByColumn: Option[String] = None,
+):
+  def nextval(): Long =
+    if !called then
+      called = true
+      if currentValue == 0 then currentValue = startValue
+      // else: setval(v, false) was called, keep currentValue as-is
+    else
+      currentValue += increment
+      if increment > 0 && currentValue > maxValue then
+        if cycle then currentValue = minValue
+        else sys.error(s"nextval: reached maximum value of sequence \"$name\" ($maxValue)")
+      else if increment < 0 && currentValue < minValue then
+        if cycle then currentValue = maxValue
+        else sys.error(s"nextval: reached minimum value of sequence \"$name\" ($minValue)")
+    currentValue
+
+  def setval(value: Long, isCalled: Boolean = true): Long =
+    currentValue = value
+    called = isCalled
+    value
+
+  def stateSnapshot(): (Long, Boolean) = (currentValue, called)
+
+  def restoreState(snap: (Long, Boolean)): Unit =
+    currentValue = snap._1
+    called = snap._2
+
 case class CatalogSnapshot(
     tablesSnap: Map[String, Table],
     indexesSnap: Map[String, IndexMeta],
     viewsSnap: Map[String, String],
     typesSnap: Map[String, Type],
     schemasSnap: Set[String],
+    sequencesSnap: Map[String, Sequence] = Map.empty,
 )
 
 abstract class DB:
@@ -27,6 +66,7 @@ abstract class DB:
   protected[petradb] val types = new mutable.HashMap[String, Type]
   protected[petradb] val indexes = new mutable.HashMap[String, IndexMeta]
   protected val views = new mutable.HashMap[String, String] // name -> SQL
+  protected[petradb] val sequences = new mutable.HashMap[String, Sequence]
   protected[petradb] val schemas = new mutable.LinkedHashSet[String]
   schemas += "public"
 
@@ -159,6 +199,33 @@ abstract class DB:
 
   def viewNames: Iterable[String] = views.keys.map(_.split('.').last)
 
+  // ── Sequence management ──────────────────────────────────────────
+
+  def createSequence(
+      name: String,
+      increment: Long = 1,
+      minValue: Long = 1,
+      maxValue: Long = Long.MaxValue / 2,
+      startValue: Option[Long] = None,
+      cycle: Boolean = false,
+      ownedByTable: Option[String] = None,
+      ownedByColumn: Option[String] = None,
+  ): Sequence =
+    require(!sequences.contains(name), s"sequence '$name' already exists")
+    val start = startValue.getOrElse(if increment > 0 then minValue else maxValue)
+    val seq = new Sequence(name, 0, increment, minValue, maxValue, start, cycle, false, ownedByTable, ownedByColumn)
+    sequences(name) = seq
+    onMutation()
+    seq
+
+  def dropSequence(name: String): Unit =
+    sequences.remove(name)
+    onMutation()
+
+  def hasSequence(name: String): Boolean = sequences.contains(name)
+
+  def getSequence(name: String): Option[Sequence] = sequences.get(name)
+
   def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
 
   def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
@@ -232,6 +299,7 @@ abstract class DB:
       viewsSnap = views.toMap,
       typesSnap = types.toMap,
       schemasSnap = schemas.toSet,
+      sequencesSnap = sequences.toMap,
     )
 
   protected def restoreCatalog(snap: CatalogSnapshot): Unit =
@@ -240,6 +308,7 @@ abstract class DB:
     views.clear(); views ++= snap.viewsSnap
     types.clear(); types ++= snap.typesSnap
     schemas.clear(); schemas ++= snap.schemasSnap
+    sequences.clear(); sequences ++= snap.sequencesSnap
 
   def snapshot(): TransactionHandle = NoOpTransactionHandle
   def commitSnapshot(handle: TransactionHandle): Unit = ()
@@ -366,6 +435,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   protected[petradb] val columns   = new ArrayBuffer[ColumnSpec]
   protected[petradb] val columnMap  = new mutable.HashMap[String, Int]
   protected[petradb] val autoMap   = new mutable.HashMap[String, Value]
+  private[engine] val backingSequences = new mutable.HashMap[String, Sequence]
   private var _meta: Metadata = Metadata(Vector.empty)
   protected[petradb] var primaryKey: Option[PrimaryKeySpec] = None
   protected[petradb] val constraints                       = new ArrayBuffer[Spec]
@@ -403,18 +473,29 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 //
 //  def rows: Int = data.length
 
+  // Optional callback for sequence tracking (set by executeSQL to update session state)
+  var onSequenceUsed: Option[(String, Long) => Unit] = None
+
   def auto(col: String): Value =
-    autoMap get col match
+    backingSequences.get(col) match
+      case Some(seq) =>
+        val n = seq.nextval()
+        onSequenceUsed.foreach(_(seq.name, n))
+        val v = columns(columnMap(col)).typ match
+          case BigSerialType => NumberValue(io.github.edadma.dal.LongType, n: java.lang.Long)
+          case _             => NumberValue(n.toInt)
+        autoMap(col) = v
+        v
       case None =>
-        val first = columns(columnMap(col)).typ.init
-
-        autoMap(col) = first
-        first
-      case Some(cur) =>
-        val next = cur.next
-
-        autoMap(col) = next
-        next
+        autoMap get col match
+          case None =>
+            val first = columns(columnMap(col)).typ.init
+            autoMap(col) = first
+            first
+          case Some(cur) =>
+            val next = cur.next
+            autoMap(col) = next
+            next
 
   protected[engine] def restoreAutoState(state: Map[String, Value]): Unit = autoMap ++= state
 

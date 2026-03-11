@@ -87,6 +87,8 @@ Type SQL terminated by `;` to execute. Multi-line input is supported — a conti
 |---------|-------------|
 | `\dt` | List all tables |
 | `\dv` | List all views |
+| `\ds` | List all sequences |
+| `\di` | List all indexes |
 | `\d <name>` | Describe a table or view (columns, types, nullability) |
 | `\i <file>` | Execute SQL from a file |
 | `\dump` | Print the full schema and data as SQL |

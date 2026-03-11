@@ -540,6 +540,19 @@ def deserializeTableHeader(pageData: Array[Byte], store: PageStore): (PageId, Ma
 //     [2 bytes] constraint count (excluding PK)
 //     For each constraint: type tag + data
 
+case class CatalogSequenceEntry(
+    name: String,
+    currentValue: Long,
+    increment: Long,
+    minValue: Long,
+    maxValue: Long,
+    startValue: Long,
+    cycle: Boolean,
+    called: Boolean,
+    ownedByTable: Option[String],
+    ownedByColumn: Option[String],
+)
+
 def serializeCatalog(
     enumTypes: Iterable[(String, Type)],
     tableEntries: Iterable[CatalogTableEntry],
@@ -547,6 +560,7 @@ def serializeCatalog(
     batch: WriteBatch,
     pageSize: Int,
     viewEntries: Iterable[(String, String)] = Nil,
+    sequenceEntries: Iterable[CatalogSequenceEntry] = Nil,
 ): Array[Byte] =
   val baos = new ByteArrayOutputStream()
   val out  = new DataOutputStream(baos)
@@ -656,6 +670,24 @@ def serializeCatalog(
     writeString(out, name)
     writeString(out, sql)
 
+  // Sequences
+  val seqSeq = sequenceEntries.toSeq
+  out.writeShort(seqSeq.size)
+  for entry <- seqSeq do
+    writeString(out, entry.name)
+    out.writeLong(entry.currentValue)
+    out.writeLong(entry.increment)
+    out.writeLong(entry.minValue)
+    out.writeLong(entry.maxValue)
+    out.writeLong(entry.startValue)
+    out.writeByte(if entry.cycle then 1 else 0)
+    out.writeByte(if entry.called then 1 else 0)
+    val hasOwner = entry.ownedByTable.isDefined && entry.ownedByColumn.isDefined
+    out.writeByte(if hasOwner then 1 else 0)
+    if hasOwner then
+      writeString(out, entry.ownedByTable.get)
+      writeString(out, entry.ownedByColumn.get)
+
   out.flush()
   baos.toByteArray
 
@@ -679,7 +711,7 @@ case class CatalogIndexEntry(
 def deserializeCatalog(
     data: Array[Byte],
     store: PageStore,
-): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)]) =
+): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)], Seq[CatalogSequenceEntry]) =
   val in = new DataInputStream(new ByteArrayInputStream(data))
 
   // Enum types
@@ -812,7 +844,26 @@ def deserializeCatalog(
       val vSql = readString(in)
       viewEntries += ((vName, vSql))
 
-  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq)
+  // Sequences (may not be present in older catalogs)
+  val seqEntries = new ArrayBuffer[CatalogSequenceEntry]
+  if in.available() > 0 then
+    val seqCount = in.readUnsignedShort()
+    for _ <- 0 until seqCount do
+      val sName = readString(in)
+      val currentValue = in.readLong()
+      val increment = in.readLong()
+      val minValue = in.readLong()
+      val maxValue = in.readLong()
+      val startValue = in.readLong()
+      val cycle = in.readByte() != 0
+      val called = in.readByte() != 0
+      val hasOwner = in.readByte() != 0
+      val (ownedByTable, ownedByColumn) =
+        if hasOwner then (Some(readString(in)), Some(readString(in)))
+        else (None, None)
+      seqEntries += CatalogSequenceEntry(sName, currentValue, increment, minValue, maxValue, startValue, cycle, called, ownedByTable, ownedByColumn)
+
+  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq, seqEntries.toSeq)
 
 private def writeString(out: DataOutputStream, s: String): Unit =
   val bytes = s.getBytes("UTF-8")

@@ -67,6 +67,47 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         Row(IndexedSeq(TextValue(name), TextValue(db.getView(name).getOrElse(""))), meta, None, None)
       }.toVector
       QueryResult(TableValue(rows, meta))
+    case ShowSequencesCommand =>
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "sequence_name", TextType),
+        ColumnMetadata(None, "current_value", NumberType),
+        ColumnMetadata(None, "increment", NumberType),
+        ColumnMetadata(None, "min_value", NumberType),
+        ColumnMetadata(None, "max_value", NumberType),
+        ColumnMetadata(None, "cycle", BooleanType),
+        ColumnMetadata(None, "owned_by", TextType),
+      ))
+      val rows = db.sequences.values.toSeq.sortBy(_.name).map { s =>
+        val ownedBy = (s.ownedByTable, s.ownedByColumn) match
+          case (Some(t), Some(c)) => s"$t.$c"
+          case _ => ""
+        Row(IndexedSeq(
+          TextValue(s.name),
+          NumberValue(s.currentValue.toInt),
+          NumberValue(s.increment.toInt),
+          NumberValue(s.minValue.toInt),
+          NumberValue(s.maxValue.toInt),
+          BooleanValue(s.cycle),
+          TextValue(ownedBy),
+        ), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
+    case ShowAllIndexesCommand =>
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "index_name", TextType),
+        ColumnMetadata(None, "table_name", TextType),
+        ColumnMetadata(None, "columns", TextType),
+        ColumnMetadata(None, "is_unique", BooleanType),
+      ))
+      val rows = db.indexes.values.toSeq.sortBy(_.name).map { idx =>
+        Row(IndexedSeq(
+          TextValue(idx.name),
+          TextValue(db.shortName(idx.tableName)),
+          TextValue(idx.columns.mkString(", ")),
+          BooleanValue(idx.unique),
+        ), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
     case ShowColumnsCommand(Ident(table)) =>
       val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
       val meta = Metadata(IndexedSeq(
@@ -185,6 +226,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
       case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
 
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        // Track sequence usage for currval/lastval in this session
+        if t.backingSequences.nonEmpty then
+          t.onSequenceUsed = Some { (seqName, value) =>
+            session.sequenceValues(seqName) = value
+            session.lastSequenceUsed = Some(seqName)
+          }
         val resolvedColumns0 = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns0.length
 
@@ -309,6 +356,11 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
 
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        if t.backingSequences.nonEmpty then
+          t.onSequenceUsed = Some { (seqName, value) =>
+            session.sequenceValues(seqName) = value
+            session.lastSequenceUsed = Some(seqName)
+          }
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
@@ -499,7 +551,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             val t = session.tempDB.createTable(table, allSpecs)
             session.tempTables(table) = t
           else
-            db.createTable(table, allSpecs)
+            val t = db.createTable(table, allSpecs)
+            // Create backing sequences for SERIAL columns (PostgreSQL behavior)
+            for spec <- columnSpecs if spec.typ == SmallSerialType || spec.typ == SerialType || spec.typ == BigSerialType do
+              val seqName = s"${table}_${spec.name}_seq"
+              val seq = db.createSequence(seqName, 1, 1, Long.MaxValue / 2, Some(1), false, Some(table), Some(spec.name))
+              t.backingSequences(spec.name) = seq
           CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
         if session.hasTempTable(table) then
@@ -517,6 +574,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               if refs.nonEmpty then
                 val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
                 throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
+            // Drop owned sequences
+            db.sequences.values.filter(_.ownedByTable.contains(table)).map(_.name).toSeq.foreach(db.dropSequence)
             db.dropTable(table)
             DropTableResult(table)
           }
@@ -719,6 +778,22 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           db.dropType(name)
           DropTypeResult(name)
         }
+      case CreateSequenceCommand(id @ Ident(name), increment, minValue, maxValue, startValue, cycle, ifNotExists) =>
+        if db.hasSequence(name) then
+          if ifNotExists then CreateSequenceResult(name)
+          else throw SchemaException(id.pos, s"sequence '$name' already exists")
+        else
+          val min = minValue.getOrElse(if increment > 0 then 1L else Long.MinValue / 2)
+          val max = maxValue.getOrElse(if increment > 0 then Long.MaxValue / 2 else -1L)
+          db.createSequence(name, increment, min, max, startValue, cycle)
+          CreateSequenceResult(name)
+      case DropSequenceCommand(id @ Ident(name), ifExists) =>
+        if !db.hasSequence(name) then
+          if !ifExists then throw UndefinedReferenceException(id.pos, s"sequence '$name' does not exist")
+          DropSequenceResult(name)
+        else
+          db.dropSequence(name)
+          DropSequenceResult(name)
       case AlterTableCommand(id @ Ident(table), alter) =>
 
         if !session.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")

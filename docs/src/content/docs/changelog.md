@@ -2,6 +2,18 @@
 title: Changelog
 ---
 
+## v1.3-20260311
+
+### Sequence support
+
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
+
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
+
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
+
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
+
 ## v1.3-20260309
 
 ### Transactional DDL
