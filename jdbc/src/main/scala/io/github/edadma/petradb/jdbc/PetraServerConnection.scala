@@ -1,6 +1,6 @@
 package io.github.edadma.petradb.jdbc
 
-import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, TextValue, BooleanValue, NumberValue, Codecs}
+import io.github.edadma.petradb.{Result, QueryResult, ColumnMetadata, TextValue, BooleanValue, Codecs}
 import io.github.edadma.petradb.engine.{ColumnSpec, PrimaryKeySpec, ForeignKeySpec, IndexMeta, ReferentialAction}
 import io.github.edadma.petradb.client
 import io.github.edadma.petradb.client.{Session => ClientSession, SessionOptions}
@@ -96,7 +96,7 @@ class PetraServerConnection(
           if fkName.nonEmpty then fkName else s"__anon__$refTable"
         }
         grouped.values.map { rows =>
-          val sorted     = rows.sortBy(_.data(6).asInstanceOf[NumberValue].value.intValue)
+          val sorted     = rows.sortBy(_.data(6).intValue)
           val fkName     = sorted.head.data(0).asInstanceOf[TextValue].s
           val cols       = sorted.map(_.data(1).asInstanceOf[TextValue].s).toSeq
           val refTable   = sorted.head.data(2).asInstanceOf[TextValue].s
@@ -112,7 +112,7 @@ class PetraServerConnection(
       case Some(QueryResult(tv)) if tv.data.nonEmpty =>
         val grouped = tv.data.groupBy(_.data(0).asInstanceOf[TextValue].s)
         grouped.map { case (idxName, rows) =>
-          val sorted  = rows.sortBy(_.data(3).asInstanceOf[NumberValue].value.intValue)
+          val sorted  = rows.sortBy(_.data(3).intValue)
           val cols    = sorted.map(_.data(1).asInstanceOf[TextValue].s).toSeq
           val unique  = sorted.head.data(2).asInstanceOf[BooleanValue].b
           IndexMeta(idxName, tableName, cols, unique)

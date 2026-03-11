@@ -527,9 +527,10 @@ def deserializeTableHeader(pageData: Array[Byte], store: PageStore): (PageId, Ma
 //     For each column:
 //       [2 bytes] name len + name UTF-8
 //       type (via serializeType)
-//       [1 byte] flags: required(bit 0), indexed(bit 1), unique(bit 2), has_fk(bit 3), has_default(bit 4)
+//       [1 byte] flags: required(bit 0), indexed(bit 1), unique(bit 2), has_fk(bit 3), has_default(bit 4), has_generated(bit 5)
 //       if has_fk: [2 bytes] ref_table len + ref_table + [2 bytes] ref_col len + ref_col
 //       if has_default: serialized value (using serializeValue with no batch needed for defaults — all inline)
+//       if has_generated: [2 bytes] expr_sql len + expr_sql UTF-8
 //     [1 byte] has_primary_key
 //     if has_primary_key:
 //       [1 byte] has_name
@@ -575,6 +576,7 @@ def serializeCatalog(
       if col.unique then flags |= 4
       if col.fk.isDefined then flags |= 8
       if col.default.isDefined then flags |= 16
+      if col.generated.isDefined then flags |= 32
       out.writeByte(flags)
       col.fk.foreach { (refTable, refCol, onDel, onUpd) =>
         writeString(out, refTable)
@@ -584,6 +586,9 @@ def serializeCatalog(
       }
       col.default.foreach { v =>
         serializeValue(v, out, batch, pageSize)
+      }
+      col.generated.foreach { (sqlSource, _) =>
+        writeString(out, sqlSource)
       }
 
     // Primary key
@@ -710,6 +715,7 @@ def deserializeCatalog(
       val unique   = (flags & 4) != 0
       val hasFk    = (flags & 8) != 0
       val hasDef   = (flags & 16) != 0
+      val hasGen   = (flags & 32) != 0
       val fk = if hasFk then
         val refTable = readString(in)
         val refCol   = readString(in)
@@ -721,7 +727,12 @@ def deserializeCatalog(
         val (v, _) = deserializeValue(in, store, enumMap.toMap)
         Some(v)
       else None
-      columns += ColumnSpec(colName, colType, required, indexed, unique, fk, default)
+      val generated = if hasGen then
+        val exprSource = readString(in)
+        val parsed = SQLParser.parseBooleanExpression(exprSource)
+        Some((exprSource, parsed))
+      else None
+      columns += ColumnSpec(colName, colType, required, indexed, unique, fk, default, generated)
 
     // Primary key
     val hasPk = in.readByte() != 0

@@ -164,7 +164,7 @@ abstract class DB:
   def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
     val t = tables(resolveKey(name))
     alteration match
-      case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _)) =>
+      case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _, _)) =>
         if t.hasColumn(colName) then throw SchemaException(cid.pos, s"column '$colName' already exists")
         val typ = typeDesc match
           case Left(primitive)             => primitive
@@ -514,15 +514,28 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   protected def addRow(row: Seq[Value]): Unit
 
+  // Precompute generated column info: (index, parsed expression)
+  private lazy val generatedColumns: Seq[(Int, Expr)] =
+    columns.zipWithIndex.collect { case (spec, idx) if spec.generated.isDefined => (idx, spec.generated.get._2) }.toSeq
+
+  // Set of generated column names (cannot be explicitly inserted or updated)
+  private lazy val generatedSet: Set[String] =
+    columns.filter(_.generated.isDefined).map(_.name).toSet
+
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
     require(headerSet subsetOf columnSet, s"unknown columns: ${headerSet diff columnSet mkString ", "}")
 
+    // Reject explicit values for generated columns
+    val explicitGenerated = headerSet intersect generatedSet
+    if explicitGenerated.nonEmpty then
+      sys.error(s"cannot insert a value into generated column: ${explicitGenerated.mkString(", ")}")
+
     val missingSet = columnSet diff headerSet
     val missing    =
-      for (m <- missingSet diff autoSet)
+      for (m <- (missingSet diff autoSet) diff generatedSet)
         yield
           val idx = columnMap(m)
           val s   = columns(idx)
@@ -561,6 +574,13 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
             c -> v
 
       result = newAutos.toMap
+
+      // Compute generated columns using current row values
+      if generatedColumns.nonEmpty then
+        val row = Row(arr.toIndexedSeq, meta, None, None)
+        for (idx, expr) <- generatedColumns do
+          val v = eval(expr, Seq(row))
+          arr(idx) = columns(idx).typ.convert(v)
 
       // Enforce NOT NULL for PRIMARY KEY columns
       primaryKey.foreach { pk =>
@@ -647,6 +667,7 @@ case class ColumnSpec(
     unique: Boolean = false,
     fk: Option[(String, String, ReferentialAction, ReferentialAction)] = None,
     default: Option[Value] = None,
+    generated: Option[(String, Expr)] = None, // (SQL source, parsed expression) for GENERATED ALWAYS AS columns
 ) extends Spec
 
 // Table-level constraint specifications

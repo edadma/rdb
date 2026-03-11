@@ -136,7 +136,7 @@ class JSONTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       table.data.length shouldBe 2
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(1, 3)
+      table.data.map(_.data(0).intValue) shouldBe Seq(1, 3)
     }
 
     "&& no overlap returns empty" in {
@@ -393,7 +393,7 @@ class JSONTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       val result = table.data(0).data(0).asInstanceOf[ArrayValue]
-      result.data.map(_.asInstanceOf[NumberValue].value.intValue) shouldBe IndexedSeq(1, 2, 3, 4, 5)
+      result.data.map(_.intValue) shouldBe IndexedSeq(1, 2, 3, 4, 5)
     }
   }
 

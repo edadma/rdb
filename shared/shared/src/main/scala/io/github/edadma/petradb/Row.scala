@@ -25,17 +25,17 @@ case class Row(
   }
 
   // Long extraction
-  def getLong(name: String): Long               = apply(name).asInstanceOf[NumberValue].value.longValue
+  def getLong(name: String): Long               = apply(name).longValue
   def getLongOption(name: String): Option[Long] = {
     val value = apply(name)
-    if (value.isNull) None else Some(value.asInstanceOf[NumberValue].value.longValue)
+    if (value.isNull) None else Some(value.longValue)
   }
 
   // Int extraction
-  def getInt(name: String): Int               = apply(name).asInstanceOf[NumberValue].value.intValue
+  def getInt(name: String): Int               = apply(name).intValue
   def getIntOption(name: String): Option[Int] = {
     val value = apply(name)
-    if (value.isNull) None else Some(value.asInstanceOf[NumberValue].value.intValue)
+    if (value.isNull) None else Some(value.intValue)
   }
 
   // Boolean extraction

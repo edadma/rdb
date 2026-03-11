@@ -18,7 +18,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 10 % 3 FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 1.0
     }
 
@@ -30,7 +30,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT a % b FROM t;
           |""".trim.stripMargin
       )
-      val results = table.data.map(_.data(0).asInstanceOf[NumberValue].value.doubleValue)
+      val results = table.data.map(_.data(0).doubleValue)
       results shouldBe Seq(2.0, 2.0, 0.0)
     }
 
@@ -43,7 +43,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // % has same precedence as * and /, higher than +
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 3.0
     }
   }
@@ -59,7 +59,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 6 & 3 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 2L
+      table.data(0).data(0).longValue shouldBe 2L
     }
   }
 
@@ -72,7 +72,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 6 | 3 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 7L
+      table.data(0).data(0).longValue shouldBe 7L
     }
   }
 
@@ -85,7 +85,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 6 # 3 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 5L
+      table.data(0).data(0).longValue shouldBe 5L
     }
   }
 
@@ -98,7 +98,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT ~1 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe -2L
+      table.data(0).data(0).longValue shouldBe -2L
     }
   }
 
@@ -111,7 +111,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 1 << 4 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 16L
+      table.data(0).data(0).longValue shouldBe 16L
     }
   }
 
@@ -124,7 +124,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT 16 >> 2 FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 4L
+      table.data(0).data(0).longValue shouldBe 4L
     }
   }
 
@@ -138,7 +138,7 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // (2 + 3) & 7 = 5 & 7 = 5
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 5L
+      table.data(0).data(0).longValue shouldBe 5L
     }
   }
 
@@ -151,8 +151,8 @@ class OperatorTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT a & b FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 8L
-      table.data(1).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 3L
+      table.data(0).data(0).longValue shouldBe 8L
+      table.data(1).data(0).longValue shouldBe 3L
     }
   }
 }

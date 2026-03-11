@@ -961,6 +961,7 @@ object SQLParser:
   private case class ColDefault(expr: Expr) extends ColConstraint
   private case class ColReferences(table: Ident, column: Ident, onDel: ReferentialAction, onUpd: ReferentialAction) extends ColConstraint
   private case class ColCheck(expr: Expr) extends ColConstraint
+  private case class ColGenerated(expr: Expr) extends ColConstraint
 
   private def colConstraint[p: P]: P[ColConstraint] =
     P(
@@ -969,6 +970,7 @@ object SQLParser:
       | kw("null").map(_ => ColNull)
       | kw("unique").map(_ => ColUnique)
       | (kw("default") ~ expression).map(ColDefault(_))
+      | (kw("generated") ~ kw("always") ~ kw("as") ~ "(" ~ expression ~ ")" ~ kw("stored")).map(ColGenerated(_))
       | colReferences
       | (kw("check") ~ "(" ~ expression ~ ")").map(ColCheck(_))
     )
@@ -989,6 +991,7 @@ object SQLParser:
       var default: Option[Expr] = None
       var references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)] = None
       var check: Option[Expr] = None
+      var generated: Option[Expr] = None
 
       for c <- constraints do
         c match
@@ -1004,6 +1007,7 @@ object SQLParser:
             unique = true
           case ColDefault(expr) =>
             if default.isDefined then throw SchemaException(name.pos, s"duplicate DEFAULT clause on column '${name.name}'")
+            if generated.isDefined then throw SchemaException(name.pos, s"a generated column cannot have a DEFAULT on column '${name.name}'")
             default = Some(expr)
           case ColReferences(tbl, col, onDel, onUpd) =>
             if references.isDefined then throw SchemaException(name.pos, s"duplicate REFERENCES constraint on column '${name.name}'")
@@ -1011,8 +1015,12 @@ object SQLParser:
           case ColCheck(expr) =>
             if check.isDefined then throw SchemaException(name.pos, s"duplicate CHECK constraint on column '${name.name}'")
             check = Some(expr)
+          case ColGenerated(expr) =>
+            if generated.isDefined then throw SchemaException(name.pos, s"duplicate GENERATED ALWAYS AS clause on column '${name.name}'")
+            if default.isDefined then throw SchemaException(name.pos, s"a generated column cannot have a DEFAULT on column '${name.name}'")
+            generated = Some(expr)
 
-      ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
+      ColumnDesc(name, t, required, unique, default, references, check, primaryKey, generated)
     }
 
   // ── DDL: CREATE/DROP VIEW ────────────────────────────────────────────

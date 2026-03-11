@@ -35,7 +35,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
 
-      val counts = table.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue)
+      val counts = table.data.map(_.data(1).intValue)
       // Engineering=2, Sales=2, Marketing=1, NULL=1 — sorted descending
       table.data.length shouldBe 4
       counts shouldBe counts.sorted.reverse
@@ -49,7 +49,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
 
-      val sums = table.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue)
+      val sums = table.data.map(_.data(1).intValue)
       // Should be in descending order
       sums shouldBe sums.sorted.reverse
     }
@@ -137,7 +137,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
 
-      val counts = table.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue)
+      val counts = table.data.map(_.data(1).intValue)
       counts shouldBe counts.sorted.reverse
     }
   }
@@ -156,7 +156,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
 
       table.data.length shouldBe 2
       // First should be Engineering (155000), second Sales (125000)
-      val totals = table.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue)
+      val totals = table.data.map(_.data(1).intValue)
       totals(0) should be > totals(1)
     }
   }
@@ -295,7 +295,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
 
-      val spreads = table.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue)
+      val spreads = table.data.map(_.data(1).intValue)
       spreads shouldBe spreads.sorted.reverse
     }
   }
@@ -369,7 +369,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // 12=1100, 10=1010, 14=1110 => AND = 1000 = 8
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 8L
+      table.data(0).data(0).longValue shouldBe 8L
     }
   }
 
@@ -383,7 +383,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // 1|2|4 = 7
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 7L
+      table.data(0).data(0).longValue shouldBe 7L
     }
   }
 
@@ -397,7 +397,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // 7^3=4, 4^5=1
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 1L
+      table.data(0).data(0).longValue shouldBe 1L
     }
   }
 
@@ -411,7 +411,7 @@ class AggregateTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // 7 & 3 = 3
-      table.data(0).data(0).asInstanceOf[NumberValue].value.longValue shouldBe 3L
+      table.data(0).data(0).longValue shouldBe 3L
     }
 
     "all-null returns NULL" in {

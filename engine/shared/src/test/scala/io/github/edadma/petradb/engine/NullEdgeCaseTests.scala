@@ -112,7 +112,7 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // AVG of 10,30 = 20 (not 10+30/3=13.3)
-      val avg = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val avg = table.data(0).data(0).doubleValue
       avg shouldBe 20.0
     }
 

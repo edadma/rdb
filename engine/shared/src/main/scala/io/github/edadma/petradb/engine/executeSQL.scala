@@ -422,7 +422,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
 
           val names = new mutable.HashSet[String]
 
-          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references, _, pk) =>
+          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references, _, pk, generated) =>
             if names contains name then throw SchemaException(id.pos, s"duplicate column name: $name")
 
             names += name
@@ -444,6 +444,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               unique,
               fkTuple,
               default.map(expr => eval(rewrite(expr), Nil)),
+              generated.map(expr => (exprToSQL(expr), rewrite(expr))),
             )
           }
 
@@ -459,7 +460,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           }
 
           // Synthesize PrimaryKeySpec from column-level PRIMARY KEY
-          val columnPKCols = columns.collect { case ColumnDesc(Ident(name), _, _, _, _, _, _, true) => name }
+          val columnPKCols = columns.collect { case ColumnDesc(Ident(name), _, _, _, _, _, _, true, _) => name }
           val hasTableLevelPK = constraintSpecs.exists(_.isInstanceOf[PrimaryKeySpec])
           if columnPKCols.nonEmpty && hasTableLevelPK then
             throw SchemaException(id.pos, s"cannot specify both column-level and table-level PRIMARY KEY")
@@ -469,7 +470,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
 
           // Convert column-level CHECK constraints to CheckSpec
           val columnCheckSpecs: Seq[CheckSpec] = columns.collect {
-            case ColumnDesc(_, _, _, _, _, _, Some(expr), _) =>
+            case ColumnDesc(_, _, _, _, _, _, Some(expr), _, _) =>
               CheckSpec(exprToSQL(expr), expr, None)
           }
 
@@ -531,6 +532,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
             if !t.hasColumn(col) then throw UndefinedReferenceException(id.pos, s"table $table doesn't has column '$col'")
+            if t.columns(t.columnMap(col)).generated.isDefined then
+              throw ExecutionException(id.pos, s"column \"$col\" can only be updated to DEFAULT")
 
             col -> rewrite(value)
           } unzip
@@ -542,6 +545,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
         val checkConstraints = t.constraints.collect { case c: CheckSpec => c }
+        val genCols = t.columns.zipWithIndex.collect { case (spec, idx) if spec.generated.isDefined => (idx, spec.name, spec.generated.get._2) }
 
         val rwReturning = returning.map(_.map(rewrite))
 
@@ -556,27 +560,40 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                     sys.error(s"null value in column \"$col\" violates not-null constraint")
                   else if t.columns(t.columnMap(col)).required then
                     sys.error(s"null value in column \"$col\" violates not-null constraint")
+              // Recompute generated columns after applying explicit updates
+              val allUpdates =
+                if genCols.nonEmpty then
+                  val newRowData = targetRow.data.toArray
+                  for (col, value) <- updates do
+                    newRowData(t.columnMap(col)) = value
+                  val tmpRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
+                  val genUpdates = genCols.map { (idx, name, expr) =>
+                    val v = eval(expr, Seq(tmpRow))
+                    name -> t.columns(idx).typ.convert(v)
+                  }
+                  updates ++ genUpdates
+                else updates
               // Enforce CHECK constraints on the updated row
               if checkConstraints.nonEmpty then
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 val checkRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
                 for c <- checkConstraints do
                   if !beval(c.parsedExpr, Seq(checkRow)) then
                     sys.error(s"new row violates check constraint${c.name.map(n => s""" "$n"""").getOrElse("")}")
-              db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(updates))
+              db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(allUpdates))
               if childFKs.nonEmpty then
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 for fk <- childFKs do
                   db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
-              u(updates)
+              u(allUpdates)
               // Evaluate RETURNING against the new row state
               rwReturning.foreach { retExprs =>
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 val newRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
                 val projected = retExprs.map {
