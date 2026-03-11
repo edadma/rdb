@@ -721,8 +721,9 @@ object SQLParser:
           case None | Some("ASC") => true
           case _ => false
         val nullsFirst = nulls match
-          case None | Some("FIRST") => true
-          case _ => false
+          case Some("FIRST") => true
+          case Some("LAST")  => false
+          case None          => !asc // SQL standard: ASC → NULLS LAST, DESC → NULLS FIRST
         OrderBy(e, asc, nullsFirst)
     }
 
