@@ -380,7 +380,7 @@ describe('quarry', () => {
       await db.insert(posts).values({ userId: 2, title: 'Bob Post', body: null }).execute()
     })
 
-    it('inner join', async () => {
+    it('inner join returns matching rows', async () => {
       const rows = await db
         .select(posts)
         .columns(col(users, 'name'), col(posts, 'title'))
@@ -393,7 +393,32 @@ describe('quarry', () => {
       }
     })
 
-    it('left join', async () => {
+    it('inner join excludes non-matching rows', async () => {
+      // Charlie has no posts, so inner join should return nothing for Charlie
+      const rows = await db
+        .select(users)
+        .columns(col(users, 'name'), col(posts, 'title'))
+        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .where(eq(col(users, 'name'), 'Charlie'))
+        .execute()
+      assert.equal(rows.length, 0)
+    })
+
+    it('inner join returns columns from both tables', async () => {
+      const rows = await db
+        .select(users)
+        .columns(col(users, 'name'), col(users, 'email'), col(posts, 'title'), col(posts, 'body'))
+        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .where(eq(col(users, 'name'), 'Bob'))
+        .execute()
+      assert.equal(rows.length, 1)
+      assert.equal(rows[0].name, 'Bob')
+      assert.ok('email' in rows[0])
+      assert.equal(rows[0].title, 'Bob Post')
+      assert.equal(rows[0].body, null) // Bob's post has null body
+    })
+
+    it('left join returns all base rows', async () => {
       const rows = await db
         .select(users)
         .columns(col(users, 'name'), col(posts, 'title'))
@@ -403,6 +428,113 @@ describe('quarry', () => {
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Charlie')
       assert.equal(rows[0].title, null) // no posts for Charlie
+    })
+
+    it('left join returns null for all joined columns when no match', async () => {
+      const rows = await db
+        .select(users)
+        .columns(col(users, 'name'), col(posts, 'title'), col(posts, 'body'), col(posts, 'userId'))
+        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .where(eq(col(users, 'name'), 'Charlie'))
+        .execute()
+      assert.equal(rows.length, 1)
+      assert.equal(rows[0].title, null)
+      assert.equal(rows[0].body, null)
+      assert.equal(rows[0].user_id, null)
+    })
+
+    it('left join returns non-null for matching rows', async () => {
+      const rows = await db
+        .select(users)
+        .columns(col(users, 'name'), col(posts, 'title'))
+        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .where(eq(col(users, 'name'), 'Alice'))
+        .orderBy(asc(col(posts, 'title')))
+        .execute()
+      assert.equal(rows.length, 2)
+      for (const row of rows) {
+        assert.equal(row.name, 'Alice')
+        assert.notEqual(row.title, null)
+      }
+    })
+
+    it('inner join with orderBy', async () => {
+      const rows = await db
+        .select(posts)
+        .columns(col(users, 'name'), col(posts, 'title'))
+        .innerJoin(users, eq(col(posts, 'userId'), col(users, 'id')))
+        .orderBy(asc(col(posts, 'title')))
+        .execute()
+      for (let i = 1; i < rows.length; i++) {
+        assert.ok(rows[i].title >= rows[i - 1].title)
+      }
+    })
+
+    it('inner join with limit', async () => {
+      const rows = await db
+        .select(posts)
+        .columns(col(users, 'name'), col(posts, 'title'))
+        .innerJoin(users, eq(col(posts, 'userId'), col(users, 'id')))
+        .limit(1)
+        .execute()
+      assert.equal(rows.length, 1)
+    })
+
+    it('inner join with aggregate', async () => {
+      const rows = await db
+        .select(users)
+        .columns(col(users, 'name'), alias(count(), 'post_count'))
+        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .groupBy(col(users, 'name'))
+        .orderBy(desc(alias(count(), 'post_count')))
+        .execute()
+      assert.ok(rows.length > 0)
+      // Alice has 2 posts, Bob has 1
+      const alice = rows.find((r) => r.name === 'Alice')
+      assert.equal(alice.post_count, 2)
+      const bob = rows.find((r) => r.name === 'Bob')
+      assert.equal(bob.post_count, 1)
+    })
+
+    it('join AST structure is correct', () => {
+      const ast = db
+        .select(users)
+        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .toAST()
+
+      // Should be nested: leftJoin(innerJoin(table, posts), posts)
+      const from = ast.query.from[0]
+      assert.equal(from.kind, 'joinLeft')
+      assert.equal(from.left.kind, 'joinInner')
+      assert.equal(from.left.left.kind, 'table')
+      assert.equal(from.left.left.name, 'users')
+      assert.equal(from.left.right.kind, 'table')
+      assert.equal(from.left.right.name, 'posts')
+      assert.equal(from.right.kind, 'table')
+      assert.equal(from.right.name, 'posts')
+    })
+
+    it('chaining preserves builder state', async () => {
+      // Build a query step by step, verify each step returns a new builder
+      const base = db.select(users)
+      const joined = base.innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+      const filtered = joined.where(eq(col(users, 'name'), 'Alice'))
+      const limited = filtered.limit(1)
+
+      // Each should produce a valid AST independently
+      const baseAst = base.toAST()
+      assert.equal(baseAst.query.from[0].kind, 'table') // no joins
+
+      const joinedAst = joined.toAST()
+      assert.equal(joinedAst.query.from[0].kind, 'joinInner')
+      assert.equal(joinedAst.query.where, undefined) // no where yet
+
+      const filteredAst = filtered.toAST()
+      assert.ok(filteredAst.query.where) // has where
+
+      const limitedAst = limited.toAST()
+      assert.equal(limitedAst.query.limit, 1)
     })
   })
 
