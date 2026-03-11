@@ -65,6 +65,7 @@ export default defineConfig({
 						{ label: 'Knex.js', slug: 'integrations/knex' },
 						{ label: 'Lucid ORM', slug: 'integrations/lucid' },
 						{ label: 'JDBC', slug: 'integrations/jdbc' },
+						{ label: 'Quarry', slug: 'integrations/quarry' },
 					],
 				},
 				{
