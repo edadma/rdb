@@ -5,40 +5,7 @@ import io.github.edadma.petradb.{Session as _, *}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-class IndexJoinTests extends AnyFreeSpec with Matchers:
-
-  private def setupSession(sql: String): Session =
-    given session: Session = new MemoryDB().connect()
-    executeSQL(sql)
-    session
-
-  private def findProcess[T](proc: Process)(pf: PartialFunction[Process, T]): Option[T] =
-    if pf.isDefinedAt(proc) then Some(pf(proc))
-    else
-      proc match
-        case p: ProjectProcess                    => findProcess(p.input)(pf)
-        case p: SeqScanProcess                    => findProcess(p.input)(pf)
-        case p: SortProcess                       => findProcess(p.input)(pf)
-        case p: AggregateProcess                  => findProcess(p.input)(pf)
-        case p: TakeProcess                       => findProcess(p.input)(pf)
-        case _: DropProcess                       => None
-        case p: DistinctProcess                   => findProcess(p.input)(pf)
-        case p: HavingProcess                     => findProcess(p.input)(pf)
-        case p: AliasProcess                      => findProcess(p.input)(pf)
-        case p: ColumnAliasProcess                => findProcess(p.input)(pf)
-        case p: CrossProcess                      => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: LeftCrossJoinProcess              => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: RightCrossJoinProcess             => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: IndexNestedLoopJoinProcess        => findProcess(p.outer)(pf)
-        case p: LeftIndexNestedLoopJoinProcess    => findProcess(p.outer)(pf)
-        case p: RightIndexNestedLoopJoinProcess   => findProcess(p.outer)(pf)
-        case p: HashJoinProcess                   => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
-        case p: LeftHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
-        case p: RightHashJoinProcess              => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
-        case p: FullHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
-        case p: WindowProcess                     => findProcess(p.input)(pf)
-        case p: FullCrossJoinProcess              => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case _                                    => None
+class IndexJoinTests extends AnyFreeSpec with Matchers with Testing:
 
   val setup: String =
     """
