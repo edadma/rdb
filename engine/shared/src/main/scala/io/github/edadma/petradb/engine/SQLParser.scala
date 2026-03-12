@@ -437,10 +437,28 @@ object SQLParser:
       case (loc, s, repl, start, None) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
     }
 
-  private def windowSpecClause[p: P]: P[(Seq[Expr], Seq[OrderBy])] =
+  private def frameBound[p: P]: P[FrameBound] =
+    P(kw("unbounded") ~ kw("preceding")).map(_ => UnboundedPreceding) |
+    P(kw("unbounded") ~ kw("following")).map(_ => UnboundedFollowing) |
+    P(kw("current") ~ kw("row")).map(_ => CurrentRow) |
+    P(intLit ~ kw("preceding")).map(n => Preceding(n)) |
+    P(intLit ~ kw("following")).map(n => Following(n))
+
+  private def intLit[p: P]: P[Int] = {
+    import NoWhitespace._
+    P(CharIn("0-9").rep(1).!).map(_.toInt)
+  }
+
+  private def frameClause[p: P]: P[FrameSpec] =
+    P(kw("rows") ~ kw("between") ~ frameBound ~ kw("and") ~ frameBound).map {
+      case (start, end) => FrameSpec(start, end)
+    }
+
+  private def windowSpecClause[p: P]: P[(Seq[Expr], Seq[OrderBy], Option[FrameSpec])] =
     P((kw("partition") ~ kw("by") ~ expression.rep(1, sep = ",")).? ~
-      (kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?).map {
-      case (partBy, ordBy) => (partBy.map(_.toSeq).getOrElse(Nil), ordBy.map(_.toSeq).getOrElse(Nil))
+      (kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).? ~
+      frameClause.?).map {
+      case (partBy, ordBy, frame) => (partBy.map(_.toSeq).getOrElse(Nil), ordBy.map(_.toSeq).getOrElse(Nil), frame)
     }
 
   // func(args...) [FILTER (WHERE ...)] [OVER (...)]
@@ -448,8 +466,8 @@ object SQLParser:
     P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")" ~
       (kw("filter") ~ "(" ~ kw("where") ~ expression ~ ")").? ~
       (kw("over") ~ "(" ~ windowSpecClause ~ ")").?).map {
-      case (loc, f, as, filter, Some((partBy, ordBy))) =>
-        pos(loc, WindowExpr(ApplyExpr(f, as, filter), partBy, ordBy))
+      case (loc, f, as, filter, Some((partBy, ordBy, frame))) =>
+        pos(loc, WindowExpr(ApplyExpr(f, as, filter), partBy, ordBy, frame))
       case (loc, f, as, filter, None) =>
         pos(loc, ApplyExpr(f, as, filter))
     }

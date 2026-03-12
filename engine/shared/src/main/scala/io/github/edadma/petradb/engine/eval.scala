@@ -19,7 +19,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case VariableInstanceExpr(v)       => v.value
     case TableConstructorExpr(expr)    => aleval(expr, ctx)
     case AggregateFunctionExpr(_, _, _) => sys.error(s"aggregate function not resolved by rewriter: $expr")
-    case WindowExpr(_, _, _)            => sys.error(s"window function not resolved by rewriter: $expr")
+    case WindowExpr(_, _, _, _)         => sys.error(s"window function not resolved by rewriter: $expr")
     case ScalarFunctionExpr(f, args)        => f.func(args map (e => eval(e, ctx)))
     case ProcessOperator(proc)              => TableValue(proc.iterator(ctx) to ArraySeq, proc.meta)
     case e @ NumberExpr(n: Int)             => NumberValue(IntType, n).setPos(e.pos)

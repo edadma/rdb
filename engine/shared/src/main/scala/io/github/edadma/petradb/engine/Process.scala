@@ -34,7 +34,7 @@ trait Process:
       case CastExpr(e, _)                   => validateColumns(e, m)
       case ScalarFunctionExpr(_, args)       => args.foreach(e => validateColumns(e, m))
       case AggregateFunctionExpr(_, args, filter) => args.foreach(e => validateColumns(e, m)); filter.foreach(f => validateColumns(f, m))
-      case WindowExpr(func, partBy, ordBy) => validateColumns(func, m); partBy.foreach(e => validateColumns(e, m)); ordBy.foreach { case OrderBy(f, _, _) => validateColumns(f, m) }
+      case WindowExpr(func, partBy, ordBy, _) => validateColumns(func, m); partBy.foreach(e => validateColumns(e, m)); ordBy.foreach { case OrderBy(f, _, _) => validateColumns(f, m) }
       case _                                => // literals, subqueries, etc.
 
 type RowIterator = Iterator[Row]
@@ -243,15 +243,40 @@ case class WindowProcess(input: Process, windows: Seq[WindowSpec]) extends Proce
               count += 1
 
           case AggregateWindowKind(aggFactory, args, filter) =>
-            val (instance, _) = aggFactory.instantiate
-            instance.init()
-            for (row, _) <- sorted do
-              val rowCtx = row +: ctx
-              if filter.forall(f => beval(f, rowCtx)) then
-                instance.acc(args.map(a => eval(a, rowCtx)))
-            val result = instance.result
-            for (_, origIdx) <- sorted do
-              winValues(origIdx)(winIdx) = result
+            spec.frame match
+              case Some(FrameSpec(start, end)) =>
+                // Frame-based: compute per-row aggregate over the frame window
+                for i <- sorted.indices do
+                  val frameStart = start match
+                    case UnboundedPreceding => 0
+                    case CurrentRow         => i
+                    case Preceding(n)      => math.max(0, i - n)
+                    case Following(n)      => math.min(sorted.length - 1, i + n)
+                    case UnboundedFollowing => sorted.length - 1
+                  val frameEnd = end match
+                    case UnboundedFollowing => sorted.length - 1
+                    case CurrentRow         => i
+                    case Following(n)      => math.min(sorted.length - 1, i + n)
+                    case Preceding(n)      => math.max(0, i - n)
+                    case UnboundedPreceding => 0
+                  val (inst, _) = aggFactory.instantiate
+                  inst.init()
+                  for j <- frameStart to frameEnd do
+                    val rowCtx = sorted(j)._1 +: ctx
+                    if filter.forall(f => beval(f, rowCtx)) then
+                      inst.acc(args.map(a => eval(a, rowCtx)))
+                  winValues(sorted(i)._2)(winIdx) = inst.result
+              case None =>
+                // No frame: aggregate over entire partition
+                val (instance, _) = aggFactory.instantiate
+                instance.init()
+                for (row, _) <- sorted do
+                  val rowCtx = row +: ctx
+                  if filter.forall(f => beval(f, rowCtx)) then
+                    instance.acc(args.map(a => eval(a, rowCtx)))
+                val result = instance.result
+                for (_, origIdx) <- sorted do
+                  winValues(origIdx)(winIdx) = result
 
     rows.iterator.zipWithIndex.map { case (row, idx) =>
       Row(row.data ++ winValues(idx).toVector, meta, None, None)

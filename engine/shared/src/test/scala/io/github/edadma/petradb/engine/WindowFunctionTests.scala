@@ -708,4 +708,154 @@ class WindowFunctionTests extends AnyFreeSpec with Matchers with Testing {
       }
     }
   }
+
+  "frame specifications" - {
+
+    "running SUM with ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // salary order: 60000, 70000, 75000, 80000, 80000, 90000
+      // running sum:  60000, 130000, 205000, 285000, 365000, 455000
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector(60000, 130000, 205000, 285000, 365000, 455000)
+    }
+
+    "running COUNT with ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  COUNT(*) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      val counts = table.data.map(_.data(2).intValue)
+      counts shouldBe Vector(1, 2, 3, 4, 5, 6)
+    }
+
+    "sliding window SUM with ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // salary order: 60000, 70000, 75000, 80000, 80000, 90000
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector(130000, 205000, 225000, 235000, 250000, 170000)
+    }
+
+    "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // salary order: 60000, 70000, 75000, 80000, 80000, 90000 (total = 455000)
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector(455000, 395000, 325000, 250000, 170000, 90000)
+    }
+
+    "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING is same as whole partition" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector.fill(6)(455000)
+    }
+
+    "frame with PARTITION BY" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, department, salary,
+          |  SUM(salary) OVER (PARTITION BY department ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          |FROM emp ORDER BY department, salary;
+          |""".trim.stripMargin
+      )
+      // Engineering (80000, 80000, 90000): running sums 80000, 160000, 250000
+      // Marketing (75000): 75000
+      // Sales (60000, 70000): 60000, 130000
+      val sums = table.data.map(_.data(3).intValue)
+      sums shouldBe Vector(80000, 160000, 250000, 75000, 60000, 130000)
+    }
+
+    "AVG with frame" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  AVG(salary) OVER (ORDER BY salary ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // salary order: 60000, 70000, 75000, 80000, 80000, 90000
+      val avgs = table.data.map(_.data(2).doubleValue)
+      avgs(0) shouldBe 65000.0 +- 1.0
+      avgs(2) shouldBe 75000.0 +- 1.0
+      avgs(5) shouldBe 85000.0 +- 1.0
+    }
+
+    "ROWS BETWEEN 2 PRECEDING AND CURRENT ROW" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector(60000, 130000, 205000, 225000, 235000, 250000)
+    }
+
+    "frame with FILTER" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) FILTER (WHERE salary > 65000) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // salary order: 60000, 70000, 75000, 80000, 80000, 90000
+      // filtered running sum (skip 60000):
+      //   row 1: 70000
+      //   row 2: 70000+75000 = 145000
+      //   row 5: 70000+75000+80000+80000+90000 = 395000
+      table.data(1).data(2).intValue shouldBe 70000
+      table.data(2).data(2).intValue shouldBe 145000
+      table.data(5).data(2).intValue shouldBe 395000
+    }
+
+    "no frame uses entire partition" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary,
+          |  SUM(salary) OVER (ORDER BY salary)
+          |FROM emp ORDER BY salary;
+          |""".trim.stripMargin
+      )
+      // Without frame, all rows get total of partition (whole table)
+      val sums = table.data.map(_.data(2).intValue)
+      sums shouldBe Vector.fill(6)(455000)
+    }
+  }
 }

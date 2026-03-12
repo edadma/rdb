@@ -81,7 +81,7 @@ class WindowCollector:
 
   def collect(expr: Expr): Expr =
     expr match
-      case w @ WindowExpr(_, partBy, ordBy) =>
+      case w @ WindowExpr(_, partBy, ordBy, frame) =>
         val kind = w.func match
           case ApplyExpr(Ident(name), args, _) =>
             name.toLowerCase match
@@ -107,7 +107,7 @@ class WindowCollector:
         val colName = seen.getOrElseUpdate(key, {
           counter += 1
           val name = s"_win_$counter"
-          specs += WindowSpec(name, kind, partBy, ordBy, w.typ.asInstanceOf[Type])
+          specs += WindowSpec(name, kind, partBy, ordBy, w.typ.asInstanceOf[Type], frame)
           name
         })
         ColumnExpr(None, Ident(colName)) setType w.typ
@@ -161,38 +161,38 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case QuantifiedCompareExpr(value, op, quantifier, expr) =>
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
-    case WindowExpr(ApplyExpr(id @ Ident(func), args, filter), partBy, ordBy) =>
+    case WindowExpr(ApplyExpr(id @ Ident(func), args, filter), partBy, ordBy, frame) =>
       val rwPartBy = partBy.map(rewrite)
       val rwOrdBy = ordBy.map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) }
       func.toLowerCase match
         case "row_number" =>
           if args.nonEmpty then throw ParseException(id.pos, "ROW_NUMBER takes no arguments")
-          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
         case "rank" =>
           if args.nonEmpty then throw ParseException(id.pos, "RANK takes no arguments")
-          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
         case "dense_rank" =>
           if args.nonEmpty then throw ParseException(id.pos, "DENSE_RANK takes no arguments")
-          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
         case "lag" =>
           if args.isEmpty || args.length > 3 then throw ParseException(id.pos, "LAG requires 1 to 3 arguments")
           val rwArgs = args.map(rewrite)
-          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy) setType rwArgs.head.typ
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
         case "lead" =>
           if args.isEmpty || args.length > 3 then throw ParseException(id.pos, "LEAD requires 1 to 3 arguments")
           val rwArgs = args.map(rewrite)
-          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy) setType rwArgs.head.typ
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
         case "ntile" =>
           if args.length != 1 then throw ParseException(id.pos, "NTILE requires exactly 1 argument")
           val rwArgs = args.map(rewrite)
-          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy) setType NumberType
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType NumberType
         case _ =>
           aggregateFunction get func.toLowerCase match
             case Some(f) =>
               val (instance, typ) = f.instantiate
               val rwArgs = args.map(rewrite)
               val rwFilter = filter.map(rewrite)
-              WindowExpr(AggregateFunctionExpr(instance, rwArgs, rwFilter), rwPartBy, rwOrdBy) setType typ
+              WindowExpr(AggregateFunctionExpr(instance, rwArgs, rwFilter), rwPartBy, rwOrdBy, frame) setType typ
             case None =>
               scalarFunction get func.toLowerCase match
                 case Some(_) => throw ParseException(id.pos, s"scalar function '$func' cannot be used as a window function")

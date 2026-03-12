@@ -36,7 +36,16 @@ case class LeadKind(expr: Expr, offset: Int, default: Option[Expr]) extends Wind
 case class NtileKind(buckets: Int) extends WindowFunctionKind
 case class AggregateWindowKind(func: AggregateFunction, args: Seq[Expr], filter: Option[Expr]) extends WindowFunctionKind
 
-case class WindowSpec(name: String, kind: WindowFunctionKind, partitionBy: Seq[Expr], orderBy: Seq[OrderBy], typ: Type)
+sealed trait FrameBound
+case object UnboundedPreceding extends FrameBound
+case object UnboundedFollowing extends FrameBound
+case object CurrentRow extends FrameBound
+case class Preceding(n: Int) extends FrameBound
+case class Following(n: Int) extends FrameBound
+
+case class FrameSpec(start: FrameBound, end: FrameBound)
+
+case class WindowSpec(name: String, kind: WindowFunctionKind, partitionBy: Seq[Expr], orderBy: Seq[OrderBy], typ: Type, frame: Option[FrameSpec] = None)
 case class WindowOperator(rel: Expr, windows: Seq[WindowSpec]) extends Operator
 
 case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator
