@@ -4,6 +4,73 @@ title: Changelog
 
 ## v1.3-20260311
 
+### Window functions
+
+Full window function support with three categories:
+
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
+
+```sql
+SELECT name, department, salary,
+  RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS dept_rank
+FROM employees;
+```
+
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
+
+```sql
+SELECT name, salary,
+  LAG(salary, 1, 0) OVER (ORDER BY salary) AS prev_salary,
+  NTILE(4) OVER (ORDER BY salary) AS quartile
+FROM employees;
+```
+
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
+
+```sql
+SELECT name, salary,
+  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total,
+  AVG(salary) OVER (PARTITION BY department) AS dept_avg
+FROM employees;
+```
+
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
+
+### Aggregate FILTER clause
+
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'active') AS active_count,
+  SUM(amount) FILTER (WHERE amount > 100) OVER (ORDER BY created_at
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_high_value
+FROM orders;
+```
+
+### Hash join optimization
+
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
+
+### Generated columns
+
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
+
+```sql
+CREATE TABLE products (
+  price NUMERIC,
+  tax_rate NUMERIC DEFAULT 0.08,
+  total NUMERIC GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+);
+```
+
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
+
+### ORDER BY null ordering
+
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
+
 ### Sequence support
 
 Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.

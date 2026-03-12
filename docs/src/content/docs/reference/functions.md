@@ -193,4 +193,37 @@ SELECT lastval();              -- 201
 | `stddev(expr)` / `stddev_samp(expr)` | Sample standard deviation |
 | `stddev_pop(expr)` | Population standard deviation |
 
+All aggregate functions support the `FILTER (WHERE ...)` clause to restrict which rows are included:
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE active) AS active_count
+FROM users;
+```
+
 See also: [JSON aggregate functions](/reference/json/#aggregate-functions)
+
+## Window Functions
+
+Window functions compute a value for each row based on a group of related rows, without collapsing them.
+
+### Ranking functions
+
+| Function | Description |
+|----------|-------------|
+| `ROW_NUMBER()` | Sequential row number within partition |
+| `RANK()` | Rank with gaps for ties |
+| `DENSE_RANK()` | Rank without gaps for ties |
+
+### Value functions
+
+| Function | Description |
+|----------|-------------|
+| `LAG(expr [, offset [, default]])` | Value from a preceding row (default offset: 1) |
+| `LEAD(expr [, offset [, default]])` | Value from a following row (default offset: 1) |
+| `NTILE(n)` | Divide rows into n roughly equal groups |
+
+### Aggregate window functions
+
+Any aggregate function can be used as a window function with `OVER()`. See [Queries — Window Functions](/reference/queries/#window-functions) for syntax and frame specifications.

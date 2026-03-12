@@ -78,6 +78,24 @@ CREATE TABLE line_items (
 );
 ```
 
+### Generated Columns
+
+Computed columns that are automatically derived from other columns:
+
+```sql
+CREATE TABLE products (
+  price NUMERIC,
+  tax_rate NUMERIC DEFAULT 0.08,
+  total NUMERIC GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+);
+
+INSERT INTO products (price) VALUES (100);
+SELECT * FROM products;
+-- price: 100, tax_rate: 0.08, total: 108
+```
+
+Generated columns are recomputed on INSERT and UPDATE. They cannot be written to directly.
+
 ### ALTER TABLE
 
 ```sql
