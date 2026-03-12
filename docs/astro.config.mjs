@@ -62,6 +62,7 @@ export default defineConfig({
 					label: 'Integrations',
 					items: [
 						{ label: 'Drizzle ORM', slug: 'integrations/drizzle' },
+						{ label: 'GraphQL', slug: 'integrations/graphql' },
 						{ label: 'Knex.js', slug: 'integrations/knex' },
 						{ label: 'Lucid ORM', slug: 'integrations/lucid' },
 						{ label: 'JDBC', slug: 'integrations/jdbc' },
