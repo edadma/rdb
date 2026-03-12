@@ -933,6 +933,7 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
     case CaseExpr(whens, els) =>
       CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w, params), deepCopyExpr(e, params)) }, els.map(deepCopyExpr(_, params)))
     case ApplyExpr(func, args, filter)     => ApplyExpr(func, args.map(deepCopyExpr(_, params)), filter.map(deepCopyExpr(_, params)))
+    case WindowExpr(func, partBy, ordBy) => WindowExpr(deepCopyExpr(func, params), partBy.map(deepCopyExpr(_, params)), ordBy.map { case OrderBy(f, d, n) => OrderBy(deepCopyExpr(f, params), d, n) })
     case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v, params), op, es.map(deepCopyExpr(_, params)))
     case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v, params), op, deepCopyExpr(q, params))
     case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q, params))

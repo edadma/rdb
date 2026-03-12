@@ -27,6 +27,15 @@ case class DistinctOperator(rel: Expr) extends Operator
 case class AggregateSpec(name: String, func: AggregateFunctionInstance, args: Seq[Expr], typ: Type, filter: Option[Expr] = None)
 case class AggregateOperator(rel: Expr, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Operator
 
+sealed trait WindowFunctionKind
+case object RowNumberKind extends WindowFunctionKind
+case object RankKind extends WindowFunctionKind
+case object DenseRankKind extends WindowFunctionKind
+case class AggregateWindowKind(func: AggregateFunction, args: Seq[Expr], filter: Option[Expr]) extends WindowFunctionKind
+
+case class WindowSpec(name: String, kind: WindowFunctionKind, partitionBy: Seq[Expr], orderBy: Seq[OrderBy], typ: Type)
+case class WindowOperator(rel: Expr, windows: Seq[WindowSpec]) extends Operator
+
 case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator
 case class IntersectOperator(rel1: Expr, rel2: Expr) extends Operator
 case class ExceptOperator(rel1: Expr, rel2: Expr) extends Operator

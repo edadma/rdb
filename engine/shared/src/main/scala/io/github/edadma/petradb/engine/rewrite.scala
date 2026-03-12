@@ -35,6 +35,7 @@ class AggregateCollector:
           whens.map { case When(w, e) => When(collect(w), collect(e)) },
           els.map(collect),
         )
+      case _: WindowExpr => expr // window expressions handle their own aggregation
       case _ => expr
 
   def result: Seq[AggregateSpec] = specs.toSeq
@@ -44,6 +45,7 @@ class AggregateCollector:
 def aggregate(expr: Expr): Boolean =
   expr match
     case _: AggregateFunctionExpr    => true
+    case _: WindowExpr               => false // window functions are not aggregates
     case AliasExpr(expr, _)          => aggregate(expr)
     case CastExpr(expr, _)           => aggregate(expr)
     case ScalarFunctionExpr(_, args) => args exists aggregate
@@ -53,6 +55,65 @@ def aggregate(expr: Expr): Boolean =
       whens.exists { case When(w, e) => aggregate(w) || aggregate(e) } ||
         els.exists(aggregate)
     case _                           => false
+
+def window(expr: Expr): Boolean =
+  expr match
+    case _: WindowExpr               => true
+    case AliasExpr(expr, _)          => window(expr)
+    case CastExpr(expr, _)           => window(expr)
+    case UnaryExpr(_, expr)          => window(expr)
+    case BinaryExpr(left, _, right)  => window(left) || window(right)
+    case ScalarFunctionExpr(_, args) => args.exists(window)
+    case CaseExpr(whens, els) =>
+      whens.exists { case When(w, e) => window(w) || window(e) } ||
+        els.exists(window)
+    case _                           => false
+
+private val windowOnlyFunctions = Set("row_number", "rank", "dense_rank")
+
+class WindowCollector:
+  private val specs = mutable.ArrayBuffer[WindowSpec]()
+  private val seen = mutable.Map[String, String]()
+  private var counter = 0
+
+  private def canonicalKey(kind: WindowFunctionKind, partBy: Seq[Expr], ordBy: Seq[OrderBy]): String =
+    s"$kind OVER (${partBy.mkString(", ")}; ${ordBy.mkString(", ")})"
+
+  def collect(expr: Expr): Expr =
+    expr match
+      case w @ WindowExpr(_, partBy, ordBy) =>
+        val kind = w.func match
+          case ApplyExpr(Ident(name), _, _) =>
+            name.toLowerCase match
+              case "row_number"  => RowNumberKind
+              case "rank"        => RankKind
+              case "dense_rank"  => DenseRankKind
+              case _ => sys.error(s"unresolved window function: $name")
+          case AggregateFunctionExpr(f, args, filter) =>
+            AggregateWindowKind(aggregateFunction(f.name), args, filter)
+          case other => sys.error(s"unexpected window function expression: $other")
+        val key = canonicalKey(kind, partBy, ordBy)
+        val colName = seen.getOrElseUpdate(key, {
+          counter += 1
+          val name = s"_win_$counter"
+          specs += WindowSpec(name, kind, partBy, ordBy, w.typ.asInstanceOf[Type])
+          name
+        })
+        ColumnExpr(None, Ident(colName)) setType w.typ
+      case AliasExpr(inner, alias)       => AliasExpr(collect(inner), alias)
+      case CastExpr(inner, t)            => CastExpr(collect(inner), t) setType expr.typ
+      case UnaryExpr(op, inner)          => UnaryExpr(op, collect(inner)) setType expr.typ
+      case BinaryExpr(l, op, r)          => BinaryExpr(collect(l), op, collect(r)) setType expr.typ
+      case ScalarFunctionExpr(f, args)   => ScalarFunctionExpr(f, args.map(collect))
+      case CaseExpr(whens, els) =>
+        CaseExpr(
+          whens.map { case When(w, e) => When(collect(w), collect(e)) },
+          els.map(collect),
+        )
+      case _ => expr
+
+  def result: Seq[WindowSpec] = specs.toSeq
+  def hasWindows: Boolean = specs.nonEmpty
 
 def resolveAliases(expr: Expr, aliases: Map[String, Expr]): Expr =
   expr match
@@ -89,6 +150,30 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case QuantifiedCompareExpr(value, op, quantifier, expr) =>
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
+    case WindowExpr(ApplyExpr(id @ Ident(func), args, filter), partBy, ordBy) =>
+      val rwPartBy = partBy.map(rewrite)
+      val rwOrdBy = ordBy.map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) }
+      func.toLowerCase match
+        case "row_number" =>
+          if args.nonEmpty then throw ParseException(id.pos, "ROW_NUMBER takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+        case "rank" =>
+          if args.nonEmpty then throw ParseException(id.pos, "RANK takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+        case "dense_rank" =>
+          if args.nonEmpty then throw ParseException(id.pos, "DENSE_RANK takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy) setType NumberType
+        case _ =>
+          aggregateFunction get func.toLowerCase match
+            case Some(f) =>
+              val (instance, typ) = f.instantiate
+              val rwArgs = args.map(rewrite)
+              val rwFilter = filter.map(rewrite)
+              WindowExpr(AggregateFunctionExpr(instance, rwArgs, rwFilter), rwPartBy, rwOrdBy) setType typ
+            case None =>
+              scalarFunction get func.toLowerCase match
+                case Some(_) => throw ParseException(id.pos, s"scalar function '$func' cannot be used as a window function")
+                case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
     case ApplyExpr(id @ Ident(func), args, filter) =>
       func.toLowerCase match
         case "generate_series" =>
@@ -310,40 +395,72 @@ def rewrite(expr: Expr)(using session: Session): Expr =
 
           val groupByExprs = groupBy.map(_.map(rewrite)).getOrElse(Nil)
 
-          // Build: source → AggregateOperator → HAVING → ORDER BY → PROJECT
+          // Build: source → AggregateOperator → HAVING → [WINDOW] → ORDER BY → PROJECT
           val r2 = AggregateOperator(r1, groupByExprs, collector.result)
           val r3 =
             collectedHaving match
               case Some(cond) => HavingOperator(r2, cond)
               case None       => r2
+
+          // Window function collection on post-aggregate expressions
+          val winCollector = new WindowCollector
+          val winCollectedExprs = collectedExprs.map(winCollector.collect)
+          val winCollectedOrderBy = collectedOrderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(winCollector.collect(f), d, n) })
+          val r3w = if winCollector.hasWindows then WindowOperator(r3, winCollector.result) else r3
+
           val r4 =
-            collectedOrderBy match
-              case Some(os) => SortOperator(r3, os)
-              case None     => r3
+            winCollectedOrderBy match
+              case Some(os) => SortOperator(r3w, os)
+              case None     => r3w
           exprs match
             case Seq(StarExpr()) => r4
-            case _               => ProjectOperator(r4, collectedExprs)
+            case _               => ProjectOperator(r4, winCollectedExprs)
         else
-          // Non-grouped path: ORDER BY → PROJECT
-          val r2 =
-            orderBy match
-              case None     => r1
-              case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
+          // Non-grouped path: [WINDOW] → ORDER BY → PROJECT
+          val hasWindows = rewrittenExprs.exists(window)
+
+          if hasWindows then
+            val winCollector = new WindowCollector
+            val winCollectedExprs = rewrittenExprs.map(winCollector.collect)
+            val winCollectedOrderBy = orderBy.map { os =>
+              os.map { case OrderBy(f, d, n) =>
                 val resolved = f match
                   case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
                     rewrittenExprs(idx - 1) match
                       case AliasExpr(inner, _) => inner
                       case other               => other
                   case _ => rewrite(f)
-                OrderBy(resolved, d, n)
-              })
-          val r3 =
+                OrderBy(winCollector.collect(resolved), d, n)
+              }
+            }
+            val r1w = WindowOperator(r1, winCollector.result)
+            val r2 =
+              winCollectedOrderBy match
+                case None     => r1w
+                case Some(os) => SortOperator(r1w, os)
             exprs match
               case Seq(StarExpr()) => r2
-              case _               => ProjectOperator(r2, rewrittenExprs)
-          having match
-            case Some(cond) => HavingOperator(r3, rewrite(cond))
-            case None       => r3
+              case _               => ProjectOperator(r2, winCollectedExprs)
+          else
+            val r2 =
+              orderBy match
+                case None     => r1
+                case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
+                  val resolved = f match
+                    case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
+                      rewrittenExprs(idx - 1) match
+                        case AliasExpr(inner, _) => inner
+                        case other               => other
+                    case _ => rewrite(f)
+                  OrderBy(resolved, d, n)
+                })
+            val r3 =
+              exprs match
+                case Seq(StarExpr()) => r2
+                case _               => ProjectOperator(r2, rewrittenExprs)
+            having match
+              case Some(cond) => HavingOperator(r3, rewrite(cond))
+              case None       => r3
 
       val r_distinct = if distinct then DistinctOperator(r_ordered) else r_ordered
       val r5 =
@@ -401,6 +518,8 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
     case AggregateOperator(rel, groupBy, aggregates) =>
       ProcessOperator(AggregateProcess(procRewrite(rel), groupBy, aggregates))
+    case WindowOperator(rel, windows) =>
+      ProcessOperator(WindowProcess(procRewrite(rel), windows))
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))

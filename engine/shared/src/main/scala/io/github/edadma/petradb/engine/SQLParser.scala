@@ -437,10 +437,21 @@ object SQLParser:
       case (loc, s, repl, start, None) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
     }
 
-  // func(args...) FILTER (WHERE ...) — identifier ~ "(" ~ args ~ ")" ~ filter? => (Int, Ident, Seq[Expr], Option[Expr])
+  private def windowSpecClause[p: P]: P[(Seq[Expr], Seq[OrderBy])] =
+    P((kw("partition") ~ kw("by") ~ expression.rep(1, sep = ",")).? ~
+      (kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).?).map {
+      case (partBy, ordBy) => (partBy.map(_.toSeq).getOrElse(Nil), ordBy.map(_.toSeq).getOrElse(Nil))
+    }
+
+  // func(args...) [FILTER (WHERE ...)] [OVER (...)]
   private def application[p: P]: P[Expr] =
-    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")" ~ (kw("filter") ~ "(" ~ kw("where") ~ expression ~ ")").?).map {
-      case (loc, f, as, filter) => pos(loc, ApplyExpr(f, as, filter))
+    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")" ~
+      (kw("filter") ~ "(" ~ kw("where") ~ expression ~ ")").? ~
+      (kw("over") ~ "(" ~ windowSpecClause ~ ")").?).map {
+      case (loc, f, as, filter, Some((partBy, ordBy))) =>
+        pos(loc, WindowExpr(ApplyExpr(f, as, filter), partBy, ordBy))
+      case (loc, f, as, filter, None) =>
+        pos(loc, ApplyExpr(f, as, filter))
     }
 
   // table.column or just column — identifier ~ ("." ~ identifier).? => (Int, Ident, Option[Ident])

@@ -34,6 +34,7 @@ trait Process:
       case CastExpr(e, _)                   => validateColumns(e, m)
       case ScalarFunctionExpr(_, args)       => args.foreach(e => validateColumns(e, m))
       case AggregateFunctionExpr(_, args, filter) => args.foreach(e => validateColumns(e, m)); filter.foreach(f => validateColumns(f, m))
+      case WindowExpr(func, partBy, ordBy) => validateColumns(func, m); partBy.foreach(e => validateColumns(e, m)); ordBy.foreach { case OrderBy(f, _, _) => validateColumns(f, m) }
       case _                                => // literals, subqueries, etc.
 
 type RowIterator = Iterator[Row]
@@ -133,6 +134,96 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
         val aggValues = aggregates.map(_.func.result).toVector
         Row(group.last.data ++ aggValues, meta, None, None)
       }
+
+case class WindowProcess(input: Process, windows: Seq[WindowSpec]) extends Process:
+  val meta: Metadata =
+    val winColumns = windows.map(spec => ColumnMetadata(None, spec.name, spec.typ))
+    Metadata(input.meta.columns ++ winColumns)
+
+  private final class SeqOrdering(ords: Seq[Ordering[Value]]) extends Ordering[Seq[Value]]:
+    def compare(xs: Seq[Value], ys: Seq[Value]): Int =
+      val x   = xs.iterator
+      val y   = ys.iterator
+      val ord = ords.iterator
+      while (x.hasNext && y.hasNext && ord.hasNext)
+        val res = ord.next().compare(x.next(), y.next())
+        if (res != 0) return res
+      0
+
+  private def sameOrderByValues(a: Row, b: Row, orderBy: Seq[OrderBy], ctx: Seq[Row]): Boolean =
+    orderBy.forall { ob =>
+      val va = eval(ob.f, a +: ctx)
+      val vb = eval(ob.f, b +: ctx)
+      (va.isNull && vb.isNull) || (!va.isNull && !vb.isNull && va.compare(vb) == 0)
+    }
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rows = input.iterator(ctx).toVector
+    if rows.isEmpty then return Iterator.empty
+
+    val rowCount = rows.length
+    val winValues = Array.ofDim[Value](rowCount, windows.length)
+
+    for (spec, winIdx) <- windows.zipWithIndex do
+      // Partition rows, preserving original indices
+      val partitioned: Map[Seq[Value], Vector[(Row, Int)]] =
+        if spec.partitionBy.isEmpty then
+          Map(Nil -> rows.zipWithIndex)
+        else
+          rows.zipWithIndex.groupBy { case (row, _) =>
+            spec.partitionBy.map(e => eval(e, row +: ctx))
+          }
+
+      for (_, partition) <- partitioned do
+        // Sort within partition
+        val sorted =
+          if spec.orderBy.isEmpty then partition
+          else
+            val orderings = spec.orderBy.map { case OrderBy(_, asc, nullsFirst) =>
+              (asc, nullsFirst) match
+                case (false, false) => Nulls.first.reverse
+                case (false, true)  => Nulls.last.reverse
+                case (true, false)  => Nulls.last
+                case (true, true)   => Nulls.first
+            }
+            val ordering = new SeqOrdering(orderings)
+            partition.sortBy { case (row, _) =>
+              spec.orderBy.map(ob => eval(ob.f, row +: ctx))
+            }(using ordering)
+
+        spec.kind match
+          case RowNumberKind =>
+            for ((_, origIdx), rank) <- sorted.zipWithIndex do
+              winValues(origIdx)(winIdx) = NumberValue(rank + 1)
+
+          case RankKind =>
+            var rank = 1
+            for i <- sorted.indices do
+              if i > 0 && !sameOrderByValues(sorted(i)._1, sorted(i - 1)._1, spec.orderBy, ctx) then
+                rank = i + 1
+              winValues(sorted(i)._2)(winIdx) = NumberValue(rank)
+
+          case DenseRankKind =>
+            var rank = 1
+            for i <- sorted.indices do
+              if i > 0 && !sameOrderByValues(sorted(i)._1, sorted(i - 1)._1, spec.orderBy, ctx) then
+                rank += 1
+              winValues(sorted(i)._2)(winIdx) = NumberValue(rank)
+
+          case AggregateWindowKind(aggFactory, args, filter) =>
+            val (instance, _) = aggFactory.instantiate
+            instance.init()
+            for (row, _) <- sorted do
+              val rowCtx = row +: ctx
+              if filter.forall(f => beval(f, rowCtx)) then
+                instance.acc(args.map(a => eval(a, rowCtx)))
+            val result = instance.result
+            for (_, origIdx) <- sorted do
+              winValues(origIdx)(winIdx) = result
+
+    rows.iterator.zipWithIndex.map { case (row, idx) =>
+      Row(row.data ++ winValues(idx).toVector, meta, None, None)
+    }
 
 case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Process:
   private val metaCtx = Seq(input.meta)
