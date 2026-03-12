@@ -61,3 +61,6 @@ docs/package.json
 
 # Large generated lock/config files in nested npm packages
 knex/npm/package-lock.json
+
+# Accidentally included reference documents
+*.html
