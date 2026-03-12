@@ -561,6 +561,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = false)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "INNER").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(SeqScanProcess(CrossProcess(proc1, proc2), rwOn)))
     case LeftJoinOperator(rel1, rel2, on) =>
       val proc1 = procRewrite(rel1)
@@ -568,6 +569,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = true, isRight = false)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "LEFT").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(LeftCrossJoinProcess(proc1, proc2, rwOn)))
     case RightJoinOperator(rel1, rel2, on) =>
       val proc1 = procRewrite(rel1)
@@ -575,9 +577,15 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = true)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "RIGHT").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(RightCrossJoinProcess(proc1, proc2, rwOn)))
     case FullJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(FullCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+      val proc1 = procRewrite(rel1)
+      val proc2 = procRewrite(rel2)
+      val rwOn = rewrite(on)
+      tryHashJoin(proc1, proc2, rwOn, "FULL")
+        .map(ProcessOperator(_))
+        .getOrElse(ProcessOperator(FullCrossJoinProcess(proc1, proc2, rwOn)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
     case ColumnAliasOperator(rel, Ident(alias), columns) =>
       ProcessOperator(ColumnAliasProcess(procRewrite(rel), alias, columns.map(_.name)))
@@ -767,6 +775,62 @@ private def columnOfMeta(meta: Metadata, expr: Expr): Option[String] =
     case ColumnExpr(None, Ident(name))           => if meta.columnMap.contains(name) then Some(name) else None
     case ColumnExpr(Some(Ident(t)), Ident(name)) => if meta.columnMap.contains(s"$t.$name") then Some(name) else None
     case _                                       => None
+
+private def columnIndexOfMeta(meta: Metadata, expr: Expr): Option[Int] =
+  expr match
+    case ColumnExpr(None, Ident(name))           => meta.columnMap.get(name).map(_._1)
+    case ColumnExpr(Some(Ident(t)), Ident(name)) => meta.columnMap.get(s"$t.$name").map(_._1)
+    case _                                       => None
+
+private def tryHashJoin(
+    left: Process,
+    right: Process,
+    cond: Expr,
+    joinType: String,
+)(using Session): Option[Process] =
+  val conjuncts = flattenAnd(cond)
+  val leftMeta = left.meta
+  val rightMeta = right.meta
+
+  case class EquiPair(leftIdx: Int, rightIdx: Int, conjIdx: Int)
+
+  val equiPairs = mutable.ArrayBuffer[EquiPair]()
+  val otherIndices = mutable.Set[Int]()
+
+  conjuncts.zipWithIndex.foreach { case (conj, idx) =>
+    conj match
+      case BinaryExpr(l, "=", r) =>
+        val pair = for
+          li <- columnIndexOfMeta(leftMeta, l)
+          ri <- columnIndexOfMeta(rightMeta, r)
+        yield EquiPair(li, ri, idx)
+
+        pair.orElse {
+          for
+            ri <- columnIndexOfMeta(rightMeta, l)
+            li <- columnIndexOfMeta(leftMeta, r)
+          yield EquiPair(li, ri, idx)
+        } match
+          case Some(ep) => equiPairs += ep
+          case None     => otherIndices += idx
+      case _ =>
+        otherIndices += idx
+  }
+
+  if equiPairs.isEmpty then return None
+
+  val buildKeys = equiPairs.map(_.leftIdx).toSeq
+  val probeKeys = equiPairs.map(_.rightIdx).toSeq
+  val residualConj = conjuncts.zipWithIndex.collect { case (c, i) if otherIndices.contains(i) => c }
+  val residual = residualConj.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+
+  val proc = joinType match
+    case "INNER" => HashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "LEFT"  => LeftHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "RIGHT" => RightHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "FULL"  => FullHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+
+  Some(proc)
 
 private def tryIndexJoin(
     left: Process,

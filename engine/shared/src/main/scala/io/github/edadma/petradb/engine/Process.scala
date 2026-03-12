@@ -528,6 +528,107 @@ case class FullCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
 
     leftResults ++ rightUnmatched
 
+case class HashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- buildRows do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { buildRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }
+    }
+
+case class LeftHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val probeRows = probe.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- probeRows do
+      val key = probeKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    build.iterator(ctx).flatMap { buildRow =>
+      val key = buildKeys.map(buildRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { probeRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(buildRow.data ++ Vector.fill(probe.meta.width)(NULL), meta, None, None))
+      else matches.iterator
+    }
+
+case class RightHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- buildRows do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { buildRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(Vector.fill(build.meta.width)(NULL) ++ probeRow.data, meta, None, None))
+      else matches.iterator
+    }
+
+case class FullHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[(Row, Int)]]()
+    for (row, idx) <- buildRows.zipWithIndex do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += ((row, idx))
+    val buildMatched = mutable.BitSet()
+
+    val probeResults = probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { case (buildRow, buildIdx) =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) =>
+            if beval(cond, combined +: ctx) then
+              buildMatched += buildIdx
+              Iterator(combined)
+            else Iterator.empty
+          case None =>
+            buildMatched += buildIdx
+            Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(Vector.fill(build.meta.width)(NULL) ++ probeRow.data, meta, None, None))
+      else matches.iterator
+    }.to(ArraySeq)
+
+    val buildUnmatched = buildRows.zipWithIndex.iterator.flatMap { case (buildRow, idx) =>
+      if buildMatched.contains(idx) then Iterator.empty
+      else Iterator(Row(buildRow.data ++ Vector.fill(probe.meta.width)(NULL), meta, None, None))
+    }
+
+    probeResults.iterator ++ buildUnmatched
+
 case class IndexNestedLoopJoinProcess(
     outer: Process,
     table: Table,

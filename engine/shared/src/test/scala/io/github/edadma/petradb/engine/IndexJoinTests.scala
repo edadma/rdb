@@ -32,6 +32,10 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
         case p: IndexNestedLoopJoinProcess        => findProcess(p.outer)(pf)
         case p: LeftIndexNestedLoopJoinProcess    => findProcess(p.outer)(pf)
         case p: RightIndexNestedLoopJoinProcess   => findProcess(p.outer)(pf)
+        case p: HashJoinProcess                   => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
+        case p: LeftHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
+        case p: RightHashJoinProcess              => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
+        case p: FullHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
         case _                                    => None
 
   val setup: String =
@@ -118,7 +122,7 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
       salesRow.data(0).isNull shouldBe true
     }
 
-    "falls back to cross product without index" in {
+    "falls back to hash join without index" in {
       given session: Session = setupSession(
         """
           |CREATE TABLE t1 (a INT, b TEXT);
@@ -129,7 +133,7 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
       val proc = procRewrite(SQLParser.parseQuery(
         "SELECT * FROM t1 JOIN t2 ON t1.a = t2.x"))
       findProcess(proc) { case _: IndexNestedLoopJoinProcess => true } shouldBe None
-      findProcess(proc) { case _: CrossProcess => true } shouldBe defined
+      findProcess(proc) { case _: HashJoinProcess => true } shouldBe defined
     }
 
     "INNER JOIN swaps sides when left is indexed" in {
