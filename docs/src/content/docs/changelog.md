@@ -119,24 +119,26 @@ CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
 ### Bug fixes
 
 - `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- `ORDER BY` alias resolution: SELECT aliases (e.g. `SELECT x AS y ... ORDER BY y`) now resolve correctly in non-grouped queries, both with and without window functions
+- `Type.convert()` null handling: NULL values passed through type conversion (e.g. via prepared statement parameters in UPDATE SET) are now preserved as NULL instead of being converted to the type's text representation. Fixed in 13 types: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
 - Exhaustive match warning in ORDER BY parser for nulls clause
 - Silent errors in playground terminal for synchronous throws
 
 ### Version bumps
 
-All components bumped to 1.4.0:
+All components bumped to 1.4.1:
 
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
-| shared | 1.4.0 | — |
-| engine | 1.4.0 | @petradb/engine 1.4.0 |
-| client | 1.4.0 | @petradb/client 1.4.0 |
-| server | 1.4.0 | @petradb/server 1.4.0 |
-| cli | 1.4.0 | @petradb/cli 1.4.0 |
-| jdbc | 1.4.0 | — |
+| shared | 1.4.1 | — |
+| engine | 1.4.1 | @petradb/engine 1.4.1 |
+| client | 1.4.1 | @petradb/client 1.4.1 |
+| server | 1.4.1 | @petradb/server 1.4.1 |
+| cli | 1.4.1 | @petradb/cli 1.4.1 |
+| jdbc | 1.4.1 | — |
 | knex | — | @petradb/knex 1.4.0 |
 | lucid | — | @petradb/lucid 1.4.0 |
-| drizzle | — | @petradb/drizzle 1.4.0 |
+| drizzle | — | @petradb/drizzle 1.4.1 |
 
 ## v1.3-20260309
 
