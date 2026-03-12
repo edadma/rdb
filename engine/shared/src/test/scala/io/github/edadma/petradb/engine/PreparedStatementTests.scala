@@ -241,6 +241,78 @@ class PreparedStatementTests extends AnyFreeSpec with Matchers:
     }
   }
 
+  "NULL parameter values" - {
+    "INSERT with NULL parameter" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE tn (id INTEGER, note TEXT)")
+
+      val ps = session.prepare("INSERT INTO tn (id, note) VALUES ($1, $2)")
+      ps.execute(NumberValue(1), NullValue())
+
+      val table = executeSQL("SELECT * FROM tn WHERE id = 1").collect { case QueryResult(t) => t }.last
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe NullValue()
+    }
+
+    "SELECT with NULL parameter in WHERE (IS NOT DISTINCT FROM)" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL(
+        """
+          |CREATE TABLE tn (id INTEGER, note TEXT);
+          |INSERT INTO tn (id, note) VALUES (1, 'hello');
+          |INSERT INTO tn (id, note) VALUES (2, NULL);
+          |""".trim.stripMargin
+      )
+
+      // NULL = NULL is false in SQL, so WHERE note = $1 with NULL param should return 0 rows
+      val ps = session.prepare("SELECT * FROM tn WHERE note = $1")
+      val table = ps.execute(NullValue()).collect { case QueryResult(t) => t }.last
+      table.data.length shouldBe 0
+    }
+
+    "UPDATE SET column to NULL via parameter" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL(
+        """
+          |CREATE TABLE tn (id INTEGER, note TEXT);
+          |INSERT INTO tn (id, note) VALUES (1, 'hello');
+          |""".trim.stripMargin
+      )
+
+      val ps = session.prepare("UPDATE tn SET note = $1 WHERE id = $2")
+      ps.execute(NullValue(), NumberValue(1))
+
+      val table = executeSQL("SELECT * FROM tn WHERE id = 1").collect { case QueryResult(t) => t }.last
+      table.data(0).data(1) shouldBe NullValue()
+    }
+
+    "INSERT RETURNING with NULL parameter" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE tn (id SERIAL PRIMARY KEY, note TEXT)")
+
+      val ps = session.prepare("INSERT INTO tn (note) VALUES ($1) RETURNING *")
+      val results = ps.execute(NullValue())
+      val inserts = results.collect { case InsertResult(_, t) => t }
+      inserts should not be empty
+      val table = inserts.last
+      table.data.length shouldBe 1
+      table.data(0).data(1) shouldBe NullValue()
+    }
+
+    "multiple params with mix of NULL and non-NULL" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE tn (id INTEGER, a TEXT, b TEXT, c TEXT)")
+
+      val ps = session.prepare("INSERT INTO tn (id, a, b, c) VALUES ($1, $2, $3, $4)")
+      ps.execute(NumberValue(1), TextValue("hello"), NullValue(), TextValue("world"))
+
+      val table = executeSQL("SELECT * FROM tn WHERE id = 1").collect { case QueryResult(t) => t }.last
+      table.data(0).data(1) shouldBe TextValue("hello")
+      table.data(0).data(2) shouldBe NullValue()
+      table.data(0).data(3) shouldBe TextValue("world")
+    }
+  }
+
   "Type coercion for parameters" - {
     "text parameter is coerced to NUMERIC column" in {
       given session: Session = new MemoryDB().connect()
