@@ -36,6 +36,8 @@ class HashJoinTests extends AnyFreeSpec with Matchers:
         case p: LeftHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
         case p: RightHashJoinProcess              => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
         case p: FullHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
+        case p: WindowProcess                     => findProcess(p.input)(pf)
+        case p: FullCrossJoinProcess              => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
         case _                                    => None
 
   val setup: String =
