@@ -161,6 +161,10 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "copy", rowCount = rows)
       case CreateSchemaResult(name) =>
         js.Dynamic.literal(command = "create schema", schema = name)
+      case CreateSequenceResult(name) =>
+        js.Dynamic.literal(command = "create sequence", sequence = name)
+      case DropSequenceResult(name) =>
+        js.Dynamic.literal(command = "drop sequence", sequence = name)
 
   @JSExport
   def execute(sql: String, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =

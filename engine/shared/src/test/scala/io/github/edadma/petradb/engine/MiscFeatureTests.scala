@@ -146,7 +146,7 @@ class MiscFeatureTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       table.data.length shouldBe 2
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(2, 4)
+      table.data.map(_.data(0).intValue) shouldBe Seq(2, 4)
     }
   }
 
@@ -155,17 +155,17 @@ class MiscFeatureTests extends AnyFreeSpec with Matchers with Testing {
   "BETWEEN SYMMETRIC" - {
     "matches when bounds are in order" in {
       val table = query(s"$setup SELECT id FROM t WHERE val BETWEEN SYMMETRIC 10 AND 30;")
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(1, 2)
+      table.data.map(_.data(0).intValue) shouldBe Seq(1, 2)
     }
 
     "matches when bounds are reversed" in {
       val table = query(s"$setup SELECT id FROM t WHERE val BETWEEN SYMMETRIC 30 AND 10;")
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(1, 2)
+      table.data.map(_.data(0).intValue) shouldBe Seq(1, 2)
     }
 
     "NOT BETWEEN SYMMETRIC" in {
       val table = query(s"$setup SELECT id FROM t WHERE val NOT BETWEEN SYMMETRIC 30 AND 10;")
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(3)
+      table.data.map(_.data(0).intValue) shouldBe Seq(3)
     }
   }
 }

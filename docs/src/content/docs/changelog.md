@@ -2,6 +2,142 @@
 title: Changelog
 ---
 
+## v1.4-20260312
+
+### Common Table Expressions (CTEs)
+
+Full CTE support with `WITH` and `WITH RECURSIVE`.
+
+**Non-recursive CTEs** — named subqueries for readability and reuse:
+
+```sql
+WITH active_orders AS (
+  SELECT * FROM orders WHERE status = 'active'
+)
+SELECT customer_id, SUM(amount)
+FROM active_orders
+GROUP BY customer_id;
+```
+
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
+
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
+
+```sql
+WITH RECURSIVE descendants(id, name, depth) AS (
+  SELECT id, name, 0 FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.id, e.name, d.depth + 1
+  FROM employees e INNER JOIN descendants d ON e.manager_id = d.id
+)
+SELECT name, depth FROM descendants ORDER BY depth, name;
+```
+
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
+
+### Window functions
+
+Full window function support with three categories:
+
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
+
+```sql
+SELECT name, department, salary,
+  RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS dept_rank
+FROM employees;
+```
+
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
+
+```sql
+SELECT name, salary,
+  LAG(salary, 1, 0) OVER (ORDER BY salary) AS prev_salary,
+  NTILE(4) OVER (ORDER BY salary) AS quartile
+FROM employees;
+```
+
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
+
+```sql
+SELECT name, salary,
+  SUM(salary) OVER (ORDER BY salary ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total,
+  AVG(salary) OVER (PARTITION BY department) AS dept_avg
+FROM employees;
+```
+
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
+
+### Aggregate FILTER clause
+
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'active') AS active_count,
+  SUM(amount) FILTER (WHERE amount > 100) OVER (ORDER BY created_at
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_high_value
+FROM orders;
+```
+
+### Hash join optimization
+
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
+
+### Generated columns
+
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
+
+```sql
+CREATE TABLE products (
+  price NUMERIC,
+  tax_rate NUMERIC DEFAULT 0.08,
+  total NUMERIC GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+);
+```
+
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
+
+### ORDER BY null ordering
+
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
+
+### Sequence support
+
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
+
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
+
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
+
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
+
+### CREATE INDEX USING clause
+
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
+
+### Bug fixes
+
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
+
+### Version bumps
+
+All components bumped to 1.4.0:
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.4.0 | — |
+| engine | 1.4.0 | @petradb/engine 1.4.0 |
+| client | 1.4.0 | @petradb/client 1.4.0 |
+| server | 1.4.0 | @petradb/server 1.4.0 |
+| cli | 1.4.0 | @petradb/cli 1.4.0 |
+| jdbc | 1.4.0 | — |
+| knex | — | @petradb/knex 1.4.0 |
+| lucid | — | @petradb/lucid 1.4.0 |
+| drizzle | — | @petradb/drizzle 1.4.0 |
+
 ## v1.3-20260309
 
 ### Transactional DDL

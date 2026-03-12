@@ -146,6 +146,25 @@ Returns 0 for values below `low`, and `count + 1` for values at or above `high`.
 | `set_byte(bytea, offset, value)` | Set byte at offset, returns new bytea |
 | `encode(bytea, format)` / `decode(text, format)` | Binary encoding (hex, base64) |
 
+## Sequence Functions
+
+| Function | Description |
+|----------|-------------|
+| `nextval('name')` | Advance sequence and return next value |
+| `currval('name')` | Current value (requires prior `nextval` in session) |
+| `setval('name', value [, is_called])` | Set sequence value (`is_called` defaults to `true`) |
+| `lastval()` | Last value returned by any sequence in this session |
+
+```sql
+CREATE SEQUENCE order_seq START WITH 100;
+SELECT nextval('order_seq');   -- 100
+SELECT nextval('order_seq');   -- 101
+SELECT currval('order_seq');   -- 101
+SELECT setval('order_seq', 200);
+SELECT nextval('order_seq');   -- 201
+SELECT lastval();              -- 201
+```
+
 ## Other Scalar Functions
 
 | Function | Description |
@@ -174,4 +193,37 @@ Returns 0 for values below `low`, and `count + 1` for values at or above `high`.
 | `stddev(expr)` / `stddev_samp(expr)` | Sample standard deviation |
 | `stddev_pop(expr)` | Population standard deviation |
 
+All aggregate functions support the `FILTER (WHERE ...)` clause to restrict which rows are included:
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE active) AS active_count
+FROM users;
+```
+
 See also: [JSON aggregate functions](/reference/json/#aggregate-functions)
+
+## Window Functions
+
+Window functions compute a value for each row based on a group of related rows, without collapsing them.
+
+### Ranking functions
+
+| Function | Description |
+|----------|-------------|
+| `ROW_NUMBER()` | Sequential row number within partition |
+| `RANK()` | Rank with gaps for ties |
+| `DENSE_RANK()` | Rank without gaps for ties |
+
+### Value functions
+
+| Function | Description |
+|----------|-------------|
+| `LAG(expr [, offset [, default]])` | Value from a preceding row (default offset: 1) |
+| `LEAD(expr [, offset [, default]])` | Value from a following row (default offset: 1) |
+| `NTILE(n)` | Divide rows into n roughly equal groups |
+
+### Aggregate window functions
+
+Any aggregate function can be used as a window function with `OVER()`. See [Queries — Window Functions](/reference/queries/#window-functions) for syntax and frame specifications.

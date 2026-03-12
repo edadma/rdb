@@ -1,6 +1,6 @@
 {
   "name": "@petradb/drizzle",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Drizzle ORM driver for PetraDB",
   "type": "module",
   "exports": {
@@ -18,7 +18,7 @@
     "test": "node --test test/integration.mjs"
   },
   "peerDependencies": {
-    "@petradb/engine": ">=1.3.4",
+    "@petradb/engine": ">=1.4.0",
     "drizzle-orm": ">=0.38.0"
   },
   "devDependencies": {

@@ -33,7 +33,8 @@ trait Process:
       case AliasExpr(e, _)                  => validateColumns(e, m)
       case CastExpr(e, _)                   => validateColumns(e, m)
       case ScalarFunctionExpr(_, args)       => args.foreach(e => validateColumns(e, m))
-      case AggregateFunctionExpr(_, args)    => args.foreach(e => validateColumns(e, m))
+      case AggregateFunctionExpr(_, args, filter) => args.foreach(e => validateColumns(e, m)); filter.foreach(f => validateColumns(f, m))
+      case WindowExpr(func, partBy, ordBy, _) => validateColumns(func, m); partBy.foreach(e => validateColumns(e, m)); ordBy.foreach { case OrderBy(f, _, _) => validateColumns(f, m) }
       case _                                => // literals, subqueries, etc.
 
 type RowIterator = Iterator[Row]
@@ -105,7 +106,9 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
       for row <- rows do
         val rowCtx = row +: ctx
-        for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
+        for spec <- aggregates do
+          if spec.filter.forall(f => beval(f, rowCtx)) then
+            spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
       val aggValues = aggregates.map(_.func.result).toVector
       // Even if rows is empty, emit one row (COUNT→0, SUM→0, etc.)
@@ -124,11 +127,160 @@ case class AggregateProcess(input: Process, groupBy: Seq[Expr], aggregates: Seq[
 
         for row <- group do
           val rowCtx = row +: ctx
-          for spec <- aggregates do spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
+          for spec <- aggregates do
+            if spec.filter.forall(f => beval(f, rowCtx)) then
+              spec.func.acc(spec.args.map(a => eval(a, rowCtx)))
 
         val aggValues = aggregates.map(_.func.result).toVector
         Row(group.last.data ++ aggValues, meta, None, None)
       }
+
+case class WindowProcess(input: Process, windows: Seq[WindowSpec]) extends Process:
+  val meta: Metadata =
+    val winColumns = windows.map(spec => ColumnMetadata(None, spec.name, spec.typ))
+    Metadata(input.meta.columns ++ winColumns)
+
+  private final class SeqOrdering(ords: Seq[Ordering[Value]]) extends Ordering[Seq[Value]]:
+    def compare(xs: Seq[Value], ys: Seq[Value]): Int =
+      val x   = xs.iterator
+      val y   = ys.iterator
+      val ord = ords.iterator
+      while (x.hasNext && y.hasNext && ord.hasNext)
+        val res = ord.next().compare(x.next(), y.next())
+        if (res != 0) return res
+      0
+
+  private def sameOrderByValues(a: Row, b: Row, orderBy: Seq[OrderBy], ctx: Seq[Row]): Boolean =
+    orderBy.forall { ob =>
+      val va = eval(ob.f, a +: ctx)
+      val vb = eval(ob.f, b +: ctx)
+      (va.isNull && vb.isNull) || (!va.isNull && !vb.isNull && va.compare(vb) == 0)
+    }
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rows = input.iterator(ctx).toVector
+    if rows.isEmpty then return Iterator.empty
+
+    val rowCount = rows.length
+    val winValues = Array.ofDim[Value](rowCount, windows.length)
+
+    for (spec, winIdx) <- windows.zipWithIndex do
+      // Partition rows, preserving original indices
+      val partitioned: Map[Seq[Value], Vector[(Row, Int)]] =
+        if spec.partitionBy.isEmpty then
+          Map(Nil -> rows.zipWithIndex)
+        else
+          rows.zipWithIndex.groupBy { case (row, _) =>
+            spec.partitionBy.map(e => eval(e, row +: ctx))
+          }
+
+      for (_, partition) <- partitioned do
+        // Sort within partition
+        val sorted =
+          if spec.orderBy.isEmpty then partition
+          else
+            val orderings = spec.orderBy.map { case OrderBy(_, asc, nullsFirst) =>
+              (asc, nullsFirst) match
+                case (false, false) => Nulls.first.reverse
+                case (false, true)  => Nulls.last.reverse
+                case (true, false)  => Nulls.last
+                case (true, true)   => Nulls.first
+            }
+            val ordering = new SeqOrdering(orderings)
+            partition.sortBy { case (row, _) =>
+              spec.orderBy.map(ob => eval(ob.f, row +: ctx))
+            }(using ordering)
+
+        spec.kind match
+          case RowNumberKind =>
+            for ((_, origIdx), rank) <- sorted.zipWithIndex do
+              winValues(origIdx)(winIdx) = NumberValue(rank + 1)
+
+          case RankKind =>
+            var rank = 1
+            for i <- sorted.indices do
+              if i > 0 && !sameOrderByValues(sorted(i)._1, sorted(i - 1)._1, spec.orderBy, ctx) then
+                rank = i + 1
+              winValues(sorted(i)._2)(winIdx) = NumberValue(rank)
+
+          case DenseRankKind =>
+            var rank = 1
+            for i <- sorted.indices do
+              if i > 0 && !sameOrderByValues(sorted(i)._1, sorted(i - 1)._1, spec.orderBy, ctx) then
+                rank += 1
+              winValues(sorted(i)._2)(winIdx) = NumberValue(rank)
+
+          case LagKind(expr, offset, default) =>
+            for i <- sorted.indices do
+              val sourceIdx = i - offset
+              val value =
+                if sourceIdx >= 0 then eval(expr, sorted(sourceIdx)._1 +: ctx)
+                else default.map(d => eval(d, sorted(i)._1 +: ctx)).getOrElse(NullValue())
+              winValues(sorted(i)._2)(winIdx) = value
+
+          case LeadKind(expr, offset, default) =>
+            for i <- sorted.indices do
+              val sourceIdx = i + offset
+              val value =
+                if sourceIdx < sorted.length then eval(expr, sorted(sourceIdx)._1 +: ctx)
+                else default.map(d => eval(d, sorted(i)._1 +: ctx)).getOrElse(NullValue())
+              winValues(sorted(i)._2)(winIdx) = value
+
+          case NtileKind(buckets) =>
+            val n = sorted.length
+            val base = n / buckets
+            val remainder = n % buckets
+            var tile = 1
+            var count = 0
+            val tileSize = if remainder > 0 then base + 1 else base
+            var currentTileSize = tileSize
+            for i <- sorted.indices do
+              if count >= currentTileSize && tile < buckets then
+                tile += 1
+                count = 0
+                currentTileSize = if tile <= remainder then base + 1 else base
+              winValues(sorted(i)._2)(winIdx) = NumberValue(tile)
+              count += 1
+
+          case AggregateWindowKind(aggFactory, args, filter) =>
+            spec.frame match
+              case Some(FrameSpec(start, end)) =>
+                // Frame-based: compute per-row aggregate over the frame window
+                for i <- sorted.indices do
+                  val frameStart = start match
+                    case UnboundedPreceding => 0
+                    case CurrentRow         => i
+                    case Preceding(n)      => math.max(0, i - n)
+                    case Following(n)      => math.min(sorted.length - 1, i + n)
+                    case UnboundedFollowing => sorted.length - 1
+                  val frameEnd = end match
+                    case UnboundedFollowing => sorted.length - 1
+                    case CurrentRow         => i
+                    case Following(n)      => math.min(sorted.length - 1, i + n)
+                    case Preceding(n)      => math.max(0, i - n)
+                    case UnboundedPreceding => 0
+                  val (inst, _) = aggFactory.instantiate
+                  inst.init()
+                  for j <- frameStart to frameEnd do
+                    val rowCtx = sorted(j)._1 +: ctx
+                    if filter.forall(f => beval(f, rowCtx)) then
+                      inst.acc(args.map(a => eval(a, rowCtx)))
+                  winValues(sorted(i)._2)(winIdx) = inst.result
+              case None =>
+                // No frame: aggregate over entire partition
+                val (instance, _) = aggFactory.instantiate
+                instance.init()
+                for (row, _) <- sorted do
+                  val rowCtx = row +: ctx
+                  if filter.forall(f => beval(f, rowCtx)) then
+                    instance.acc(args.map(a => eval(a, rowCtx)))
+                val result = instance.result
+                for (_, origIdx) <- sorted do
+                  winValues(origIdx)(winIdx) = result
+
+    rows.iterator.zipWithIndex.map { case (row, idx) =>
+      Row(row.data ++ winValues(idx).toVector, meta, None, None)
+    }
 
 case class ProjectProcess(input: Process, fields: IndexedSeq[Expr]) extends Process:
   private val metaCtx = Seq(input.meta)
@@ -194,13 +346,15 @@ case class DistinctProcess(input: Process) extends Process:
 object Nulls:
   val first: Ordering[Value] =
     (x: Value, y: Value) =>
-      if x.isNull then -1
+      if x.isNull && y.isNull then 0
+      else if x.isNull then -1
       else if y.isNull then 1
       else x compare y
 
   val last: Ordering[Value] =
     (x: Value, y: Value) =>
-      if x.isNull then 1
+      if x.isNull && y.isNull then 0
+      else if x.isNull then 1
       else if y.isNull then -1
       else x compare y
 
@@ -266,6 +420,38 @@ case class UnionProcess(input1: Process, input2: Process, all: Boolean) extends 
   def iterator(ctx: Seq[Row]): RowIterator =
     val combined = input1.iterator(ctx) ++ input2.iterator(ctx).map(row => Row(row.data, meta, None, None))
     if all then combined else combined.distinctBy(_.data)
+
+class WorkingTableProcess(val meta: Metadata) extends Process:
+  private var rows: IndexedSeq[Row] = IndexedSeq.empty
+  def setRows(newRows: IndexedSeq[Row]): Unit = rows = newRows
+  def iterator(ctx: Seq[Row]): RowIterator = rows.iterator
+
+case class RecursiveCTEProcess(
+    anchor: Process,
+    recursive: Process,
+    workingTable: WorkingTableProcess,
+    all: Boolean,
+    maxIterations: Int = 1000,
+) extends Process:
+  val meta: Metadata = workingTable.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val allResults = ArrayBuffer[Row]()
+    var currentRows = anchor.iterator(ctx).map(r => Row(r.data, meta, None, None)).toVector
+    var iteration = 0
+
+    while currentRows.nonEmpty && iteration < maxIterations do
+      allResults ++= currentRows
+      workingTable.setRows(currentRows.toIndexedSeq)
+      val nextRows = recursive.iterator(ctx).map(r => Row(r.data, meta, None, None)).toVector
+      currentRows =
+        if all then nextRows
+        else
+          val seen = allResults.map(_.data).toSet
+          nextRows.filterNot(r => seen.contains(r.data))
+      iteration += 1
+
+    allResults.iterator
 
 case class IntersectProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = input1.meta
@@ -375,6 +561,107 @@ case class FullCrossJoinProcess(input1: Process, input2: Process, cond: Expr) ex
     }
 
     leftResults ++ rightUnmatched
+
+case class HashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- buildRows do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { buildRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }
+    }
+
+case class LeftHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val probeRows = probe.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- probeRows do
+      val key = probeKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    build.iterator(ctx).flatMap { buildRow =>
+      val key = buildKeys.map(buildRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { probeRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(buildRow.data ++ Vector.fill(probe.meta.width)(NULL), meta, None, None))
+      else matches.iterator
+    }
+
+case class RightHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[Row]]()
+    for row <- buildRows do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += row
+    probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { buildRow =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) => if beval(cond, combined +: ctx) then Iterator(combined) else Iterator.empty
+          case None       => Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(Vector.fill(build.meta.width)(NULL) ++ probeRow.data, meta, None, None))
+      else matches.iterator
+    }
+
+case class FullHashJoinProcess(build: Process, probe: Process, buildKeys: Seq[Int], probeKeys: Seq[Int], residual: Option[Expr])
+    extends Process:
+  val meta: Metadata = Metadata(build.meta.columns ++ probe.meta.columns)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val buildRows = build.iterator(ctx).toVector
+    val hashTable = mutable.HashMap[Vector[Value], ArrayBuffer[(Row, Int)]]()
+    for (row, idx) <- buildRows.zipWithIndex do
+      val key = buildKeys.map(row.data(_)).toVector
+      hashTable.getOrElseUpdate(key, ArrayBuffer()) += ((row, idx))
+    val buildMatched = mutable.BitSet()
+
+    val probeResults = probe.iterator(ctx).flatMap { probeRow =>
+      val key = probeKeys.map(probeRow.data(_)).toVector
+      val matches = hashTable.getOrElse(key, ArrayBuffer.empty).iterator.flatMap { case (buildRow, buildIdx) =>
+        val combined = Row(buildRow.data ++ probeRow.data, meta, None, None)
+        residual match
+          case Some(cond) =>
+            if beval(cond, combined +: ctx) then
+              buildMatched += buildIdx
+              Iterator(combined)
+            else Iterator.empty
+          case None =>
+            buildMatched += buildIdx
+            Iterator(combined)
+      }.to(ArraySeq)
+      if matches.isEmpty then Iterator(Row(Vector.fill(build.meta.width)(NULL) ++ probeRow.data, meta, None, None))
+      else matches.iterator
+    }.to(ArraySeq)
+
+    val buildUnmatched = buildRows.zipWithIndex.iterator.flatMap { case (buildRow, idx) =>
+      if buildMatched.contains(idx) then Iterator.empty
+      else Iterator(Row(buildRow.data ++ Vector.fill(probe.meta.width)(NULL), meta, None, None))
+    }
+
+    probeResults.iterator ++ buildUnmatched
 
 case class IndexNestedLoopJoinProcess(
     outer: Process,

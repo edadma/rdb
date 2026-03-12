@@ -343,7 +343,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT log(2, 8) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 3.0 +- 0.0001
     }
 
@@ -355,7 +355,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT degrees(pi()) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 180.0 +- 0.0001
     }
 
@@ -606,7 +606,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT cbrt(27) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 3.0 +- 0.0001
     }
 
@@ -618,7 +618,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT cbrt(-8) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe -2.0 +- 0.0001
     }
   }
@@ -632,7 +632,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT div(7, 2) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 3.0
     }
 
@@ -644,7 +644,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT div(17, 5) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 3.0
     }
   }
@@ -658,7 +658,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT factorial(5) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 120.0
     }
 
@@ -670,7 +670,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT factorial(0) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 1.0
     }
 
@@ -682,7 +682,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT factorial(1) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 1.0
     }
   }
@@ -696,7 +696,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT gcd(12, 8) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 4.0
     }
 
@@ -708,7 +708,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT gcd(7, 0) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 7.0
     }
   }
@@ -722,7 +722,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT lcm(4, 6) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 12.0
     }
 
@@ -734,7 +734,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT lcm(5, 0) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 0.0
     }
   }
@@ -759,7 +759,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT sinh(1) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe math.sinh(1.0) +- 0.0001
     }
   }
@@ -799,7 +799,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT asinh(0) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 0.0 +- 0.0001
     }
 
@@ -811,7 +811,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT asinh(sinh(1.5)) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 1.5 +- 0.0001
     }
   }
@@ -825,7 +825,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT acosh(1) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 0.0 +- 0.0001
     }
 
@@ -837,7 +837,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT acosh(cosh(2.0)) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 2.0 +- 0.0001
     }
   }
@@ -851,7 +851,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT atanh(0) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 0.0 +- 0.0001
     }
 
@@ -863,7 +863,7 @@ class NewFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT atanh(tanh(0.5)) FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 0.5 +- 0.0001
     }
   }

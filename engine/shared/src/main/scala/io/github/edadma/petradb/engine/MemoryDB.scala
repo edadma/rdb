@@ -26,6 +26,7 @@ class MemoryDB extends DB:
       val catalogSnap: CatalogSnapshot,
       val autoMapSnap: Map[String, Map[String, Value]],
       val indexStateSnap: Map[String, Map[String, Long]],
+      val sequenceStateSnap: Map[String, (Long, Boolean)],
   ) extends TransactionHandle
 
   override def snapshot(): TransactionHandle =
@@ -35,7 +36,8 @@ class MemoryDB extends DB:
         iName -> idx.asInstanceOf[MemoryTableIndex].nextRowId
       }.toMap
     }.toMap
-    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry], takeCatalogSnapshot(), autoSnap, idxSnap)
+    val seqSnap = sequences.map { (n, s) => n -> s.stateSnapshot() }.toMap
+    new MemoryTransactionHandle(new mutable.ArrayBuffer[UndoEntry], takeCatalogSnapshot(), autoSnap, idxSnap, seqSnap)
 
   override def commitSnapshot(handle: TransactionHandle): Unit = ()
 
@@ -67,6 +69,20 @@ class MemoryDB extends DB:
             idx.asInstanceOf[MemoryTableIndex].nextRowId = nextRowId
           }
       }
+
+    // Restore sequence state
+    for (n, snap) <- h.sequenceStateSnap do
+      sequences.get(n).foreach(_.restoreState(snap))
+
+    // Restore backing sequence references for tables
+    for (_, t) <- tables do
+      t.backingSequences.clear()
+    for (seqName, seq) <- sequences do
+      for
+        tableName <- seq.ownedByTable
+        colName <- seq.ownedByColumn
+        table <- tables.get(resolveKey(tableName))
+      do table.backingSequences(colName) = seq
 
     currentUndoLog = savedUndoLog
 
@@ -166,6 +182,10 @@ class MemoryTable(name: String, specs: Seq[Spec], private[engine] val db: Memory
   def truncate(): Unit =
     for node <- data.nodeIterator.toList do node.unlink
     autoMap.clear()
+    // Reset backing sequences to their start values
+    for (_, seq) <- backingSequences do
+      seq.currentValue = 0
+      seq.called = false
     for (idxName, idx) <- tableIndexes do
       given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
       val midx = idx.asInstanceOf[MemoryTableIndex]

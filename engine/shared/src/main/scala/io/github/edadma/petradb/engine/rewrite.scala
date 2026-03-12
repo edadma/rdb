@@ -10,17 +10,18 @@ class AggregateCollector:
   private val seen = mutable.Map[String, String]() // canonical key → column name
   private var counter = 0
 
-  private def canonicalKey(funcName: String, args: Seq[Expr]): String =
-    s"$funcName(${args.mkString(", ")})"
+  private def canonicalKey(funcName: String, args: Seq[Expr], filter: Option[Expr]): String =
+    val filterStr = filter.map(f => s" FILTER($f)").getOrElse("")
+    s"$funcName(${args.mkString(", ")})$filterStr"
 
   def collect(expr: Expr): Expr =
     expr match
-      case AggregateFunctionExpr(f, args) =>
-        val key = canonicalKey(f.name, args)
+      case AggregateFunctionExpr(f, args, filter) =>
+        val key = canonicalKey(f.name, args, filter)
         val colName = seen.getOrElseUpdate(key, {
           counter += 1
           val name = s"_agg_$counter"
-          specs += AggregateSpec(name, f, args, expr.typ.asInstanceOf[Type])
+          specs += AggregateSpec(name, f, args, expr.typ.asInstanceOf[Type], filter)
           name
         })
         ColumnExpr(None, Ident(colName)) setType expr.typ
@@ -34,6 +35,7 @@ class AggregateCollector:
           whens.map { case When(w, e) => When(collect(w), collect(e)) },
           els.map(collect),
         )
+      case _: WindowExpr => expr // window expressions handle their own aggregation
       case _ => expr
 
   def result: Seq[AggregateSpec] = specs.toSeq
@@ -43,6 +45,7 @@ class AggregateCollector:
 def aggregate(expr: Expr): Boolean =
   expr match
     case _: AggregateFunctionExpr    => true
+    case _: WindowExpr               => false // window functions are not aggregates
     case AliasExpr(expr, _)          => aggregate(expr)
     case CastExpr(expr, _)           => aggregate(expr)
     case ScalarFunctionExpr(_, args) => args exists aggregate
@@ -52,6 +55,76 @@ def aggregate(expr: Expr): Boolean =
       whens.exists { case When(w, e) => aggregate(w) || aggregate(e) } ||
         els.exists(aggregate)
     case _                           => false
+
+def window(expr: Expr): Boolean =
+  expr match
+    case _: WindowExpr               => true
+    case AliasExpr(expr, _)          => window(expr)
+    case CastExpr(expr, _)           => window(expr)
+    case UnaryExpr(_, expr)          => window(expr)
+    case BinaryExpr(left, _, right)  => window(left) || window(right)
+    case ScalarFunctionExpr(_, args) => args.exists(window)
+    case CaseExpr(whens, els) =>
+      whens.exists { case When(w, e) => window(w) || window(e) } ||
+        els.exists(window)
+    case _                           => false
+
+private val windowOnlyFunctions = Set("row_number", "rank", "dense_rank", "lag", "lead", "ntile")
+
+class WindowCollector:
+  private val specs = mutable.ArrayBuffer[WindowSpec]()
+  private val seen = mutable.Map[String, String]()
+  private var counter = 0
+
+  private def canonicalKey(kind: WindowFunctionKind, partBy: Seq[Expr], ordBy: Seq[OrderBy]): String =
+    s"$kind OVER (${partBy.mkString(", ")}; ${ordBy.mkString(", ")})"
+
+  def collect(expr: Expr): Expr =
+    expr match
+      case w @ WindowExpr(_, partBy, ordBy, frame) =>
+        val kind = w.func match
+          case ApplyExpr(Ident(name), args, _) =>
+            name.toLowerCase match
+              case "row_number"  => RowNumberKind
+              case "rank"        => RankKind
+              case "dense_rank"  => DenseRankKind
+              case "lag" =>
+                val offset = if args.length >= 2 then eval(args(1), Nil).intValue else 1
+                val default = args.lift(2)
+                LagKind(args.head, offset, default)
+              case "lead" =>
+                val offset = if args.length >= 2 then eval(args(1), Nil).intValue else 1
+                val default = args.lift(2)
+                LeadKind(args.head, offset, default)
+              case "ntile" =>
+                val buckets = eval(args.head, Nil).intValue
+                NtileKind(buckets)
+              case _ => sys.error(s"unresolved window function: $name")
+          case AggregateFunctionExpr(f, args, filter) =>
+            AggregateWindowKind(aggregateFunction(f.name), args, filter)
+          case other => sys.error(s"unexpected window function expression: $other")
+        val key = canonicalKey(kind, partBy, ordBy)
+        val colName = seen.getOrElseUpdate(key, {
+          counter += 1
+          val name = s"_win_$counter"
+          specs += WindowSpec(name, kind, partBy, ordBy, w.typ.asInstanceOf[Type], frame)
+          name
+        })
+        ColumnExpr(None, Ident(colName)) setType w.typ
+      case AliasExpr(inner, alias)       => AliasExpr(collect(inner), alias)
+      case CastExpr(inner, t)            => CastExpr(collect(inner), t) setType expr.typ
+      case UnaryExpr(op, inner)          => UnaryExpr(op, collect(inner)) setType expr.typ
+      case BinaryExpr(l, op, r)          => BinaryExpr(collect(l), op, collect(r)) setType expr.typ
+      case ScalarFunctionExpr(f, args)   => ScalarFunctionExpr(f, args.map(collect))
+      case CaseExpr(whens, els) =>
+        CaseExpr(
+          whens.map { case When(w, e) => When(collect(w), collect(e)) },
+          els.map(collect),
+        )
+      case _ => expr
+
+  def result: Seq[WindowSpec] = specs.toSeq
+  def hasWindows: Boolean = specs.nonEmpty
 
 def resolveAliases(expr: Expr, aliases: Map[String, Expr]): Expr =
   expr match
@@ -78,6 +151,49 @@ private def evalCountExpr(pos: Position, expr: Expr, label: String)(using sessio
 def rewrite(expr: Expr)(using session: Session): Expr =
   expr match
     case _ if expr.typ != null              => expr
+    case WithExpr(ctes, query, recursive) =>
+      val cteMap = mutable.Map[String, Expr]()
+      for cte @ CTEDef(id @ Ident(name), cols, body) <- ctes do
+        val lowerName = name.toLowerCase
+        if recursive && containsTableRef(lowerName, body) then
+          // Recursive CTE — body must be UNION [ALL]
+          body match
+            case SetOperationExpr(op, anchorExpr, recursiveExpr) if op == "UNION ALL" || op == "UNION" =>
+              val all = op == "UNION ALL"
+
+              // Rewrite anchor (substitute earlier CTEs, NOT self)
+              val anchorSubstituted = substituteCTEs(anchorExpr, cteMap.toMap)
+              val anchorProc = procRewrite(rewrite(anchorSubstituted))
+
+              // Build working table metadata with CTE name as table qualifier
+              val baseMeta = cols match
+                case Some(colNames) =>
+                  Metadata(anchorProc.meta.columns.zip(colNames).map { case (cm, Ident(cn)) =>
+                    ColumnMetadata(Some(lowerName), cn, cm.typ)
+                  }.toIndexedSeq)
+                case None =>
+                  Metadata(anchorProc.meta.columns.map(cm =>
+                    ColumnMetadata(Some(lowerName), cm.name, cm.typ)
+                  ).toIndexedSeq)
+
+              val workingTable = new WorkingTableProcess(baseMeta)
+
+              // Substitute self-ref with working table in recursive part
+              val selfMap = cteMap.toMap + (lowerName -> ProcessOperator(workingTable))
+              val recursiveSubstituted = substituteCTEs(recursiveExpr, selfMap)
+              val recursiveProc = procRewrite(rewrite(recursiveSubstituted))
+
+              val rctProc = RecursiveCTEProcess(anchorProc, recursiveProc, workingTable, all)
+              cteMap(lowerName) = ProcessOperator(rctProc)
+            case _ =>
+              throw ParseException(body.pos, "recursive CTE must use UNION or UNION ALL")
+        else
+          // Non-recursive CTE
+          val substituted = substituteCTEs(body, cteMap.toMap)
+          cteMap(lowerName) = cols match
+            case Some(colNames) => ColumnAliasOperator(substituted, Ident(name), colNames)
+            case None           => substituted
+      rewrite(substituteCTEs(query, cteMap.toMap))
     case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
     case AliasExpr(expr, alias) => AliasExpr(rewrite(expr), alias)
     case SubqueryExpr(query)    => SubqueryExpr(rewrite(query))
@@ -88,20 +204,107 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case QuantifiedCompareExpr(value, op, quantifier, expr) =>
       QuantifiedCompareExpr(rewrite(value), op, quantifier, rewrite(expr))
     case TableConstructorExpr(expr)        => TableConstructorExpr(rewrite(expr))
-    case ApplyExpr(id @ Ident(func), args) =>
-      if func.toLowerCase == "generate_series" then
-        val rwArgs = args map rewrite
-        ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
-      else
-        scalarFunction get func.toLowerCase match
-          case None =>
-            aggregateFunction get func.toLowerCase match
-              case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
-              case Some(f) =>
-                val (instance, typ) = f.instantiate
-
-                AggregateFunctionExpr(instance, args map rewrite) setType typ
-          case Some(f) => ScalarFunctionExpr(f, args map rewrite)
+    case WindowExpr(ApplyExpr(id @ Ident(func), args, filter), partBy, ordBy, frame) =>
+      val rwPartBy = partBy.map(rewrite)
+      val rwOrdBy = ordBy.map { case OrderBy(f, d, n) => OrderBy(rewrite(f), d, n) }
+      func.toLowerCase match
+        case "row_number" =>
+          if args.nonEmpty then throw ParseException(id.pos, "ROW_NUMBER takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
+        case "rank" =>
+          if args.nonEmpty then throw ParseException(id.pos, "RANK takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
+        case "dense_rank" =>
+          if args.nonEmpty then throw ParseException(id.pos, "DENSE_RANK takes no arguments")
+          WindowExpr(ApplyExpr(id, Nil, None), rwPartBy, rwOrdBy, frame) setType NumberType
+        case "lag" =>
+          if args.isEmpty || args.length > 3 then throw ParseException(id.pos, "LAG requires 1 to 3 arguments")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
+        case "lead" =>
+          if args.isEmpty || args.length > 3 then throw ParseException(id.pos, "LEAD requires 1 to 3 arguments")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
+        case "ntile" =>
+          if args.length != 1 then throw ParseException(id.pos, "NTILE requires exactly 1 argument")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType NumberType
+        case _ =>
+          aggregateFunction get func.toLowerCase match
+            case Some(f) =>
+              val (instance, typ) = f.instantiate
+              val rwArgs = args.map(rewrite)
+              val rwFilter = filter.map(rewrite)
+              WindowExpr(AggregateFunctionExpr(instance, rwArgs, rwFilter), rwPartBy, rwOrdBy, frame) setType typ
+            case None =>
+              scalarFunction get func.toLowerCase match
+                case Some(_) => throw ParseException(id.pos, s"scalar function '$func' cannot be used as a window function")
+                case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
+    case ApplyExpr(id @ Ident(func), args, filter) =>
+      func.toLowerCase match
+        case "generate_series" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on generate_series")
+          val rwArgs = args map rewrite
+          ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
+        case "nextval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+          ScalarFunctionExpr(
+            ScalarFunction("nextval", { case Seq(nameVal) =>
+              val seqName = nameVal.string
+              val seq = session.db.getSequence(seqName).getOrElse(sys.error(s"relation \"$seqName\" does not exist"))
+              val v = seq.nextval()
+              session.sequenceValues(seqName) = v
+              session.lastSequenceUsed = Some(seqName)
+              NumberValue(v.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "currval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+          ScalarFunctionExpr(
+            ScalarFunction("currval", { case Seq(nameVal) =>
+              val seqName = nameVal.string
+              if !session.db.hasSequence(seqName) then sys.error(s"relation \"$seqName\" does not exist")
+              val v = session.sequenceValues.getOrElse(seqName, sys.error(s"currval of sequence \"$seqName\" is not yet defined in this session"))
+              NumberValue(v.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "setval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+          ScalarFunctionExpr(
+            ScalarFunction("setval", { case params =>
+              val seqName = params.head.string
+              val value = params(1).longValue
+              val isCalled = if params.length > 2 then params(2).asInstanceOf[BooleanValue].b else true
+              val seq = session.db.getSequence(seqName).getOrElse(sys.error(s"relation \"$seqName\" does not exist"))
+              seq.setval(value, isCalled)
+              session.sequenceValues(seqName) = value
+              session.lastSequenceUsed = Some(seqName)
+              NumberValue(value.toInt)
+            }, NumberType),
+            args map rewrite,
+          )
+        case "lastval" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+          ScalarFunctionExpr(
+            ScalarFunction("lastval", { case Seq() =>
+              val seqName = session.lastSequenceUsed.getOrElse(sys.error("lastval is not yet defined in this session"))
+              NumberValue(session.sequenceValues(seqName).toInt)
+            }, NumberType),
+            Seq.empty,
+          )
+        case _ =>
+          scalarFunction get func.toLowerCase match
+            case None =>
+              aggregateFunction get func.toLowerCase match
+                case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
+                case Some(f) =>
+                  val (instance, typ) = f.instantiate
+                  AggregateFunctionExpr(instance, args map rewrite, filter map rewrite) setType typ
+            case Some(f) =>
+              if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
+              ScalarFunctionExpr(f, args map rewrite)
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
         case None    => throw UndefinedReferenceException(id.pos, s"unknown variable '$name'")
@@ -258,40 +461,72 @@ def rewrite(expr: Expr)(using session: Session): Expr =
 
           val groupByExprs = groupBy.map(_.map(rewrite)).getOrElse(Nil)
 
-          // Build: source → AggregateOperator → HAVING → ORDER BY → PROJECT
+          // Build: source → AggregateOperator → HAVING → [WINDOW] → ORDER BY → PROJECT
           val r2 = AggregateOperator(r1, groupByExprs, collector.result)
           val r3 =
             collectedHaving match
               case Some(cond) => HavingOperator(r2, cond)
               case None       => r2
+
+          // Window function collection on post-aggregate expressions
+          val winCollector = new WindowCollector
+          val winCollectedExprs = collectedExprs.map(winCollector.collect)
+          val winCollectedOrderBy = collectedOrderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(winCollector.collect(f), d, n) })
+          val r3w = if winCollector.hasWindows then WindowOperator(r3, winCollector.result) else r3
+
           val r4 =
-            collectedOrderBy match
-              case Some(os) => SortOperator(r3, os)
-              case None     => r3
+            winCollectedOrderBy match
+              case Some(os) => SortOperator(r3w, os)
+              case None     => r3w
           exprs match
             case Seq(StarExpr()) => r4
-            case _               => ProjectOperator(r4, collectedExprs)
+            case _               => ProjectOperator(r4, winCollectedExprs)
         else
-          // Non-grouped path: ORDER BY → PROJECT
-          val r2 =
-            orderBy match
-              case None     => r1
-              case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
+          // Non-grouped path: [WINDOW] → ORDER BY → PROJECT
+          val hasWindows = rewrittenExprs.exists(window)
+
+          if hasWindows then
+            val winCollector = new WindowCollector
+            val winCollectedExprs = rewrittenExprs.map(winCollector.collect)
+            val winCollectedOrderBy = orderBy.map { os =>
+              os.map { case OrderBy(f, d, n) =>
                 val resolved = f match
                   case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
                     rewrittenExprs(idx - 1) match
                       case AliasExpr(inner, _) => inner
                       case other               => other
                   case _ => rewrite(f)
-                OrderBy(resolved, d, n)
-              })
-          val r3 =
+                OrderBy(winCollector.collect(resolved), d, n)
+              }
+            }
+            val r1w = WindowOperator(r1, winCollector.result)
+            val r2 =
+              winCollectedOrderBy match
+                case None     => r1w
+                case Some(os) => SortOperator(r1w, os)
             exprs match
               case Seq(StarExpr()) => r2
-              case _               => ProjectOperator(r2, rewrittenExprs)
-          having match
-            case Some(cond) => HavingOperator(r3, rewrite(cond))
-            case None       => r3
+              case _               => ProjectOperator(r2, winCollectedExprs)
+          else
+            val r2 =
+              orderBy match
+                case None     => r1
+                case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
+                  val resolved = f match
+                    case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
+                      rewrittenExprs(idx - 1) match
+                        case AliasExpr(inner, _) => inner
+                        case other               => other
+                    case _ => rewrite(f)
+                  OrderBy(resolved, d, n)
+                })
+            val r3 =
+              exprs match
+                case Seq(StarExpr()) => r2
+                case _               => ProjectOperator(r2, rewrittenExprs)
+            having match
+              case Some(cond) => HavingOperator(r3, rewrite(cond))
+              case None       => r3
 
       val r_distinct = if distinct then DistinctOperator(r_ordered) else r_ordered
       val r5 =
@@ -349,6 +584,8 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case SortOperator(rel, by)             => ProcessOperator(SortProcess(procRewrite(rel), by))
     case AggregateOperator(rel, groupBy, aggregates) =>
       ProcessOperator(AggregateProcess(procRewrite(rel), groupBy, aggregates))
+    case WindowOperator(rel, windows) =>
+      ProcessOperator(WindowProcess(procRewrite(rel), windows))
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))
@@ -367,6 +604,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = false)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "INNER").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(SeqScanProcess(CrossProcess(proc1, proc2), rwOn)))
     case LeftJoinOperator(rel1, rel2, on) =>
       val proc1 = procRewrite(rel1)
@@ -374,6 +612,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = true, isRight = false)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "LEFT").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(LeftCrossJoinProcess(proc1, proc2, rwOn)))
     case RightJoinOperator(rel1, rel2, on) =>
       val proc1 = procRewrite(rel1)
@@ -381,9 +620,15 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val rwOn = rewrite(on)
       tryIndexJoin(proc1, proc2, rwOn, isLeft = false, isRight = true)
         .map(ProcessOperator(_))
+        .orElse(tryHashJoin(proc1, proc2, rwOn, "RIGHT").map(ProcessOperator(_)))
         .getOrElse(ProcessOperator(RightCrossJoinProcess(proc1, proc2, rwOn)))
     case FullJoinOperator(rel1, rel2, on) =>
-      ProcessOperator(FullCrossJoinProcess(procRewrite(rel1), procRewrite(rel2), rewrite(on)))
+      val proc1 = procRewrite(rel1)
+      val proc2 = procRewrite(rel2)
+      val rwOn = rewrite(on)
+      tryHashJoin(proc1, proc2, rwOn, "FULL")
+        .map(ProcessOperator(_))
+        .getOrElse(ProcessOperator(FullCrossJoinProcess(proc1, proc2, rwOn)))
     case AliasOperator(rel, Ident(alias)) => ProcessOperator(AliasProcess(procRewrite(rel), alias))
     case ColumnAliasOperator(rel, Ident(alias), columns) =>
       ProcessOperator(ColumnAliasProcess(procRewrite(rel), alias, columns.map(_.name)))
@@ -574,6 +819,62 @@ private def columnOfMeta(meta: Metadata, expr: Expr): Option[String] =
     case ColumnExpr(Some(Ident(t)), Ident(name)) => if meta.columnMap.contains(s"$t.$name") then Some(name) else None
     case _                                       => None
 
+private def columnIndexOfMeta(meta: Metadata, expr: Expr): Option[Int] =
+  expr match
+    case ColumnExpr(None, Ident(name))           => meta.columnMap.get(name).map(_._1)
+    case ColumnExpr(Some(Ident(t)), Ident(name)) => meta.columnMap.get(s"$t.$name").map(_._1)
+    case _                                       => None
+
+private def tryHashJoin(
+    left: Process,
+    right: Process,
+    cond: Expr,
+    joinType: String,
+)(using Session): Option[Process] =
+  val conjuncts = flattenAnd(cond)
+  val leftMeta = left.meta
+  val rightMeta = right.meta
+
+  case class EquiPair(leftIdx: Int, rightIdx: Int, conjIdx: Int)
+
+  val equiPairs = mutable.ArrayBuffer[EquiPair]()
+  val otherIndices = mutable.Set[Int]()
+
+  conjuncts.zipWithIndex.foreach { case (conj, idx) =>
+    conj match
+      case BinaryExpr(l, "=", r) =>
+        val pair = for
+          li <- columnIndexOfMeta(leftMeta, l)
+          ri <- columnIndexOfMeta(rightMeta, r)
+        yield EquiPair(li, ri, idx)
+
+        pair.orElse {
+          for
+            ri <- columnIndexOfMeta(rightMeta, l)
+            li <- columnIndexOfMeta(leftMeta, r)
+          yield EquiPair(li, ri, idx)
+        } match
+          case Some(ep) => equiPairs += ep
+          case None     => otherIndices += idx
+      case _ =>
+        otherIndices += idx
+  }
+
+  if equiPairs.isEmpty then return None
+
+  val buildKeys = equiPairs.map(_.leftIdx).toSeq
+  val probeKeys = equiPairs.map(_.rightIdx).toSeq
+  val residualConj = conjuncts.zipWithIndex.collect { case (c, i) if otherIndices.contains(i) => c }
+  val residual = residualConj.reduceLeftOption((a, b) => BinaryExpr(a, "AND", b) setType BooleanType)
+
+  val proc = joinType match
+    case "INNER" => HashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "LEFT"  => LeftHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "RIGHT" => RightHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+    case "FULL"  => FullHashJoinProcess(left, right, buildKeys, probeKeys, residual)
+
+  Some(proc)
+
 private def tryIndexJoin(
     left: Process,
     right: Process,
@@ -684,5 +985,70 @@ private def tryIndexJoin(
       }
     else None
   }
+
+private def containsTableRef(name: String, expr: Expr): Boolean =
+  expr match
+    case TableOperator(Ident(n)) => n.equalsIgnoreCase(name)
+    case SQLSelectExpr(exprs, from, where, _, _, _, _, _, _) =>
+      from.exists(_.exists(containsTableRef(name, _))) ||
+        where.exists(containsTableRef(name, _)) ||
+        exprs.exists(containsTableRef(name, _))
+    case SetOperationExpr(_, left, right) =>
+      containsTableRef(name, left) || containsTableRef(name, right)
+    case AliasOperator(rel, _)                => containsTableRef(name, rel)
+    case ColumnAliasOperator(rel, _, _)       => containsTableRef(name, rel)
+    case CrossOperator(r1, r2)                => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case InnerJoinOperator(r1, r2, _)         => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case LeftJoinOperator(r1, r2, _)          => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case RightJoinOperator(r1, r2, _)         => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case FullJoinOperator(r1, r2, _)          => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case SubqueryExpr(q)                      => containsTableRef(name, q)
+    case CompoundQueryExpr(q, _, _, _)        => containsTableRef(name, q)
+    case WithExpr(ctes, q, _)                 => ctes.exists(c => containsTableRef(name, c.query)) || containsTableRef(name, q)
+    case _ => false
+
+private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
+  if cteMap.isEmpty then return expr
+
+  def sub(e: Expr): Expr =
+    val result: Expr = e match
+      case TableOperator(id @ Ident(name)) if cteMap.contains(name.toLowerCase) =>
+        val body = deepCopyExpr(cteMap(name.toLowerCase))
+        body match
+          case _: ColumnAliasOperator => body // already has alias from column-aliased CTE
+          case _ => AliasOperator(body, id)
+      case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+        SQLSelectExpr(
+          exprs.map(sub).to(scala.collection.immutable.ArraySeq),
+          from.map(_.map(sub)),
+          where.map(sub),
+          groupBy.map(_.map(sub)),
+          having.map(sub),
+          orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }),
+          offset, limit, distinct,
+        )
+      case CompoundQueryExpr(query, orderBy, offset, limit) =>
+        CompoundQueryExpr(sub(query), orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }), offset, limit)
+      case SetOperationExpr(op, left, right) => SetOperationExpr(op, sub(left), sub(right))
+      case WithExpr(ctes, query, recursive) =>
+        WithExpr(ctes.map(c => CTEDef(c.name, c.columns, sub(c.query))), sub(query), recursive)
+      case SubqueryExpr(query)         => SubqueryExpr(sub(query))
+      case ExistsExpr(query)           => ExistsExpr(sub(query))
+      case InQueryExpr(v, op, query)   => InQueryExpr(sub(v), op, sub(query))
+      case AliasOperator(rel, alias)   => AliasOperator(sub(rel), alias)
+      case ColumnAliasOperator(rel, alias, cols) => ColumnAliasOperator(sub(rel), alias, cols)
+      case CrossOperator(r1, r2)       => CrossOperator(sub(r1), sub(r2))
+      case InnerJoinOperator(r1, r2, on) => InnerJoinOperator(sub(r1), sub(r2), sub(on))
+      case LeftJoinOperator(r1, r2, on)  => LeftJoinOperator(sub(r1), sub(r2), sub(on))
+      case RightJoinOperator(r1, r2, on) => RightJoinOperator(sub(r1), sub(r2), sub(on))
+      case FullJoinOperator(r1, r2, on)  => FullJoinOperator(sub(r1), sub(r2), sub(on))
+      case LateralCrossOperator(r1, r2)  => LateralCrossOperator(sub(r1), sub(r2))
+      case LateralExpr(query)            => LateralExpr(sub(query))
+      case TableConstructorExpr(query)   => TableConstructorExpr(sub(query))
+      case _ => e
+    if e.pos != null && result.pos == null then result.setPos(e.pos)
+    result
+
+  sub(expr)
 
 def procRewrite(expr: Expr)(using session: Session): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

@@ -115,7 +115,7 @@ class PersistentBasicTests extends PersistentTestBase:
         executeSQL("INSERT INTO bs (name) VALUES ('c');")
         val table = executeSQL("SELECT id FROM bs ORDER BY id;").collect { case QueryResult(t) => t }.head
         table.data.length shouldBe 3
-        table.data(2).data(0) shouldBe NumberValue(3)
+        table.data(2).data(0) shouldBe NumberValue(io.github.edadma.dal.LongType, 3L: java.lang.Long)
         db.close()
       }
     }

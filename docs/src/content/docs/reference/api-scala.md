@@ -8,7 +8,7 @@ description: Scala API reference for PetraDB.
 Add to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.3.2"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.4.0"
 ```
 
 ## Package Structure
@@ -90,6 +90,8 @@ case class CreateTypeResult(typ: String)                            extends Resu
 case class DropTypeResult(name: String)                             extends Result
 case class CreateViewResult(name: String)                           extends Result
 case class DropViewResult(name: String)                             extends Result
+case class CreateSequenceResult(name: String)                       extends Result
+case class DropSequenceResult(name: String)                         extends Result
 case class UpdateResult(rows: Int)                                  extends Result
 case class DeleteResult(rows: Int)                                  extends Result
 case class TruncateResult(table: String)                            extends Result

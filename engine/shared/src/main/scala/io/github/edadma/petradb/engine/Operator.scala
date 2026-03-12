@@ -24,8 +24,29 @@ case class OffsetOperator(rel: Expr, offset: Int) extends Operator
 case class LimitOperator(rel: Expr, limit: Int) extends Operator
 case class DistinctOperator(rel: Expr) extends Operator
 
-case class AggregateSpec(name: String, func: AggregateFunctionInstance, args: Seq[Expr], typ: Type)
+case class AggregateSpec(name: String, func: AggregateFunctionInstance, args: Seq[Expr], typ: Type, filter: Option[Expr] = None)
 case class AggregateOperator(rel: Expr, groupBy: Seq[Expr], aggregates: Seq[AggregateSpec]) extends Operator
+
+sealed trait WindowFunctionKind
+case object RowNumberKind extends WindowFunctionKind
+case object RankKind extends WindowFunctionKind
+case object DenseRankKind extends WindowFunctionKind
+case class LagKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
+case class LeadKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
+case class NtileKind(buckets: Int) extends WindowFunctionKind
+case class AggregateWindowKind(func: AggregateFunction, args: Seq[Expr], filter: Option[Expr]) extends WindowFunctionKind
+
+sealed trait FrameBound
+case object UnboundedPreceding extends FrameBound
+case object UnboundedFollowing extends FrameBound
+case object CurrentRow extends FrameBound
+case class Preceding(n: Int) extends FrameBound
+case class Following(n: Int) extends FrameBound
+
+case class FrameSpec(start: FrameBound, end: FrameBound)
+
+case class WindowSpec(name: String, kind: WindowFunctionKind, partitionBy: Seq[Expr], orderBy: Seq[OrderBy], typ: Type, frame: Option[FrameSpec] = None)
+case class WindowOperator(rel: Expr, windows: Seq[WindowSpec]) extends Operator
 
 case class UnionOperator(rel1: Expr, rel2: Expr, all: Boolean) extends Operator
 case class IntersectOperator(rel1: Expr, rel2: Expr) extends Operator

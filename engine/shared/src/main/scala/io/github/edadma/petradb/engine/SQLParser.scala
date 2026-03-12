@@ -437,11 +437,40 @@ object SQLParser:
       case (loc, s, repl, start, None) => pos(loc, ApplyExpr(Ident("overlay"), Seq(s, repl, start)))
     }
 
-  // func(args...) — identifier ~ "(" ~ args ~ ")" => (Int, Ident, Seq[Expr])
+  private def frameBound[p: P]: P[FrameBound] =
+    P(kw("unbounded") ~ kw("preceding")).map(_ => UnboundedPreceding) |
+    P(kw("unbounded") ~ kw("following")).map(_ => UnboundedFollowing) |
+    P(kw("current") ~ kw("row")).map(_ => CurrentRow) |
+    P(intLit ~ kw("preceding")).map(n => Preceding(n)) |
+    P(intLit ~ kw("following")).map(n => Following(n))
+
+  private def intLit[p: P]: P[Int] = {
+    import NoWhitespace._
+    P(CharIn("0-9").rep(1).!).map(_.toInt)
+  }
+
+  private def frameClause[p: P]: P[FrameSpec] =
+    P(kw("rows") ~ kw("between") ~ frameBound ~ kw("and") ~ frameBound).map {
+      case (start, end) => FrameSpec(start, end)
+    }
+
+  private def windowSpecClause[p: P]: P[(Seq[Expr], Seq[OrderBy], Option[FrameSpec])] =
+    P((kw("partition") ~ kw("by") ~ expression.rep(1, sep = ",")).? ~
+      (kw("order") ~ kw("by") ~ orderByItem.rep(1, sep = ",")).? ~
+      frameClause.?).map {
+      case (partBy, ordBy, frame) => (partBy.map(_.toSeq).getOrElse(Nil), ordBy.map(_.toSeq).getOrElse(Nil), frame)
+    }
+
+  // func(args...) [FILTER (WHERE ...)] [OVER (...)]
   private def application[p: P]: P[Expr] =
-    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")").map((loc, f, as) =>
-      pos(loc, ApplyExpr(f, as))
-    )
+    P(Idx ~ identifier ~ "(" ~ (expression | star).rep(sep = ",") ~ ")" ~
+      (kw("filter") ~ "(" ~ kw("where") ~ expression ~ ")").? ~
+      (kw("over") ~ "(" ~ windowSpecClause ~ ")").?).map {
+      case (loc, f, as, filter, Some((partBy, ordBy, frame))) =>
+        pos(loc, WindowExpr(ApplyExpr(f, as, filter), partBy, ordBy, frame))
+      case (loc, f, as, filter, None) =>
+        pos(loc, ApplyExpr(f, as, filter))
+    }
 
   // table.column or just column — identifier ~ ("." ~ identifier).? => (Int, Ident, Option[Ident])
   private def column[p: P]: P[ColumnExpr] =
@@ -721,8 +750,10 @@ object SQLParser:
           case None | Some("ASC") => true
           case _ => false
         val nullsFirst = nulls match
-          case None | Some("FIRST") => true
-          case _ => false
+          case Some("FIRST") => true
+          case Some("LAST")  => false
+          case None          => !asc // SQL standard: ASC → NULLS LAST, DESC → NULLS FIRST
+          case _             => !asc
         OrderBy(e, asc, nullsFirst)
     }
 
@@ -842,12 +873,28 @@ object SQLParser:
       }
     }
 
-  // query = compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+  // ── CTE: WITH name [(cols)] AS (query) ────────────────────────────
+
+  private def cteDef[p: P]: P[CTEDef] =
+    P(Idx ~ ident ~ ("(" ~ ident.rep(1, sep = ",") ~ ")").? ~ kw("as") ~ "(" ~ query ~ ")").map {
+      case (loc, name, cols, q) =>
+        val id = Ident(name).setPos(mkPos(loc)).asInstanceOf[Ident]
+        CTEDef(id, cols.map(_.map(c => Ident(c).setPos(mkPos(loc)).asInstanceOf[Ident])), q)
+    }
+
+  private def withClause[p: P]: P[(Boolean, Seq[CTEDef])] =
+    P(kw("with") ~ kw("recursive").!.?.map(_.isDefined) ~ cteDef.rep(1, sep = ","))
+
+  // query = [WITH [RECURSIVE] ...] compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
   private def query[p: P]: P[Expr] =
-    P(compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
-      case (s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
-      case (s, None, None, None) => s
-      case (s, o, l, of) => CompoundQueryExpr(s, o, of, l)
+    P(withClause.? ~ compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
+      case (None, s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
+      case (None, s, None, None, None) => s
+      case (None, s, o, l, of) => CompoundQueryExpr(s, o, of, l)
+      case (Some((rec, ctes)), s: SQLSelectExpr, o, l, of) =>
+        WithExpr(ctes, s.copy(orderBy = o, limit = l, offset = of), rec)
+      case (Some((rec, ctes)), s, None, None, None) => WithExpr(ctes, s, rec)
+      case (Some((rec, ctes)), s, o, l, of) => WithExpr(ctes, CompoundQueryExpr(s, o, of, l), rec)
     }
 
   // ── DML: INSERT ────────────────────────────────────────────────────
@@ -961,6 +1008,7 @@ object SQLParser:
   private case class ColDefault(expr: Expr) extends ColConstraint
   private case class ColReferences(table: Ident, column: Ident, onDel: ReferentialAction, onUpd: ReferentialAction) extends ColConstraint
   private case class ColCheck(expr: Expr) extends ColConstraint
+  private case class ColGenerated(expr: Expr) extends ColConstraint
 
   private def colConstraint[p: P]: P[ColConstraint] =
     P(
@@ -969,6 +1017,7 @@ object SQLParser:
       | kw("null").map(_ => ColNull)
       | kw("unique").map(_ => ColUnique)
       | (kw("default") ~ expression).map(ColDefault(_))
+      | (kw("generated") ~ kw("always") ~ kw("as") ~ "(" ~ expression ~ ")" ~ kw("stored")).map(ColGenerated(_))
       | colReferences
       | (kw("check") ~ "(" ~ expression ~ ")").map(ColCheck(_))
     )
@@ -989,6 +1038,7 @@ object SQLParser:
       var default: Option[Expr] = None
       var references: Option[(Ident, Ident, ReferentialAction, ReferentialAction)] = None
       var check: Option[Expr] = None
+      var generated: Option[Expr] = None
 
       for c <- constraints do
         c match
@@ -1004,6 +1054,7 @@ object SQLParser:
             unique = true
           case ColDefault(expr) =>
             if default.isDefined then throw SchemaException(name.pos, s"duplicate DEFAULT clause on column '${name.name}'")
+            if generated.isDefined then throw SchemaException(name.pos, s"a generated column cannot have a DEFAULT on column '${name.name}'")
             default = Some(expr)
           case ColReferences(tbl, col, onDel, onUpd) =>
             if references.isDefined then throw SchemaException(name.pos, s"duplicate REFERENCES constraint on column '${name.name}'")
@@ -1011,8 +1062,12 @@ object SQLParser:
           case ColCheck(expr) =>
             if check.isDefined then throw SchemaException(name.pos, s"duplicate CHECK constraint on column '${name.name}'")
             check = Some(expr)
+          case ColGenerated(expr) =>
+            if generated.isDefined then throw SchemaException(name.pos, s"duplicate GENERATED ALWAYS AS clause on column '${name.name}'")
+            if default.isDefined then throw SchemaException(name.pos, s"a generated column cannot have a DEFAULT on column '${name.name}'")
+            generated = Some(expr)
 
-      ColumnDesc(name, t, required, unique, default, references, check, primaryKey)
+      ColumnDesc(name, t, required, unique, default, references, check, primaryKey, generated)
     }
 
   // ── DDL: CREATE/DROP VIEW ────────────────────────────────────────────
@@ -1086,6 +1141,56 @@ object SQLParser:
       | (kw("drop") ~ kw("type") ~ identifier ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
           case (name, cascade) => DropTypeCommand(name, false, cascade.getOrElse(false))
         }
+    )
+
+  // ── DDL: CREATE/DROP SEQUENCE ─────────────────────────────────────
+
+  private sealed trait SeqOption
+  private case class SeqIncrement(v: Long) extends SeqOption
+  private case class SeqMinValue(v: Option[Long]) extends SeqOption
+  private case class SeqMaxValue(v: Option[Long]) extends SeqOption
+  private case class SeqStart(v: Long) extends SeqOption
+  private case class SeqCycle(v: Boolean) extends SeqOption
+
+  private def seqOption[p: P]: P[SeqOption] =
+    P(
+      (kw("increment") ~ kw("by").? ~ signedLongLit).map(n => SeqIncrement(n))
+      | (kw("minvalue") ~ signedLongLit).map(n => SeqMinValue(Some(n)))
+      | (kw("no") ~ kw("minvalue")).map(_ => SeqMinValue(None))
+      | (kw("maxvalue") ~ signedLongLit).map(n => SeqMaxValue(Some(n)))
+      | (kw("no") ~ kw("maxvalue")).map(_ => SeqMaxValue(None))
+      | (kw("start") ~ kw("with").? ~ signedLongLit).map(n => SeqStart(n))
+      | kw("cycle").map(_ => SeqCycle(true))
+      | (kw("no") ~ kw("cycle")).map(_ => SeqCycle(false))
+    )
+
+  private def signedLongLit[p: P]: P[Long] =
+    P(("-".!.? ~ CharIn("0-9").rep(1).!).map { case (neg, digits) =>
+      val v = digits.toLong
+      if neg.isDefined then -v else v
+    })
+
+  private def createSequence[p: P]: P[Command] =
+    P(kw("create") ~ kw("sequence") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ identifier ~ seqOption.rep).map {
+      case (ine, name, opts) =>
+        var increment = 1L
+        var minValue: Option[Long] = None
+        var maxValue: Option[Long] = None
+        var startValue: Option[Long] = None
+        var cycle = false
+        for opt <- opts do opt match
+          case SeqIncrement(v) => increment = v
+          case SeqMinValue(v)  => minValue = v
+          case SeqMaxValue(v)  => maxValue = v
+          case SeqStart(v)     => startValue = Some(v)
+          case SeqCycle(v)     => cycle = v
+        CreateSequenceCommand(name, increment, minValue, maxValue, startValue, cycle, ine.isDefined)
+    }
+
+  private def dropSequence[p: P]: P[Command] =
+    P(
+      (kw("drop") ~ kw("sequence") ~ kw("if") ~ kw("exists") ~ identifier).map(name => DropSequenceCommand(name, true))
+      | (kw("drop") ~ kw("sequence") ~ identifier).map(name => DropSequenceCommand(name, false))
     )
 
   // ── DDL: ALTER TABLE ───────────────────────────────────────────────
@@ -1226,7 +1331,11 @@ object SQLParser:
     P(kw("show") ~ kw("foreign") ~ kw("keys") ~ tableIdent).map(ShowForeignKeysCommand(_))
   private def showIndexes[p: P]: P[Command] =
     P(kw("show") ~ kw("indexes") ~ tableIdent).map(ShowIndexesCommand(_))
-  private def showCmd[p: P]: P[Command] = P(showTables | showViews | showPrimaryKey | showForeignKeys | showIndexes | showColumns)
+  private def showSequences[p: P]: P[Command] =
+    P(kw("show") ~ kw("sequences")).map(_ => ShowSequencesCommand)
+  private def showAllIndexes[p: P]: P[Command] =
+    P(kw("show") ~ kw("indexes")).map(_ => ShowAllIndexesCommand)
+  private def showCmd[p: P]: P[Command] = P(showTables | showViews | showSequences | showPrimaryKey | showForeignKeys | showIndexes | showAllIndexes | showColumns)
 
   // ── Top-level command ──────────────────────────────────────────────
 
@@ -1248,7 +1357,7 @@ object SQLParser:
       .map { case (cmd, _) => DoBlockCommand(cmd) }
 
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createView | createTable | createIndex | createType | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
+    P(createSchema | createSequence | createView | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
     P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))

@@ -181,7 +181,7 @@ class ArrayDateFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT to_number('12345.67', '99999.99') FROM t;
           |""".trim.stripMargin
       )
-      val v = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val v = table.data(0).data(0).doubleValue
       v shouldBe 12345.67 +- 0.001
     }
   }

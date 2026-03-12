@@ -20,9 +20,9 @@ PetraDB follows PostgreSQL conventions for SQL syntax, identifier handling, and 
 | `SMALLINT` | 16-bit integer (-32768 to 32767) |
 | `INT` / `INTEGER` | 32-bit integer |
 | `BIGINT` | 64-bit integer |
-| `SMALLSERIAL` | Auto-incrementing 16-bit integer |
-| `SERIAL` | Auto-incrementing 32-bit integer |
-| `BIGSERIAL` | Auto-incrementing 64-bit integer |
+| `SMALLSERIAL` | Auto-incrementing 16-bit integer (creates backing sequence) |
+| `SERIAL` | Auto-incrementing 32-bit integer (creates backing sequence) |
+| `BIGSERIAL` | Auto-incrementing 64-bit integer (creates backing sequence) |
 | `DOUBLE` / `FLOAT` / `REAL` | Double-precision floating point |
 | `NUMERIC(p,s)` / `DECIMAL(p,s)` | Fixed-precision decimal |
 | `TEXT` | Variable-length string |

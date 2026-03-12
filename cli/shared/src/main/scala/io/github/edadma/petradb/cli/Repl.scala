@@ -31,6 +31,10 @@ abstract class Repl(val session: petradb.Session):
         executeSql("SHOW TABLES;")(onDone(true))
       case MetaCommand.ListViews =>
         executeSql("SHOW VIEWS;")(onDone(true))
+      case MetaCommand.ListSequences =>
+        executeSql("SHOW SEQUENCES;")(onDone(true))
+      case MetaCommand.ListIndexes =>
+        executeSql("SHOW INDEXES;")(onDone(true))
       case MetaCommand.DescribeTable(name) =>
         executeSql(s"SHOW COLUMNS FROM $name;")(onDone(true))
       case MetaCommand.Include(path) =>
@@ -48,7 +52,7 @@ abstract class Repl(val session: petradb.Session):
         onDone(true)
       case MetaCommand.Unknown(cmd) =>
         println(s"Unknown command: $cmd")
-        println("Available: \\copy <args>  \\d <table>  \\dt  \\dump  \\dv  \\i <file>  \\q  \\timing")
+        println("Available: \\copy <args>  \\d <table>  \\di  \\ds  \\dt  \\dump  \\dv  \\i <file>  \\q  \\timing")
         onDone(true)
 
   def collectAndExecute(first: String, readLine: String => Option[String])(onDone: => Unit): Unit =

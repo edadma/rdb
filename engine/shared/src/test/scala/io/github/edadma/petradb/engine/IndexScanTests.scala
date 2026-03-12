@@ -65,7 +65,7 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
         |""".stripMargin,
     )
     t.data.length shouldBe 3
-    val prices = t.data.map(_.data(1).asInstanceOf[NumberValue].value.intValue).toSet
+    val prices = t.data.map(_.data(1).intValue).toSet
     prices shouldBe Set(20, 30, 40)
   }
 
@@ -88,7 +88,7 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
     )
     t.data.length shouldBe 2
     t.data.foreach(row => row.data(1) shouldBe TextValue("A"))
-    val prices = t.data.map(_.data(2).asInstanceOf[NumberValue].value.intValue).toSet
+    val prices = t.data.map(_.data(2).intValue).toSet
     prices shouldBe Set(50, 20)
   }
 
@@ -181,7 +181,7 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
     )
     val qr = r.collect { case QueryResult(t) => t }.last
     qr.data.length shouldBe 2
-    val ids = qr.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue).toSet
+    val ids = qr.data.map(_.data(0).intValue).toSet
     ids shouldBe Set(1, 3)
   }
 
@@ -276,7 +276,7 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
         |""".stripMargin,
     )
     t.data.length shouldBe 1
-    t.data.head.data(0).asInstanceOf[NumberValue].value.intValue shouldBe 500
+    t.data.head.data(0).intValue shouldBe 500
   }
 
   "composite full match on unique index" in {
@@ -476,7 +476,7 @@ class IndexScanTests extends AnyFreeSpec with Matchers with Testing {
         |""".stripMargin,
     )
     t.data.length shouldBe 2
-    val results = t.data.map(r => (r.data(0).asInstanceOf[TextValue].s, r.data(1).asInstanceOf[NumberValue].value.intValue)).toSet
+    val results = t.data.map(r => (r.data(0).asInstanceOf[TextValue].s, r.data(1).intValue)).toSet
     results shouldBe Set(("blue", 20), ("red", 30))
   }
 

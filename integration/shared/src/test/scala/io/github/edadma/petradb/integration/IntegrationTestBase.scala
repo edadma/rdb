@@ -89,7 +89,7 @@ trait IntegrationTestBase extends AsyncFreeSpec with Matchers:
         results <- session.execute("SELECT COUNT(*) FROM t")
       yield
         val count = results.head.asInstanceOf[QueryResult].table.data(0).data(0)
-        count.asInstanceOf[NumberValue].value.intValue shouldBe 2
+        count.intValue shouldBe 2
     }
 
     "transaction commit" in withConnectedSession { (session, _) =>
@@ -131,7 +131,7 @@ trait IntegrationTestBase extends AsyncFreeSpec with Matchers:
           _       <- session2.execute("INSERT INTO t VALUES (2, 'from-session-2')")
           r2      <- session1.execute("SELECT COUNT(*) FROM t")
           count    = r2.head.asInstanceOf[QueryResult].table.data(0).data(0)
-        yield count.asInstanceOf[NumberValue].value.intValue shouldBe 2
+        yield count.intValue shouldBe 2
 
         test
           .flatMap { result =>

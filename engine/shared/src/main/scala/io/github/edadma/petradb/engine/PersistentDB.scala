@@ -10,6 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 private case class PersistentSnapshot(
     catalog: CatalogSnapshot,
     tableState: Map[String, (PageId, PageId, Map[String, Value], Map[String, (TableIndex, Long)])],
+    sequenceStateSnap: Map[String, (Long, Boolean)],
 )
 
 class PersistentDB private (val store: FilePageStore) extends DB:
@@ -30,9 +31,11 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       }.toMap
       n -> (pt.firstDataPage, pt.headerPage, pt.autoMap.toMap, idxSnap)
     }.toMap
+    val seqSnap = sequences.map { (n, s) => n -> s.stateSnapshot() }.toMap
     val snap = PersistentSnapshot(
       catalog = takeCatalogSnapshot(),
       tableState = tableStatSnap,
+      sequenceStateSnap = seqSnap,
     )
     val handle = new PersistentTransactionHandle(snap)
     pendingTxnHandle = Some(handle)
@@ -73,6 +76,20 @@ class PersistentDB private (val store: FilePageStore) extends DB:
           pidx.nextRowId = nextRowId
           t.tableIndexes(iName) = idx
       }
+
+    // Restore sequence state
+    for (n, statSnap) <- snap.sequenceStateSnap do
+      sequences.get(n).foreach(_.restoreState(statSnap))
+
+    // Restore backing sequence references for tables
+    for (_, t) <- tables do
+      t.backingSequences.clear()
+    for (seqName, seq) <- sequences do
+      for
+        tableName <- seq.ownedByTable
+        colName <- seq.ownedByColumn
+        table <- tables.get(resolveKey(tableName))
+      do table.backingSequences(colName) = seq
 
     pendingTxnHandle = None
 
@@ -159,6 +176,24 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     super.dropView(name)
     persistCatalog()
 
+  override def createSequence(
+      name: String,
+      increment: Long,
+      minValue: Long,
+      maxValue: Long,
+      startValue: Option[Long],
+      cycle: Boolean,
+      ownedByTable: Option[String] = None,
+      ownedByColumn: Option[String] = None,
+  ): Sequence =
+    val seq = super.createSequence(name, increment, minValue, maxValue, startValue, cycle, ownedByTable, ownedByColumn)
+    persistCatalog()
+    seq
+
+  override def dropSequence(name: String): Unit =
+    super.dropSequence(name)
+    persistCatalog()
+
   private def createPersistentIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, batch: WriteBatch): Unit =
     val table = tables(resolveKey(tableName))
     val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
@@ -224,7 +259,10 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       CatalogIndexEntry(meta.name, meta.tableName, meta.columns, meta.unique, meta.treeRecordPage, meta.nextRowId)
     }
 
-    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq)
+    val seqEntries = sequences.values.map { s =>
+      CatalogSequenceEntry(s.name, s.currentValue, s.increment, s.minValue, s.maxValue, s.startValue, s.cycle, s.called, s.ownedByTable, s.ownedByColumn)
+    }
+    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq, seqEntries)
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
@@ -238,13 +276,18 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     // Read catalog chain — we need to figure out the total length
     // Read the catalog data using a page-walking approach
     val catalogBytes = readCatalogChain(metaRoot)
-    val (enums, tableEntries, indexEntries, viewEntries) = deserializeCatalog(catalogBytes, store)
+    val (enums, tableEntries, indexEntries, viewEntries, seqEntries) = deserializeCatalog(catalogBytes, store)
 
     // Restore enum types
     for (eName, eType) <- enums do types(eName) = eType
 
     // Restore views
     for (vName, vSql) <- viewEntries do views(vName) = vSql
+
+    // Restore sequences
+    for entry <- seqEntries do
+      val seq = new Sequence(entry.name, entry.currentValue, entry.increment, entry.minValue, entry.maxValue, entry.startValue, entry.cycle, entry.called, entry.ownedByTable, entry.ownedByColumn)
+      sequences(entry.name) = seq
 
     // Restore tables
     for entry <- tableEntries do
@@ -255,6 +298,9 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       table.firstDataPage = fdp
       table.restoreAutoState(autoState)
       tables(entry.name) = table
+      // Restore backing sequence references for SERIAL columns
+      for seq <- sequences.values if seq.ownedByTable.map(resolveKey).contains(entry.name) do
+        seq.ownedByColumn.foreach(col => table.backingSequences(col) = seq)
 
     // Restore indexes
     for entry <- indexEntries do
@@ -356,6 +402,8 @@ class PersistentTable(
           addRowInBatch(row, batch, openIndexTrees(batch))
           if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
             writeHeaderPage(batch)
+          if backingSequences.nonEmpty then
+            db.writeCatalogInBatch(batch)
         }
 
   override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
@@ -370,6 +418,8 @@ class PersistentTable(
       finally bulkBatch = None
       if autoMap.nonEmpty || firstDataPage != oldFirstDataPage then
         writeHeaderPage(batch)
+      if backingSequences.nonEmpty then
+        db.writeCatalogInBatch(batch)
     }
     result
 
@@ -656,7 +706,13 @@ class PersistentTable(
         for key <- allKeys do tree.delete(key)
         tableIndexes(idxName) = PersistentTableIndex(pidx.meta.copy(nextRowId = 0), pidx.columnIndices, 0L)
       autoMap.clear()
+      // Reset backing sequences to their start values
+      for (_, seq) <- backingSequences do
+        seq.currentValue = 0
+        seq.called = false
       writeHeaderPage(batch)
+      if backingSequences.nonEmpty then
+        db.writeCatalogInBatch(batch)
     }
 
 
