@@ -11,12 +11,51 @@ import scala.concurrent.{Future, ExecutionContext}
 trait TransactionHandle
 object NoOpTransactionHandle extends TransactionHandle
 
+class Sequence(
+    val name: String,
+    var currentValue: Long,
+    val increment: Long = 1,
+    val minValue: Long = 1,
+    val maxValue: Long = Long.MaxValue / 2,
+    val startValue: Long = 1,
+    val cycle: Boolean = false,
+    var called: Boolean = false,
+    val ownedByTable: Option[String] = None,
+    val ownedByColumn: Option[String] = None,
+):
+  def nextval(): Long =
+    if !called then
+      called = true
+      if currentValue == 0 then currentValue = startValue
+      // else: setval(v, false) was called, keep currentValue as-is
+    else
+      currentValue += increment
+      if increment > 0 && currentValue > maxValue then
+        if cycle then currentValue = minValue
+        else sys.error(s"nextval: reached maximum value of sequence \"$name\" ($maxValue)")
+      else if increment < 0 && currentValue < minValue then
+        if cycle then currentValue = maxValue
+        else sys.error(s"nextval: reached minimum value of sequence \"$name\" ($minValue)")
+    currentValue
+
+  def setval(value: Long, isCalled: Boolean = true): Long =
+    currentValue = value
+    called = isCalled
+    value
+
+  def stateSnapshot(): (Long, Boolean) = (currentValue, called)
+
+  def restoreState(snap: (Long, Boolean)): Unit =
+    currentValue = snap._1
+    called = snap._2
+
 case class CatalogSnapshot(
     tablesSnap: Map[String, Table],
     indexesSnap: Map[String, IndexMeta],
     viewsSnap: Map[String, String],
     typesSnap: Map[String, Type],
     schemasSnap: Set[String],
+    sequencesSnap: Map[String, Sequence] = Map.empty,
 )
 
 abstract class DB:
@@ -27,6 +66,7 @@ abstract class DB:
   protected[petradb] val types = new mutable.HashMap[String, Type]
   protected[petradb] val indexes = new mutable.HashMap[String, IndexMeta]
   protected val views = new mutable.HashMap[String, String] // name -> SQL
+  protected[petradb] val sequences = new mutable.HashMap[String, Sequence]
   protected[petradb] val schemas = new mutable.LinkedHashSet[String]
   schemas += "public"
 
@@ -159,12 +199,39 @@ abstract class DB:
 
   def viewNames: Iterable[String] = views.keys.map(_.split('.').last)
 
+  // ── Sequence management ──────────────────────────────────────────
+
+  def createSequence(
+      name: String,
+      increment: Long = 1,
+      minValue: Long = 1,
+      maxValue: Long = Long.MaxValue / 2,
+      startValue: Option[Long] = None,
+      cycle: Boolean = false,
+      ownedByTable: Option[String] = None,
+      ownedByColumn: Option[String] = None,
+  ): Sequence =
+    require(!sequences.contains(name), s"sequence '$name' already exists")
+    val start = startValue.getOrElse(if increment > 0 then minValue else maxValue)
+    val seq = new Sequence(name, 0, increment, minValue, maxValue, start, cycle, false, ownedByTable, ownedByColumn)
+    sequences(name) = seq
+    onMutation()
+    seq
+
+  def dropSequence(name: String): Unit =
+    sequences.remove(name)
+    onMutation()
+
+  def hasSequence(name: String): Boolean = sequences.contains(name)
+
+  def getSequence(name: String): Option[Sequence] = sequences.get(name)
+
   def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
 
   def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
     val t = tables(resolveKey(name))
     alteration match
-      case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _)) =>
+      case AddColumnTableAlteration(ColumnDesc(cid @ Ident(colName), typeDesc, required, unique, default, references, _, _, _)) =>
         if t.hasColumn(colName) then throw SchemaException(cid.pos, s"column '$colName' already exists")
         val typ = typeDesc match
           case Left(primitive)             => primitive
@@ -232,6 +299,7 @@ abstract class DB:
       viewsSnap = views.toMap,
       typesSnap = types.toMap,
       schemasSnap = schemas.toSet,
+      sequencesSnap = sequences.toMap,
     )
 
   protected def restoreCatalog(snap: CatalogSnapshot): Unit =
@@ -240,6 +308,7 @@ abstract class DB:
     views.clear(); views ++= snap.viewsSnap
     types.clear(); types ++= snap.typesSnap
     schemas.clear(); schemas ++= snap.schemasSnap
+    sequences.clear(); sequences ++= snap.sequencesSnap
 
   def snapshot(): TransactionHandle = NoOpTransactionHandle
   def commitSnapshot(handle: TransactionHandle): Unit = ()
@@ -366,6 +435,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   protected[petradb] val columns   = new ArrayBuffer[ColumnSpec]
   protected[petradb] val columnMap  = new mutable.HashMap[String, Int]
   protected[petradb] val autoMap   = new mutable.HashMap[String, Value]
+  private[engine] val backingSequences = new mutable.HashMap[String, Sequence]
   private var _meta: Metadata = Metadata(Vector.empty)
   protected[petradb] var primaryKey: Option[PrimaryKeySpec] = None
   protected[petradb] val constraints                       = new ArrayBuffer[Spec]
@@ -403,18 +473,29 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 //
 //  def rows: Int = data.length
 
+  // Optional callback for sequence tracking (set by executeSQL to update session state)
+  var onSequenceUsed: Option[(String, Long) => Unit] = None
+
   def auto(col: String): Value =
-    autoMap get col match
+    backingSequences.get(col) match
+      case Some(seq) =>
+        val n = seq.nextval()
+        onSequenceUsed.foreach(_(seq.name, n))
+        val v = columns(columnMap(col)).typ match
+          case BigSerialType => NumberValue(io.github.edadma.dal.LongType, n: java.lang.Long)
+          case _             => NumberValue(n.toInt)
+        autoMap(col) = v
+        v
       case None =>
-        val first = columns(columnMap(col)).typ.init
-
-        autoMap(col) = first
-        first
-      case Some(cur) =>
-        val next = cur.next
-
-        autoMap(col) = next
-        next
+        autoMap get col match
+          case None =>
+            val first = columns(columnMap(col)).typ.init
+            autoMap(col) = first
+            first
+          case Some(cur) =>
+            val next = cur.next
+            autoMap(col) = next
+            next
 
   protected[engine] def restoreAutoState(state: Map[String, Value]): Unit = autoMap ++= state
 
@@ -514,15 +595,28 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
 
   protected def addRow(row: Seq[Value]): Unit
 
+  // Precompute generated column info: (index, parsed expression)
+  private lazy val generatedColumns: Seq[(Int, Expr)] =
+    columns.zipWithIndex.collect { case (spec, idx) if spec.generated.isDefined => (idx, spec.generated.get._2) }.toSeq
+
+  // Set of generated column names (cannot be explicitly inserted or updated)
+  private lazy val generatedSet: Set[String] =
+    columns.filter(_.generated.isDefined).map(_.name).toSet
+
   def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
     require(headerSet subsetOf columnSet, s"unknown columns: ${headerSet diff columnSet mkString ", "}")
 
+    // Reject explicit values for generated columns
+    val explicitGenerated = headerSet intersect generatedSet
+    if explicitGenerated.nonEmpty then
+      sys.error(s"cannot insert a value into generated column: ${explicitGenerated.mkString(", ")}")
+
     val missingSet = columnSet diff headerSet
     val missing    =
-      for (m <- missingSet diff autoSet)
+      for (m <- (missingSet diff autoSet) diff generatedSet)
         yield
           val idx = columnMap(m)
           val s   = columns(idx)
@@ -561,6 +655,13 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
             c -> v
 
       result = newAutos.toMap
+
+      // Compute generated columns using current row values
+      if generatedColumns.nonEmpty then
+        val row = Row(arr.toIndexedSeq, meta, None, None)
+        for (idx, expr) <- generatedColumns do
+          val v = eval(expr, Seq(row))
+          arr(idx) = columns(idx).typ.convert(v)
 
       // Enforce NOT NULL for PRIMARY KEY columns
       primaryKey.foreach { pk =>
@@ -612,7 +713,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
         case OverlapsExpr(a, b, c, d)          => countInExpr(a) ++ countInExpr(b) ++ countInExpr(c) ++ countInExpr(d)
         case CaseExpr(whens, els) =>
           whens.flatMap { case When(w, e) => countInExpr(w) ++ countInExpr(e) } ++ els.toSeq.flatMap(countInExpr)
-        case ApplyExpr(_, args)                => args.flatMap(countInExpr)
+        case ApplyExpr(_, args, filter)        => args.flatMap(countInExpr) ++ filter.toSeq.flatMap(countInExpr)
         case InSeqExpr(v, _, es)               => countInExpr(v) ++ es.flatMap(countInExpr)
         case InQueryExpr(v, _, q)              => countInExpr(v) ++ countInExpr(q)
         case SubqueryExpr(q)                   => countInExpr(q)
@@ -647,6 +748,7 @@ case class ColumnSpec(
     unique: Boolean = false,
     fk: Option[(String, String, ReferentialAction, ReferentialAction)] = None,
     default: Option[Value] = None,
+    generated: Option[(String, Expr)] = None, // (SQL source, parsed expression) for GENERATED ALWAYS AS columns
 ) extends Spec
 
 // Table-level constraint specifications

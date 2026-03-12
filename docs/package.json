@@ -29,7 +29,7 @@
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.15",
     "@edadma/table": "^0.0.4",
-    "@petradb/engine": "^1.2.0",
+    "@petradb/engine": "^1.3.4",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@xterm/addon-fit": "^0.10.0",

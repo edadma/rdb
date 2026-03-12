@@ -78,6 +78,24 @@ CREATE TABLE line_items (
 );
 ```
 
+### Generated Columns
+
+Computed columns that are automatically derived from other columns:
+
+```sql
+CREATE TABLE products (
+  price NUMERIC,
+  tax_rate NUMERIC DEFAULT 0.08,
+  total NUMERIC GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+);
+
+INSERT INTO products (price) VALUES (100);
+SELECT * FROM products;
+-- price: 100, tax_rate: 0.08, total: 108
+```
+
+Generated columns are recomputed on INSERT and UPDATE. They cannot be written to directly.
+
 ### ALTER TABLE
 
 ```sql
@@ -139,6 +157,59 @@ CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
 DROP TYPE order_status CASCADE;
 ```
 
+## Sequences
+
+Sequences are named counters that generate sequential numeric values. They are commonly used for primary key generation.
+
+### CREATE SEQUENCE
+
+```sql
+CREATE SEQUENCE order_seq;
+CREATE SEQUENCE order_seq START WITH 100 INCREMENT BY 10;
+CREATE SEQUENCE IF NOT EXISTS order_seq;
+```
+
+Options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `INCREMENT BY n` | 1 | Step size |
+| `START WITH n` | 1 | Initial value |
+| `MINVALUE n` / `NO MINVALUE` | 1 | Minimum value |
+| `MAXVALUE n` / `NO MAXVALUE` | 4611686018427387903 | Maximum value |
+| `CYCLE` / `NO CYCLE` | `NO CYCLE` | Whether to wrap around at limits |
+
+### DROP SEQUENCE
+
+```sql
+DROP SEQUENCE order_seq;
+DROP SEQUENCE IF EXISTS order_seq;
+```
+
+### SERIAL and Sequences
+
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns automatically create a backing sequence named `<table>_<column>_seq`. This matches PostgreSQL behavior:
+
+```sql
+CREATE TABLE orders (id SERIAL PRIMARY KEY, name TEXT);
+-- Implicitly creates sequence "orders_id_seq"
+
+SELECT nextval('orders_id_seq');   -- works
+SELECT currval('orders_id_seq');   -- works after INSERT or nextval
+```
+
+Dropping the table cascades to drop its owned sequences. `TRUNCATE` resets backing sequences to their start values.
+
+### Sequence Functions
+
+| Function | Description |
+|----------|-------------|
+| `nextval('seq_name')` | Advance and return next value |
+| `currval('seq_name')` | Return current value (must call nextval first in session) |
+| `setval('seq_name', value)` | Set current value; next nextval returns value + increment |
+| `setval('seq_name', value, false)` | Set current value; next nextval returns value |
+| `lastval()` | Return last value from any sequence in this session |
+
 ## Indexes
 
 ```sql
@@ -154,10 +225,12 @@ Inspect database metadata:
 ```sql
 SHOW TABLES;
 SHOW VIEWS;
+SHOW SEQUENCES;
 SHOW COLUMNS orders;
 SHOW PRIMARY KEY orders;
 SHOW FOREIGN KEYS orders;
 SHOW INDEXES orders;
+SHOW INDEXES;              -- all indexes across all tables
 ```
 
 ### SHOW VIEWS output

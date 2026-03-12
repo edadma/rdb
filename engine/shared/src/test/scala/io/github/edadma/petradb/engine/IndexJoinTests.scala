@@ -5,34 +5,7 @@ import io.github.edadma.petradb.{Session as _, *}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-class IndexJoinTests extends AnyFreeSpec with Matchers:
-
-  private def setupSession(sql: String): Session =
-    given session: Session = new MemoryDB().connect()
-    executeSQL(sql)
-    session
-
-  private def findProcess[T](proc: Process)(pf: PartialFunction[Process, T]): Option[T] =
-    if pf.isDefinedAt(proc) then Some(pf(proc))
-    else
-      proc match
-        case p: ProjectProcess                    => findProcess(p.input)(pf)
-        case p: SeqScanProcess                    => findProcess(p.input)(pf)
-        case p: SortProcess                       => findProcess(p.input)(pf)
-        case p: AggregateProcess                  => findProcess(p.input)(pf)
-        case p: TakeProcess                       => findProcess(p.input)(pf)
-        case _: DropProcess                       => None
-        case p: DistinctProcess                   => findProcess(p.input)(pf)
-        case p: HavingProcess                     => findProcess(p.input)(pf)
-        case p: AliasProcess                      => findProcess(p.input)(pf)
-        case p: ColumnAliasProcess                => findProcess(p.input)(pf)
-        case p: CrossProcess                      => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: LeftCrossJoinProcess              => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: RightCrossJoinProcess             => findProcess(p.input1)(pf).orElse(findProcess(p.input2)(pf))
-        case p: IndexNestedLoopJoinProcess        => findProcess(p.outer)(pf)
-        case p: LeftIndexNestedLoopJoinProcess    => findProcess(p.outer)(pf)
-        case p: RightIndexNestedLoopJoinProcess   => findProcess(p.outer)(pf)
-        case _                                    => None
+class IndexJoinTests extends AnyFreeSpec with Matchers with Testing:
 
   val setup: String =
     """
@@ -118,7 +91,7 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
       salesRow.data(0).isNull shouldBe true
     }
 
-    "falls back to cross product without index" in {
+    "falls back to hash join without index" in {
       given session: Session = setupSession(
         """
           |CREATE TABLE t1 (a INT, b TEXT);
@@ -129,7 +102,7 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
       val proc = procRewrite(SQLParser.parseQuery(
         "SELECT * FROM t1 JOIN t2 ON t1.a = t2.x"))
       findProcess(proc) { case _: IndexNestedLoopJoinProcess => true } shouldBe None
-      findProcess(proc) { case _: CrossProcess => true } shouldBe defined
+      findProcess(proc) { case _: HashJoinProcess => true } shouldBe defined
     }
 
     "INNER JOIN swaps sides when left is indexed" in {
@@ -151,5 +124,47 @@ class IndexJoinTests extends AnyFreeSpec with Matchers:
       data.length shouldBe 2
       data(0).data(0) shouldBe TextValue("Alice")
       data(1).data(0) shouldBe TextValue("Bob")
+    }
+  }
+
+  "findProcess recursion" - {
+
+    "recurses through WindowProcess to find HashJoinProcess inside" in {
+      given session: Session = setupSession(
+        """
+          |CREATE TABLE t1 (a INT, b TEXT);
+          |CREATE TABLE t2 (x INT, y TEXT);
+          |INSERT INTO t1 (a, b) VALUES (1, 'one');
+          |INSERT INTO t2 (x, y) VALUES (1, 'uno');
+          |""".trim.stripMargin)
+      val proc = procRewrite(SQLParser.parseQuery(
+        "SELECT t1.b, ROW_NUMBER() OVER (ORDER BY t1.a) FROM t1 JOIN t2 ON t1.a = t2.x"))
+      findProcess(proc) { case _: HashJoinProcess => true } shouldBe defined
+    }
+
+    "recurses through FullCrossJoinProcess to find Table on input1 side" in {
+      given session: Session = setupSession(
+        """
+          |CREATE TABLE left_t (a INT);
+          |CREATE TABLE right_t (x INT);
+          |INSERT INTO left_t (a) VALUES (1);
+          |INSERT INTO right_t (x) VALUES (1);
+          |""".trim.stripMargin)
+      val proc = procRewrite(SQLParser.parseQuery(
+        "SELECT * FROM left_t FULL JOIN right_t ON left_t.a > right_t.x"))
+      findProcess(proc) { case t: Table if t.name == "left_t" => t } shouldBe defined
+    }
+
+    "recurses through FullCrossJoinProcess to find Table on input2 side" in {
+      given session: Session = setupSession(
+        """
+          |CREATE TABLE left_t (a INT);
+          |CREATE TABLE right_t (x INT);
+          |INSERT INTO left_t (a) VALUES (1);
+          |INSERT INTO right_t (x) VALUES (1);
+          |""".trim.stripMargin)
+      val proc = procRewrite(SQLParser.parseQuery(
+        "SELECT * FROM left_t FULL JOIN right_t ON left_t.a > right_t.x"))
+      findProcess(proc) { case t: Table if t.name == "right_t" => t } shouldBe defined
     }
   }

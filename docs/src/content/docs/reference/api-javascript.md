@@ -109,6 +109,8 @@ Every result has a `command` field for discrimination:
 { command: 'alter table' }
 { command: 'create view', view: string }
 { command: 'drop view', view: string }
+{ command: 'create sequence', sequence: string }
+{ command: 'drop sequence', sequence: string }
 
 // Query plan
 { command: 'explain', plan: string }

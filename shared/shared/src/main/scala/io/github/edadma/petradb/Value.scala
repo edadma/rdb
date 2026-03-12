@@ -15,6 +15,18 @@ trait Value(val vtyp: Type) extends Positional with Ordered[Value]:
 
   def string: String
 
+  private def asNumber: NumberValue = this match
+    case n: NumberValue => n
+    case _ => throw TypeException(pos, s"expected a number, got ${vtyp.name}")
+
+  def intValue: Int       = asNumber.value.intValue
+  def longValue: Long     = asNumber.value.longValue
+  def doubleValue: Double = asNumber.value.doubleValue
+  def floatValue: Float   = asNumber.value.floatValue
+  def shortValue: Short   = asNumber.value.shortValue
+  def byteValue: Byte     = asNumber.value.byteValue
+  def number: Number      = asNumber.value
+
   infix def compare(that: Value): Int =
     if this.isNull && that.isNull then 0
     else if this.isNull then -1

@@ -112,7 +112,7 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       // AVG of 10,30 = 20 (not 10+30/3=13.3)
-      val avg = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val avg = table.data(0).data(0).doubleValue
       avg shouldBe 20.0
     }
 
@@ -348,6 +348,71 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0) shouldBe NumberValue(DIntType, 1)
       table.data(1).data(0) shouldBe NumberValue(DIntType, 3)
       table.data(2).data(0).isNull shouldBe true
+    }
+
+    "ASC defaults to NULLS LAST (SQL standard)" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (3), (NULL), (1);
+          |SELECT val FROM t ORDER BY val ASC;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 1)
+      table.data(1).data(0) shouldBe NumberValue(DIntType, 3)
+      table.data(2).data(0).isNull shouldBe true
+    }
+
+    "DESC defaults to NULLS FIRST (SQL standard)" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (3), (NULL), (1);
+          |SELECT val FROM t ORDER BY val DESC;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+      table.data(1).data(0) shouldBe NumberValue(DIntType, 3)
+      table.data(2).data(0) shouldBe NumberValue(DIntType, 1)
+    }
+
+    "implicit ORDER BY (no ASC/DESC) defaults to NULLS LAST" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (3), (NULL), (1);
+          |SELECT val FROM t ORDER BY val;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 1)
+      table.data(1).data(0) shouldBe NumberValue(DIntType, 3)
+      table.data(2).data(0).isNull shouldBe true
+    }
+
+    "DESC NULLS LAST overrides default" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (3), (NULL), (1);
+          |SELECT val FROM t ORDER BY val DESC NULLS LAST;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(DIntType, 3)
+      table.data(1).data(0) shouldBe NumberValue(DIntType, 1)
+      table.data(2).data(0).isNull shouldBe true
+    }
+
+    "ASC NULLS FIRST overrides default" in {
+      val table = query(
+        """
+          |CREATE TABLE t (val INT);
+          |INSERT INTO t (val) VALUES (3), (NULL), (1);
+          |SELECT val FROM t ORDER BY val ASC NULLS FIRST;
+          |""".trim.stripMargin
+      )
+      table.data(0).data(0).isNull shouldBe true
+      table.data(1).data(0) shouldBe NumberValue(DIntType, 1)
+      table.data(2).data(0) shouldBe NumberValue(DIntType, 3)
     }
   }
 

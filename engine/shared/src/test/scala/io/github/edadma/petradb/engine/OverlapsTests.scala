@@ -80,7 +80,7 @@ class OverlapsTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin,
       )
 
-      val ids = table.data.map(_.data(0).asInstanceOf[NumberValue].value)
+      val ids = table.data.map(_.data(0).number)
       ids shouldBe Vector(1, 3)
     }
 

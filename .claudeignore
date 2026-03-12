@@ -44,8 +44,13 @@ changelog.md
 .DS_Store
 **/.DS_Store
 
-# Docs build output and content
-docs/
+# Keep docs content, exclude build infrastructure
+docs/dist/
+docs/.astro/
+docs/src/styles/
+docs/astro.config.mjs
+docs/tsconfig.json
+docs/package.json
 
 # Test files
 **/src/test/
@@ -56,3 +61,6 @@ docs/
 
 # Large generated lock/config files in nested npm packages
 knex/npm/package-lock.json
+
+# Accidentally included reference documents
+*.html

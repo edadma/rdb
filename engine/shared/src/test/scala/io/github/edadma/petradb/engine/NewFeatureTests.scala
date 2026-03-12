@@ -13,17 +13,17 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
   "power operator (^)" - {
     "computes 2^3 = 8" in {
       val table = query("SELECT 2 ^ 3")
-      table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue shouldBe 8.0
+      table.data(0).data(0).doubleValue shouldBe 8.0
     }
 
     "respects precedence: 2*3^2 = 18" in {
       val table = query("SELECT 2 * 3 ^ 2")
-      table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue shouldBe 18.0
+      table.data(0).data(0).doubleValue shouldBe 18.0
     }
 
     "fractional exponent: 9^0.5 = 3.0" in {
       val table = query("SELECT 9 ^ 0.5")
-      table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue shouldBe 3.0
+      table.data(0).data(0).doubleValue shouldBe 3.0
     }
   }
 
@@ -37,7 +37,7 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT random() AS r1;
           |""".trim.stripMargin
       )
-      val r1 = table.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val r1 = table.data(0).data(0).doubleValue
 
       val table2 = query(
         """
@@ -45,7 +45,7 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT random() AS r1;
           |""".trim.stripMargin
       )
-      val r2 = table2.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue
+      val r2 = table2.data(0).data(0).doubleValue
 
       r1 shouldBe r2
     }
@@ -56,7 +56,7 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
   "scale" - {
     "integer returns 0" in {
       val table = query("SELECT scale(42)")
-      table.data(0).data(0).asInstanceOf[NumberValue].value.intValue shouldBe 0
+      table.data(0).data(0).intValue shouldBe 0
     }
   }
 
@@ -132,8 +132,8 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
       )
       table.data.length shouldBe 1
       val row = table.data(0).data
-      row(0).asInstanceOf[NumberValue].value.intValue shouldBe 1
-      row(2).asInstanceOf[NumberValue].value.intValue shouldBe 99
+      row(0).intValue shouldBe 1
+      row(2).intValue shouldBe 99
     }
 
     "returns specific columns" in {
@@ -145,7 +145,7 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
       )
       table.data.length shouldBe 1
       table.data(0).data(0) shouldBe TextValue("b")
-      table.data(0).data(1).asInstanceOf[NumberValue].value.intValue shouldBe 50
+      table.data(0).data(1).intValue shouldBe 50
     }
 
     "returns multiple rows" in {
@@ -176,7 +176,7 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
           |""".trim.stripMargin
       )
       table.data.length shouldBe 1
-      table.data(0).data(0).asInstanceOf[NumberValue].value.intValue shouldBe 2
+      table.data(0).data(0).intValue shouldBe 2
       table.data(0).data(1) shouldBe TextValue("y")
     }
 
@@ -288,17 +288,17 @@ class NewFeatureTests extends AnyFreeSpec with Matchers with Testing {
     "basic range" in {
       val table = query("SELECT * FROM generate_series(1, 5)")
       table.data.length shouldBe 5
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(1, 2, 3, 4, 5)
+      table.data.map(_.data(0).intValue) shouldBe Seq(1, 2, 3, 4, 5)
     }
 
     "with step" in {
       val table = query("SELECT * FROM generate_series(0, 10, 3)")
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(0, 3, 6, 9)
+      table.data.map(_.data(0).intValue) shouldBe Seq(0, 3, 6, 9)
     }
 
     "negative step" in {
       val table = query("SELECT * FROM generate_series(5, 1, -1)")
-      table.data.map(_.data(0).asInstanceOf[NumberValue].value.intValue) shouldBe Seq(5, 4, 3, 2, 1)
+      table.data.map(_.data(0).intValue) shouldBe Seq(5, 4, 3, 2, 1)
     }
 
     "with alias" in {

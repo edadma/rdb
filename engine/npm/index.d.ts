@@ -100,6 +100,16 @@ export interface CreateSchemaResult {
     schema: string;
 }
 
+export interface CreateSequenceResult {
+    command: 'create sequence';
+    sequence: string;
+}
+
+export interface DropSequenceResult {
+    command: 'drop sequence';
+    sequence: string;
+}
+
 export interface InsertResult {
     command: 'insert';
     result: Record<string, any>;
@@ -145,7 +155,9 @@ export type ExecuteResult =
     | RollbackResult
     | ExplainResult
     | CopyResult
-    | CreateSchemaResult;
+    | CreateSchemaResult
+    | CreateSequenceResult
+    | DropSequenceResult;
 
 export interface PreparedStatement {
     execute(params?: any[], options?: ExecuteOptions): Promise<ExecuteResult[]>;

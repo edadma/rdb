@@ -52,9 +52,25 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
     case NullExpr()     => ("NULL", 99)
     case ColumnExpr(Some(table), col) => (s"${table.name}.${col.name}", 99)
     case ColumnExpr(None, col)        => (col.name, 99)
-    case ApplyExpr(func, args) =>
+    case ApplyExpr(func, args, filter) =>
       val argStrs = args.map(a => exprToSQLInner(a)._1)
-      (s"${func.name}(${argStrs.mkString(", ")})", 99)
+      val filterStr = filter.map(f => s" FILTER (WHERE ${exprToSQLInner(f)._1})").getOrElse("")
+      (s"${func.name}(${argStrs.mkString(", ")})$filterStr", 99)
+    case WindowExpr(func, partBy, ordBy, frame) =>
+      val funcStr = exprToSQLInner(func)._1
+      val partStr = if partBy.isEmpty then "" else s"PARTITION BY ${partBy.map(e => exprToSQLInner(e)._1).mkString(", ")}"
+      val ordStr = if ordBy.isEmpty then "" else s"ORDER BY ${ordBy.map(orderByToSQL).mkString(", ")}"
+      val frameStr = frame.map { f =>
+        def boundStr(b: FrameBound): String = b match
+          case UnboundedPreceding => "UNBOUNDED PRECEDING"
+          case UnboundedFollowing => "UNBOUNDED FOLLOWING"
+          case CurrentRow         => "CURRENT ROW"
+          case Preceding(n)      => s"$n PRECEDING"
+          case Following(n)      => s"$n FOLLOWING"
+        s"ROWS BETWEEN ${boundStr(f.start)} AND ${boundStr(f.end)}"
+      }.getOrElse("")
+      val spec = Seq(partStr, ordStr, frameStr).filter(_.nonEmpty).mkString(" ")
+      (s"$funcStr OVER ($spec)", 99)
     case UnaryExpr("NOT", e) =>
       val (s, p) = exprToSQLInner(e)
       val child = if p < 3 then s"($s)" else s
@@ -116,6 +132,13 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       val es = elems.map(e => exprToSQLInner(e)._1)
       (s"ARRAY[${es.mkString(", ")}]", 99)
     // ── Query-level nodes ────────────────────────────────────────────
+    case WithExpr(ctes, query, recursive) =>
+      val cteParts = ctes.map { c =>
+        val cols = c.columns.map(cs => s"(${cs.map(_.name).mkString(", ")})").getOrElse("")
+        s"${c.name.name}$cols AS (${exprToSQLInner(c.query)._1})"
+      }
+      val recStr = if recursive then "WITH RECURSIVE" else "WITH"
+      (s"$recStr ${cteParts.mkString(", ")} ${exprToSQLInner(query)._1}", 99)
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       val sb = new StringBuilder("SELECT ")
       if distinct then sb.append("DISTINCT ")

@@ -67,6 +67,47 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         Row(IndexedSeq(TextValue(name), TextValue(db.getView(name).getOrElse(""))), meta, None, None)
       }.toVector
       QueryResult(TableValue(rows, meta))
+    case ShowSequencesCommand =>
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "sequence_name", TextType),
+        ColumnMetadata(None, "current_value", NumberType),
+        ColumnMetadata(None, "increment", NumberType),
+        ColumnMetadata(None, "min_value", NumberType),
+        ColumnMetadata(None, "max_value", NumberType),
+        ColumnMetadata(None, "cycle", BooleanType),
+        ColumnMetadata(None, "owned_by", TextType),
+      ))
+      val rows = db.sequences.values.toSeq.sortBy(_.name).map { s =>
+        val ownedBy = (s.ownedByTable, s.ownedByColumn) match
+          case (Some(t), Some(c)) => s"$t.$c"
+          case _ => ""
+        Row(IndexedSeq(
+          TextValue(s.name),
+          NumberValue(s.currentValue.toInt),
+          NumberValue(s.increment.toInt),
+          NumberValue(s.minValue.toInt),
+          NumberValue(s.maxValue.toInt),
+          BooleanValue(s.cycle),
+          TextValue(ownedBy),
+        ), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
+    case ShowAllIndexesCommand =>
+      val meta = Metadata(IndexedSeq(
+        ColumnMetadata(None, "index_name", TextType),
+        ColumnMetadata(None, "table_name", TextType),
+        ColumnMetadata(None, "columns", TextType),
+        ColumnMetadata(None, "is_unique", BooleanType),
+      ))
+      val rows = db.indexes.values.toSeq.sortBy(_.name).map { idx =>
+        Row(IndexedSeq(
+          TextValue(idx.name),
+          TextValue(db.shortName(idx.tableName)),
+          TextValue(idx.columns.mkString(", ")),
+          BooleanValue(idx.unique),
+        ), meta, None, None)
+      }.toVector
+      QueryResult(TableValue(rows, meta))
     case ShowColumnsCommand(Ident(table)) =>
       val t = db.getTable(table).getOrElse(sys.error(s"unknown table: $table"))
       val meta = Metadata(IndexedSeq(
@@ -185,6 +226,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
       case InsertCommand(id @ Ident(table), columns, rows, returning, onConflict) =>
 
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        // Track sequence usage for currval/lastval in this session
+        if t.backingSequences.nonEmpty then
+          t.onSequenceUsed = Some { (seqName, value) =>
+            session.sequenceValues(seqName) = value
+            session.lastSequenceUsed = Some(seqName)
+          }
         val resolvedColumns0 = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns0.length
 
@@ -309,6 +356,11 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
 
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
+        if t.backingSequences.nonEmpty then
+          t.onSequenceUsed = Some { (seqName, value) =>
+            session.sequenceValues(seqName) = value
+            session.lastSequenceUsed = Some(seqName)
+          }
         val queryResult = eval(rewrite(selectQuery), Nil).asInstanceOf[TableValue]
         val resolvedColumns = columns.getOrElse(t.columns.map(c => Ident(c.name)).toSeq)
         val cols = resolvedColumns.length
@@ -422,7 +474,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
 
           val names = new mutable.HashSet[String]
 
-          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references, _, pk) =>
+          val columnSpecs = columns map { case ColumnDesc(id @ Ident(name), typeDesc, required, unique, default, references, _, pk, generated) =>
             if names contains name then throw SchemaException(id.pos, s"duplicate column name: $name")
 
             names += name
@@ -444,6 +496,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               unique,
               fkTuple,
               default.map(expr => eval(rewrite(expr), Nil)),
+              generated.map(expr => (exprToSQL(expr), rewrite(expr))),
             )
           }
 
@@ -459,7 +512,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           }
 
           // Synthesize PrimaryKeySpec from column-level PRIMARY KEY
-          val columnPKCols = columns.collect { case ColumnDesc(Ident(name), _, _, _, _, _, _, true) => name }
+          val columnPKCols = columns.collect { case ColumnDesc(Ident(name), _, _, _, _, _, _, true, _) => name }
           val hasTableLevelPK = constraintSpecs.exists(_.isInstanceOf[PrimaryKeySpec])
           if columnPKCols.nonEmpty && hasTableLevelPK then
             throw SchemaException(id.pos, s"cannot specify both column-level and table-level PRIMARY KEY")
@@ -469,7 +522,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
 
           // Convert column-level CHECK constraints to CheckSpec
           val columnCheckSpecs: Seq[CheckSpec] = columns.collect {
-            case ColumnDesc(_, _, _, _, _, _, Some(expr), _) =>
+            case ColumnDesc(_, _, _, _, _, _, Some(expr), _, _) =>
               CheckSpec(exprToSQL(expr), expr, None)
           }
 
@@ -498,7 +551,12 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             val t = session.tempDB.createTable(table, allSpecs)
             session.tempTables(table) = t
           else
-            db.createTable(table, allSpecs)
+            val t = db.createTable(table, allSpecs)
+            // Create backing sequences for SERIAL columns (PostgreSQL behavior)
+            for spec <- columnSpecs if spec.typ == SmallSerialType || spec.typ == SerialType || spec.typ == BigSerialType do
+              val seqName = s"${table}_${spec.name}_seq"
+              val seq = db.createSequence(seqName, 1, 1, Long.MaxValue / 2, Some(1), false, Some(table), Some(spec.name))
+              t.backingSequences(spec.name) = seq
           CreateTableResult(table)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
         if session.hasTempTable(table) then
@@ -516,6 +574,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               if refs.nonEmpty then
                 val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
                 throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
+            // Drop owned sequences
+            db.sequences.values.filter(_.ownedByTable.contains(table)).map(_.name).toSeq.foreach(db.dropSequence)
             db.dropTable(table)
             DropTableResult(table)
           }
@@ -531,6 +591,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         val (cols, exprs) =
           sets map { case UpdateSet(id @ Ident(col), value) =>
             if !t.hasColumn(col) then throw UndefinedReferenceException(id.pos, s"table $table doesn't has column '$col'")
+            if t.columns(t.columnMap(col)).generated.isDefined then
+              throw ExecutionException(id.pos, s"column \"$col\" can only be updated to DEFAULT")
 
             col -> rewrite(value)
           } unzip
@@ -542,6 +604,7 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
         val childFKs = db.foreignKeys(t).filter(fk => fk.columns.exists(updatedColSet.contains))
 
         val checkConstraints = t.constraints.collect { case c: CheckSpec => c }
+        val genCols = t.columns.zipWithIndex.collect { case (spec, idx) if spec.generated.isDefined => (idx, spec.name, spec.generated.get._2) }
 
         val rwReturning = returning.map(_.map(rewrite))
 
@@ -556,27 +619,40 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                     sys.error(s"null value in column \"$col\" violates not-null constraint")
                   else if t.columns(t.columnMap(col)).required then
                     sys.error(s"null value in column \"$col\" violates not-null constraint")
+              // Recompute generated columns after applying explicit updates
+              val allUpdates =
+                if genCols.nonEmpty then
+                  val newRowData = targetRow.data.toArray
+                  for (col, value) <- updates do
+                    newRowData(t.columnMap(col)) = value
+                  val tmpRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
+                  val genUpdates = genCols.map { (idx, name, expr) =>
+                    val v = eval(expr, Seq(tmpRow))
+                    name -> t.columns(idx).typ.convert(v)
+                  }
+                  updates ++ genUpdates
+                else updates
               // Enforce CHECK constraints on the updated row
               if checkConstraints.nonEmpty then
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 val checkRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
                 for c <- checkConstraints do
                   if !beval(c.parsedExpr, Seq(checkRow)) then
                     sys.error(s"new row violates check constraint${c.name.map(n => s""" "$n"""").getOrElse("")}")
-              db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(updates))
+              db.enforceChildConstraints(table, targetRow, "update", Some(updatedColSet), Some(allUpdates))
               if childFKs.nonEmpty then
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 for fk <- childFKs do
                   db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
-              u(updates)
+              u(allUpdates)
               // Evaluate RETURNING against the new row state
               rwReturning.foreach { retExprs =>
                 val newRowData = targetRow.data.toArray
-                for (col, value) <- updates do
+                for (col, value) <- allUpdates do
                   newRowData(t.columnMap(col)) = value
                 val newRow = Row(newRowData.toIndexedSeq, t.meta, None, None)
                 val projected = retExprs.map {
@@ -702,6 +778,22 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
           db.dropType(name)
           DropTypeResult(name)
         }
+      case CreateSequenceCommand(id @ Ident(name), increment, minValue, maxValue, startValue, cycle, ifNotExists) =>
+        if db.hasSequence(name) then
+          if ifNotExists then CreateSequenceResult(name)
+          else throw SchemaException(id.pos, s"sequence '$name' already exists")
+        else
+          val min = minValue.getOrElse(if increment > 0 then 1L else Long.MinValue / 2)
+          val max = maxValue.getOrElse(if increment > 0 then Long.MaxValue / 2 else -1L)
+          db.createSequence(name, increment, min, max, startValue, cycle)
+          CreateSequenceResult(name)
+      case DropSequenceCommand(id @ Ident(name), ifExists) =>
+        if !db.hasSequence(name) then
+          if !ifExists then throw UndefinedReferenceException(id.pos, s"sequence '$name' does not exist")
+          DropSequenceResult(name)
+        else
+          db.dropSequence(name)
+          DropSequenceResult(name)
       case AlterTableCommand(id @ Ident(table), alter) =>
 
         if !session.hasTable(table) then throw UndefinedReferenceException(id.pos, s"unknown table: $table")
@@ -805,7 +897,12 @@ private def formatProcess(proc: Process, indent: Int): String =
       s"${prefix}Index Nested Loop Left Join using ${p.index.meta.name} on ${p.table.name}\n${formatProcess(p.outer, indent + 1)}"
     case p: RightIndexNestedLoopJoinProcess =>
       s"${prefix}Index Nested Loop Right Join using ${p.index.meta.name} on ${p.table.name}\n${formatProcess(p.outer, indent + 1)}"
+    case p: HashJoinProcess      => s"${prefix}Hash Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
+    case p: LeftHashJoinProcess  => s"${prefix}Hash Left Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
+    case p: RightHashJoinProcess => s"${prefix}Hash Right Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
+    case p: FullHashJoinProcess  => s"${prefix}Hash Full Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
     case p: UnionProcess       => s"${prefix}Union${if p.all then " All" else ""}\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
+    case p: RecursiveCTEProcess  => s"${prefix}Recursive CTE${if p.all then " All" else ""}\n${formatProcess(p.anchor, indent + 1)}\n${formatProcess(p.recursive, indent + 1)}"
     case p: GenerateSeriesProcess => s"${prefix}Generate Series"
     case t: Table              => s"${prefix}Seq Scan on ${t.name}"
     case SingleProcess         => s"${prefix}Result"
@@ -840,7 +937,8 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
     case OverlapsExpr(a, b, c, d)          => OverlapsExpr(deepCopyExpr(a, params), deepCopyExpr(b, params), deepCopyExpr(c, params), deepCopyExpr(d, params))
     case CaseExpr(whens, els) =>
       CaseExpr(whens.map { case When(w, e) => When(deepCopyExpr(w, params), deepCopyExpr(e, params)) }, els.map(deepCopyExpr(_, params)))
-    case ApplyExpr(func, args)             => ApplyExpr(func, args.map(deepCopyExpr(_, params)))
+    case ApplyExpr(func, args, filter)     => ApplyExpr(func, args.map(deepCopyExpr(_, params)), filter.map(deepCopyExpr(_, params)))
+    case WindowExpr(func, partBy, ordBy, frame) => WindowExpr(deepCopyExpr(func, params), partBy.map(deepCopyExpr(_, params)), ordBy.map { case OrderBy(f, d, n) => OrderBy(deepCopyExpr(f, params), d, n) }, frame)
     case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v, params), op, es.map(deepCopyExpr(_, params)))
     case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v, params), op, deepCopyExpr(q, params))
     case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q, params))
@@ -856,6 +954,12 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
       CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))),
         off.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         lim.map(c => Count(c.pos, deepCopyExpr(c.expr, params))))
+    case WithExpr(ctes, query, recursive) =>
+      WithExpr(
+        ctes.map(c => CTEDef(c.name, c.columns, deepCopyExpr(c.query, params))),
+        deepCopyExpr(query, params),
+        recursive,
+      )
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       SQLSelectExpr(
         exprs.map(deepCopyExpr(_, params)).to(ArraySeq),

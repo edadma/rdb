@@ -11,6 +11,10 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
   private var txnHandle: Option[TransactionHandle] = None
   val preparedStatements: mutable.Map[String, PreparedStatement] = mutable.Map.empty
 
+  // Sequence tracking — per-session CURRVAL / LASTVAL state
+  private[engine] val sequenceValues = new mutable.HashMap[String, Long]
+  private[engine] var lastSequenceUsed: Option[String] = None
+
   // Temp table support — session-scoped, always in-memory
   private[engine] val tempTables = new mutable.HashMap[String, Table]
   private[engine] lazy val tempDB = new MemoryDB

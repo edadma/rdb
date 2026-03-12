@@ -159,7 +159,7 @@ class JoinTests extends AnyFreeSpec with Matchers with Testing {
           |CREATE TABLE t2 (id INT, val TEXT);
           |INSERT INTO t1 (id, val) VALUES (1, 'a'), (2, 'b');
           |INSERT INTO t2 (id, val) VALUES (3, 'c'), (4, 'd');
-          |SELECT t1.val, t2.val FROM t1 FULL JOIN t2 ON t1.id = t2.id ORDER BY t1.val NULLS LAST;
+          |SELECT t1.val, t2.val FROM t1 FULL JOIN t2 ON t1.id = t2.id ORDER BY t1.val NULLS LAST, t2.val NULLS LAST;
           |""".trim.stripMargin
       )
 

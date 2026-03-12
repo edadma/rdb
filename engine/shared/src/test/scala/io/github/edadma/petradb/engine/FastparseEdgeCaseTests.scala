@@ -100,7 +100,7 @@ class FastparseEdgeCaseTests extends AnyFreeSpec with Matchers with Testing:
     table.data.length shouldBe 1
     table.data(0).data(0) shouldBe NumberValue(0.5)
     table.data(0).data(1) shouldBe NumberValue(0.5)
-    table.data(0).data(2).asInstanceOf[NumberValue].value.doubleValue shouldBe 500.0
+    table.data(0).data(2).doubleValue shouldBe 500.0
     table.data(0).data(3) shouldBe NumberValue(0.0015)
   }
 
@@ -163,7 +163,7 @@ class FastparseEdgeCaseTests extends AnyFreeSpec with Matchers with Testing:
 
     // scientific notation
     val t5 = query("SELECT 5e2 AS val;")
-    t5.data(0).data(0).asInstanceOf[NumberValue].value.doubleValue shouldBe 500.0
+    t5.data(0).data(0).doubleValue shouldBe 500.0
 
     // dot-qualified column mixed with decimal in same expression
     val t6 = query("""

@@ -65,12 +65,12 @@ class PetraResultSet(table: TableValue) extends AbstractResultSet:
 
   // ── getByte / getShort ──────────────────────────────────────────────
   override def getByte(col: Int): Byte =
-    withNull(col, 0.toByte)(v => v.asInstanceOf[NumberValue].value.byteValue)
+    withNull(col, 0.toByte)(v => v.byteValue)
 
   override def getByte(label: String): Byte = getByte(findColumn(label))
 
   override def getShort(col: Int): Short =
-    withNull(col, 0.toShort)(v => v.asInstanceOf[NumberValue].value.shortValue)
+    withNull(col, 0.toShort)(v => v.shortValue)
 
   override def getShort(label: String): Short = getShort(findColumn(label))
 
@@ -96,7 +96,7 @@ class PetraResultSet(table: TableValue) extends AbstractResultSet:
 
   // ── getFloat / getDouble ────────────────────────────────────────────
   override def getFloat(col: Int): Float =
-    withNull(col, 0f)(v => v.asInstanceOf[NumberValue].value.floatValue)
+    withNull(col, 0f)(v => v.floatValue)
 
   override def getFloat(label: String): Float = getFloat(findColumn(label))
 
