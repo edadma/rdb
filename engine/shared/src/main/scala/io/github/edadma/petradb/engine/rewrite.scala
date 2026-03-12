@@ -151,6 +151,14 @@ private def evalCountExpr(pos: Position, expr: Expr, label: String)(using sessio
 def rewrite(expr: Expr)(using session: Session): Expr =
   expr match
     case _ if expr.typ != null              => expr
+    case WithExpr(ctes, query) =>
+      val cteMap = mutable.Map[String, Expr]()
+      for CTEDef(Ident(name), cols, body) <- ctes do
+        val substituted = substituteCTEs(body, cteMap.toMap)
+        cteMap(name.toLowerCase) = cols match
+          case Some(colNames) => ColumnAliasOperator(substituted, Ident(name), colNames)
+          case None           => substituted
+      rewrite(substituteCTEs(query, cteMap.toMap))
     case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
     case AliasExpr(expr, alias) => AliasExpr(rewrite(expr), alias)
     case SubqueryExpr(query)    => SubqueryExpr(rewrite(query))
@@ -942,5 +950,49 @@ private def tryIndexJoin(
       }
     else None
   }
+
+private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
+  if cteMap.isEmpty then return expr
+
+  def sub(e: Expr): Expr =
+    val result: Expr = e match
+      case TableOperator(id @ Ident(name)) if cteMap.contains(name.toLowerCase) =>
+        val body = deepCopyExpr(cteMap(name.toLowerCase))
+        body match
+          case _: ColumnAliasOperator => body // already has alias from column-aliased CTE
+          case _ => AliasOperator(body, id)
+      case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+        SQLSelectExpr(
+          exprs.map(sub).to(scala.collection.immutable.ArraySeq),
+          from.map(_.map(sub)),
+          where.map(sub),
+          groupBy.map(_.map(sub)),
+          having.map(sub),
+          orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }),
+          offset, limit, distinct,
+        )
+      case CompoundQueryExpr(query, orderBy, offset, limit) =>
+        CompoundQueryExpr(sub(query), orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }), offset, limit)
+      case SetOperationExpr(op, left, right) => SetOperationExpr(op, sub(left), sub(right))
+      case WithExpr(ctes, query) =>
+        WithExpr(ctes.map(c => CTEDef(c.name, c.columns, sub(c.query))), sub(query))
+      case SubqueryExpr(query)         => SubqueryExpr(sub(query))
+      case ExistsExpr(query)           => ExistsExpr(sub(query))
+      case InQueryExpr(v, op, query)   => InQueryExpr(sub(v), op, sub(query))
+      case AliasOperator(rel, alias)   => AliasOperator(sub(rel), alias)
+      case ColumnAliasOperator(rel, alias, cols) => ColumnAliasOperator(sub(rel), alias, cols)
+      case CrossOperator(r1, r2)       => CrossOperator(sub(r1), sub(r2))
+      case InnerJoinOperator(r1, r2, on) => InnerJoinOperator(sub(r1), sub(r2), sub(on))
+      case LeftJoinOperator(r1, r2, on)  => LeftJoinOperator(sub(r1), sub(r2), sub(on))
+      case RightJoinOperator(r1, r2, on) => RightJoinOperator(sub(r1), sub(r2), sub(on))
+      case FullJoinOperator(r1, r2, on)  => FullJoinOperator(sub(r1), sub(r2), sub(on))
+      case LateralCrossOperator(r1, r2)  => LateralCrossOperator(sub(r1), sub(r2))
+      case LateralExpr(query)            => LateralExpr(sub(query))
+      case TableConstructorExpr(query)   => TableConstructorExpr(sub(query))
+      case _ => e
+    if e.pos != null && result.pos == null then result.setPos(e.pos)
+    result
+
+  sub(expr)
 
 def procRewrite(expr: Expr)(using session: Session): Process = rewrite(expr).asInstanceOf[ProcessOperator].proc

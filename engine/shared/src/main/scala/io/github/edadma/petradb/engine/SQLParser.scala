@@ -873,12 +873,28 @@ object SQLParser:
       }
     }
 
-  // query = compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+  // ── CTE: WITH name [(cols)] AS (query) ────────────────────────────
+
+  private def cteDef[p: P]: P[CTEDef] =
+    P(Idx ~ ident ~ ("(" ~ ident.rep(1, sep = ",") ~ ")").? ~ kw("as") ~ "(" ~ query ~ ")").map {
+      case (loc, name, cols, q) =>
+        val id = Ident(name).setPos(mkPos(loc)).asInstanceOf[Ident]
+        CTEDef(id, cols.map(_.map(c => Ident(c).setPos(mkPos(loc)).asInstanceOf[Ident])), q)
+    }
+
+  private def withClause[p: P]: P[Seq[CTEDef]] =
+    P(kw("with") ~ cteDef.rep(1, sep = ","))
+
+  // query = [WITH ...] compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
   private def query[p: P]: P[Expr] =
-    P(compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
-      case (s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
-      case (s, None, None, None) => s
-      case (s, o, l, of) => CompoundQueryExpr(s, o, of, l)
+    P(withClause.? ~ compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
+      case (None, s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
+      case (None, s, None, None, None) => s
+      case (None, s, o, l, of) => CompoundQueryExpr(s, o, of, l)
+      case (Some(ctes), s: SQLSelectExpr, o, l, of) =>
+        WithExpr(ctes, s.copy(orderBy = o, limit = l, offset = of))
+      case (Some(ctes), s, None, None, None) => WithExpr(ctes, s)
+      case (Some(ctes), s, o, l, of) => WithExpr(ctes, CompoundQueryExpr(s, o, of, l))
     }
 
   // ── DML: INSERT ────────────────────────────────────────────────────

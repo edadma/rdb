@@ -132,6 +132,12 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       val es = elems.map(e => exprToSQLInner(e)._1)
       (s"ARRAY[${es.mkString(", ")}]", 99)
     // ── Query-level nodes ────────────────────────────────────────────
+    case WithExpr(ctes, query) =>
+      val cteParts = ctes.map { c =>
+        val cols = c.columns.map(cs => s"(${cs.map(_.name).mkString(", ")})").getOrElse("")
+        s"${c.name.name}$cols AS (${exprToSQLInner(c.query)._1})"
+      }
+      (s"WITH ${cteParts.mkString(", ")} ${exprToSQLInner(query)._1}", 99)
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       val sb = new StringBuilder("SELECT ")
       if distinct then sb.append("DISTINCT ")

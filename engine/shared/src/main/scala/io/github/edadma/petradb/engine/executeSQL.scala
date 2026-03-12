@@ -953,6 +953,11 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
       CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))),
         off.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         lim.map(c => Count(c.pos, deepCopyExpr(c.expr, params))))
+    case WithExpr(ctes, query) =>
+      WithExpr(
+        ctes.map(c => CTEDef(c.name, c.columns, deepCopyExpr(c.query, params))),
+        deepCopyExpr(query, params),
+      )
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       SQLSelectExpr(
         exprs.map(deepCopyExpr(_, params)).to(ArraySeq),

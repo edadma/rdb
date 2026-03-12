@@ -55,6 +55,9 @@ case class CompoundQueryExpr(
     limit: Option[Count],
 ) extends Expr
 
+case class CTEDef(name: Ident, columns: Option[Seq[Ident]], query: Expr)
+case class WithExpr(ctes: Seq[CTEDef], query: Expr) extends Expr
+
 case class When(when: Expr, expr: Expr)
 
 case class Count(pos: Position, expr: Expr)
