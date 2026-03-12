@@ -2,7 +2,38 @@
 title: Changelog
 ---
 
-## v1.3-20260311
+## v1.4-20260312
+
+### Common Table Expressions (CTEs)
+
+Full CTE support with `WITH` and `WITH RECURSIVE`.
+
+**Non-recursive CTEs** — named subqueries for readability and reuse:
+
+```sql
+WITH active_orders AS (
+  SELECT * FROM orders WHERE status = 'active'
+)
+SELECT customer_id, SUM(amount)
+FROM active_orders
+GROUP BY customer_id;
+```
+
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
+
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
+
+```sql
+WITH RECURSIVE descendants(id, name, depth) AS (
+  SELECT id, name, 0 FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.id, e.name, d.depth + 1
+  FROM employees e INNER JOIN descendants d ON e.manager_id = d.id
+)
+SELECT name, depth FROM descendants ORDER BY depth, name;
+```
+
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
 
 ### Window functions
 
@@ -80,6 +111,32 @@ Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENC
 New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
 
 CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
+
+### CREATE INDEX USING clause
+
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
+
+### Bug fixes
+
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
+
+### Version bumps
+
+All components bumped to 1.4.0:
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.4.0 | — |
+| engine | 1.4.0 | @petradb/engine 1.4.0 |
+| client | 1.4.0 | @petradb/client 1.4.0 |
+| server | 1.4.0 | @petradb/server 1.4.0 |
+| cli | 1.4.0 | @petradb/cli 1.4.0 |
+| jdbc | 1.4.0 | — |
+| knex | — | @petradb/knex 1.4.0 |
+| lucid | — | @petradb/lucid 1.4.0 |
+| drizzle | — | @petradb/drizzle 1.4.0 |
 
 ## v1.3-20260309
 

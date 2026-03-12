@@ -153,6 +153,52 @@ SELECT name FROM suppliers;
 
 `UNION`, `UNION ALL`, `INTERSECT`, and `EXCEPT` are supported.
 
+## Common Table Expressions (WITH)
+
+CTEs define named subqueries that can be referenced in the main query, improving readability and enabling reuse:
+
+```sql
+WITH active_users AS (
+  SELECT id, name FROM users WHERE active = TRUE
+),
+user_orders AS (
+  SELECT u.name, COUNT(*) AS order_count
+  FROM active_users u
+  INNER JOIN orders o ON u.id = o.user_id
+  GROUP BY u.name
+)
+SELECT name, order_count FROM user_orders ORDER BY order_count DESC;
+```
+
+Column aliases can be specified: `WITH t(x, y) AS (SELECT 1, 2)`.
+
+Later CTEs can reference earlier CTEs. A CTE name shadows any table with the same name.
+
+### Recursive CTEs
+
+`WITH RECURSIVE` enables iterative queries for hierarchical data, graph traversal, and series generation:
+
+```sql
+-- Generate a number series
+WITH RECURSIVE nums(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT n + 1 FROM nums WHERE n < 10
+)
+SELECT n FROM nums;
+
+-- Tree traversal
+WITH RECURSIVE tree(id, name, depth) AS (
+  SELECT id, name, 0 FROM categories WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.id, c.name, t.depth + 1
+  FROM categories c INNER JOIN tree t ON c.parent_id = t.id
+)
+SELECT name, depth FROM tree ORDER BY depth, name;
+```
+
+The recursive CTE body must be a `UNION ALL` or `UNION` of an anchor query (non-recursive base case) and a recursive query (references the CTE name). Execution stops when the recursive query produces no new rows, or after 1000 iterations.
+
 ## CASE Expressions
 
 ```sql
