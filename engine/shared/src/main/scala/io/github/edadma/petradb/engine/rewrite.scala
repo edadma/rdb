@@ -483,6 +483,10 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             case _               => ProjectOperator(r4, winCollectedExprs)
         else
           // Non-grouped path: [WINDOW] → ORDER BY → PROJECT
+          // Build alias map so ORDER BY can reference SELECT aliases
+          val aliasMap: Map[String, Expr] = rewrittenExprs.collect {
+            case AliasExpr(underlying, Ident(name)) => name -> underlying
+          }.toMap
           val hasWindows = rewrittenExprs.exists(window)
 
           if hasWindows then
@@ -490,12 +494,13 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             val winCollectedExprs = rewrittenExprs.map(winCollector.collect)
             val winCollectedOrderBy = orderBy.map { os =>
               os.map { case OrderBy(f, d, n) =>
-                val resolved = f match
+                val ordinalResolved = f match
                   case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
                     rewrittenExprs(idx - 1) match
                       case AliasExpr(inner, _) => inner
                       case other               => other
                   case _ => rewrite(f)
+                val resolved = resolveAliases(ordinalResolved, aliasMap)
                 OrderBy(winCollector.collect(resolved), d, n)
               }
             }
@@ -512,13 +517,13 @@ def rewrite(expr: Expr)(using session: Session): Expr =
               orderBy match
                 case None     => r1
                 case Some(os) => SortOperator(r1, os map { case OrderBy(f, d, n) =>
-                  val resolved = f match
+                  val ordinalResolved = f match
                     case NumberExpr(idx: Int) if idx >= 1 && idx <= rewrittenExprs.length =>
                       rewrittenExprs(idx - 1) match
                         case AliasExpr(inner, _) => inner
                         case other               => other
                     case _ => rewrite(f)
-                  OrderBy(resolved, d, n)
+                  OrderBy(resolveAliases(ordinalResolved, aliasMap), d, n)
                 })
             val r3 =
               exprs match
