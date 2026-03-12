@@ -210,6 +210,38 @@ case class WindowProcess(input: Process, windows: Seq[WindowSpec]) extends Proce
                 rank += 1
               winValues(sorted(i)._2)(winIdx) = NumberValue(rank)
 
+          case LagKind(expr, offset, default) =>
+            for i <- sorted.indices do
+              val sourceIdx = i - offset
+              val value =
+                if sourceIdx >= 0 then eval(expr, sorted(sourceIdx)._1 +: ctx)
+                else default.map(d => eval(d, sorted(i)._1 +: ctx)).getOrElse(NullValue())
+              winValues(sorted(i)._2)(winIdx) = value
+
+          case LeadKind(expr, offset, default) =>
+            for i <- sorted.indices do
+              val sourceIdx = i + offset
+              val value =
+                if sourceIdx < sorted.length then eval(expr, sorted(sourceIdx)._1 +: ctx)
+                else default.map(d => eval(d, sorted(i)._1 +: ctx)).getOrElse(NullValue())
+              winValues(sorted(i)._2)(winIdx) = value
+
+          case NtileKind(buckets) =>
+            val n = sorted.length
+            val base = n / buckets
+            val remainder = n % buckets
+            var tile = 1
+            var count = 0
+            val tileSize = if remainder > 0 then base + 1 else base
+            var currentTileSize = tileSize
+            for i <- sorted.indices do
+              if count >= currentTileSize && tile < buckets then
+                tile += 1
+                count = 0
+                currentTileSize = if tile <= remainder then base + 1 else base
+              winValues(sorted(i)._2)(winIdx) = NumberValue(tile)
+              count += 1
+
           case AggregateWindowKind(aggFactory, args, filter) =>
             val (instance, _) = aggFactory.instantiate
             instance.init()

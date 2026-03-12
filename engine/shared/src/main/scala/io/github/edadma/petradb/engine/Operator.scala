@@ -31,6 +31,9 @@ sealed trait WindowFunctionKind
 case object RowNumberKind extends WindowFunctionKind
 case object RankKind extends WindowFunctionKind
 case object DenseRankKind extends WindowFunctionKind
+case class LagKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
+case class LeadKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
+case class NtileKind(buckets: Int) extends WindowFunctionKind
 case class AggregateWindowKind(func: AggregateFunction, args: Seq[Expr], filter: Option[Expr]) extends WindowFunctionKind
 
 case class WindowSpec(name: String, kind: WindowFunctionKind, partitionBy: Seq[Expr], orderBy: Seq[OrderBy], typ: Type)

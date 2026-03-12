@@ -385,6 +385,239 @@ class WindowFunctionTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  "LAG" - {
+
+    "basic LAG with default offset" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LAG(salary) OVER (ORDER BY salary) AS prev_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // First row has no previous → NULL
+      table.data.head.data(2).isNull shouldBe true
+      // Second row: previous salary
+      table.data(1).data(2).intValue shouldBe table.data(0).data(1).intValue
+    }
+
+    "LAG with explicit offset" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LAG(salary, 2) OVER (ORDER BY salary) AS prev2_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // First two rows have no value 2 back → NULL
+      table.data(0).data(2).isNull shouldBe true
+      table.data(1).data(2).isNull shouldBe true
+      // Third row: salary from first row
+      table.data(2).data(2).intValue shouldBe table.data(0).data(1).intValue
+    }
+
+    "LAG with default value" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LAG(salary, 1, 0) OVER (ORDER BY salary) AS prev_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // First row: default value 0
+      table.data.head.data(2).intValue shouldBe 0
+      // Second row onwards: previous salary
+      table.data(1).data(2).intValue shouldBe table.data(0).data(1).intValue
+    }
+
+    "LAG with PARTITION BY" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, department, salary,
+          |       LAG(salary) OVER (PARTITION BY department ORDER BY salary) AS prev_salary
+          |FROM emp
+          |ORDER BY department, salary;
+          |""".trim.stripMargin
+      )
+
+      // Engineering partition: 80000, 80000, 90000
+      val eng = table.data.filter(_.data(1).string == "Engineering")
+      eng(0).data(3).isNull shouldBe true     // first in partition
+      eng(1).data(3).intValue shouldBe 80000  // previous
+      eng(2).data(3).intValue shouldBe 80000  // previous
+    }
+  }
+
+  "LEAD" - {
+
+    "basic LEAD with default offset" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LEAD(salary) OVER (ORDER BY salary) AS next_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // Last row has no next → NULL
+      table.data.last.data(2).isNull shouldBe true
+      // First row: next salary
+      table.data(0).data(2).intValue shouldBe table.data(1).data(1).intValue
+    }
+
+    "LEAD with explicit offset" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LEAD(salary, 2) OVER (ORDER BY salary) AS next2_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // Last two rows have no value 2 ahead → NULL
+      table.data(4).data(2).isNull shouldBe true
+      table.data(5).data(2).isNull shouldBe true
+      // First row: salary from third row
+      table.data(0).data(2).intValue shouldBe table.data(2).data(1).intValue
+    }
+
+    "LEAD with default value" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, LEAD(salary, 1, -1) OVER (ORDER BY salary) AS next_salary
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      // Last row: default value -1
+      table.data.last.data(2).intValue shouldBe -1
+      // First row: next salary
+      table.data(0).data(2).intValue shouldBe table.data(1).data(1).intValue
+    }
+
+    "LEAD with PARTITION BY" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, department, salary,
+          |       LEAD(salary) OVER (PARTITION BY department ORDER BY salary) AS next_salary
+          |FROM emp
+          |ORDER BY department, salary;
+          |""".trim.stripMargin
+      )
+
+      // Engineering partition: 80000, 80000, 90000
+      val eng = table.data.filter(_.data(1).string == "Engineering")
+      eng(0).data(3).intValue shouldBe 80000  // next
+      eng(1).data(3).intValue shouldBe 90000  // next
+      eng(2).data(3).isNull shouldBe true     // last in partition
+    }
+  }
+
+  "NTILE" - {
+
+    "NTILE divides into equal groups" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, NTILE(3) OVER (ORDER BY salary) AS tile
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      val tiles = table.data.map(_.data(2).intValue)
+      // 6 rows / 3 tiles = 2 per tile
+      tiles shouldBe Vector(1, 1, 2, 2, 3, 3)
+    }
+
+    "NTILE with uneven distribution" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, NTILE(4) OVER (ORDER BY salary) AS tile
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      val tiles = table.data.map(_.data(2).intValue)
+      // 6 rows / 4 tiles: first 2 tiles get 2 rows, last 2 get 1 row
+      tiles shouldBe Vector(1, 1, 2, 2, 3, 4)
+    }
+
+    "NTILE with more buckets than rows" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, salary, NTILE(10) OVER (ORDER BY salary) AS tile
+          |FROM emp
+          |ORDER BY salary;
+          |""".trim.stripMargin
+      )
+
+      table.data.length shouldBe 6
+      val tiles = table.data.map(_.data(2).intValue)
+      // Each row gets its own tile: 1, 2, 3, 4, 5, 6
+      tiles shouldBe Vector(1, 2, 3, 4, 5, 6)
+    }
+
+    "NTILE with PARTITION BY" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, department, salary,
+          |       NTILE(2) OVER (PARTITION BY department ORDER BY salary) AS tile
+          |FROM emp
+          |ORDER BY department, salary;
+          |""".trim.stripMargin
+      )
+
+      // Engineering (3 rows): tile 1 gets 2 rows, tile 2 gets 1 row
+      val eng = table.data.filter(_.data(1).string == "Engineering")
+      eng.map(_.data(3).intValue) shouldBe Vector(1, 1, 2)
+
+      // Sales (2 rows): 1 per tile
+      val sales = table.data.filter(_.data(1).string == "Sales")
+      sales.map(_.data(3).intValue) shouldBe Vector(1, 2)
+
+      // Marketing (1 row): just tile 1
+      val mkt = table.data.filter(_.data(1).string == "Marketing")
+      mkt.map(_.data(3).intValue) shouldBe Vector(1)
+    }
+
+    "NTILE(1) puts all rows in one tile" in {
+      val table = query(
+        s"""
+          |$setup
+          |SELECT name, NTILE(1) OVER (ORDER BY salary) AS tile
+          |FROM emp;
+          |""".trim.stripMargin
+      )
+
+      table.data.foreach(_.data(1).intValue shouldBe 1)
+    }
+  }
+
   "negative tests" - {
 
     "ROW_NUMBER with arguments should fail" in {
@@ -426,6 +659,50 @@ class WindowFunctionTests extends AnyFreeSpec with Matchers with Testing {
           s"""
             |$setup
             |SELECT bogus() OVER (ORDER BY salary) FROM emp;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "LAG with no arguments should fail" in {
+      an[Exception] should be thrownBy {
+        query(
+          s"""
+            |$setup
+            |SELECT LAG() OVER (ORDER BY salary) FROM emp;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "LAG with too many arguments should fail" in {
+      an[Exception] should be thrownBy {
+        query(
+          s"""
+            |$setup
+            |SELECT LAG(salary, 1, 0, 'extra') OVER (ORDER BY salary) FROM emp;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "NTILE with no arguments should fail" in {
+      an[Exception] should be thrownBy {
+        query(
+          s"""
+            |$setup
+            |SELECT NTILE() OVER (ORDER BY salary) FROM emp;
+            |""".trim.stripMargin
+        )
+      }
+    }
+
+    "NTILE with too many arguments should fail" in {
+      an[Exception] should be thrownBy {
+        query(
+          s"""
+            |$setup
+            |SELECT NTILE(3, 4) OVER (ORDER BY salary) FROM emp;
             |""".trim.stripMargin
         )
       }
