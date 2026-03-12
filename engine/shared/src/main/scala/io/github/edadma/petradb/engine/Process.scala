@@ -346,13 +346,15 @@ case class DistinctProcess(input: Process) extends Process:
 object Nulls:
   val first: Ordering[Value] =
     (x: Value, y: Value) =>
-      if x.isNull then -1
+      if x.isNull && y.isNull then 0
+      else if x.isNull then -1
       else if y.isNull then 1
       else x compare y
 
   val last: Ordering[Value] =
     (x: Value, y: Value) =>
-      if x.isNull then 1
+      if x.isNull && y.isNull then 0
+      else if x.isNull then 1
       else if y.isNull then -1
       else x compare y
 
