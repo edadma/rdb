@@ -151,13 +151,48 @@ private def evalCountExpr(pos: Position, expr: Expr, label: String)(using sessio
 def rewrite(expr: Expr)(using session: Session): Expr =
   expr match
     case _ if expr.typ != null              => expr
-    case WithExpr(ctes, query) =>
+    case WithExpr(ctes, query, recursive) =>
       val cteMap = mutable.Map[String, Expr]()
-      for CTEDef(Ident(name), cols, body) <- ctes do
-        val substituted = substituteCTEs(body, cteMap.toMap)
-        cteMap(name.toLowerCase) = cols match
-          case Some(colNames) => ColumnAliasOperator(substituted, Ident(name), colNames)
-          case None           => substituted
+      for cte @ CTEDef(id @ Ident(name), cols, body) <- ctes do
+        val lowerName = name.toLowerCase
+        if recursive && containsTableRef(lowerName, body) then
+          // Recursive CTE — body must be UNION [ALL]
+          body match
+            case SetOperationExpr(op, anchorExpr, recursiveExpr) if op == "UNION ALL" || op == "UNION" =>
+              val all = op == "UNION ALL"
+
+              // Rewrite anchor (substitute earlier CTEs, NOT self)
+              val anchorSubstituted = substituteCTEs(anchorExpr, cteMap.toMap)
+              val anchorProc = procRewrite(rewrite(anchorSubstituted))
+
+              // Build working table metadata with CTE name as table qualifier
+              val baseMeta = cols match
+                case Some(colNames) =>
+                  Metadata(anchorProc.meta.columns.zip(colNames).map { case (cm, Ident(cn)) =>
+                    ColumnMetadata(Some(lowerName), cn, cm.typ)
+                  }.toIndexedSeq)
+                case None =>
+                  Metadata(anchorProc.meta.columns.map(cm =>
+                    ColumnMetadata(Some(lowerName), cm.name, cm.typ)
+                  ).toIndexedSeq)
+
+              val workingTable = new WorkingTableProcess(baseMeta)
+
+              // Substitute self-ref with working table in recursive part
+              val selfMap = cteMap.toMap + (lowerName -> ProcessOperator(workingTable))
+              val recursiveSubstituted = substituteCTEs(recursiveExpr, selfMap)
+              val recursiveProc = procRewrite(rewrite(recursiveSubstituted))
+
+              val rctProc = RecursiveCTEProcess(anchorProc, recursiveProc, workingTable, all)
+              cteMap(lowerName) = ProcessOperator(rctProc)
+            case _ =>
+              throw ParseException(body.pos, "recursive CTE must use UNION or UNION ALL")
+        else
+          // Non-recursive CTE
+          val substituted = substituteCTEs(body, cteMap.toMap)
+          cteMap(lowerName) = cols match
+            case Some(colNames) => ColumnAliasOperator(substituted, Ident(name), colNames)
+            case None           => substituted
       rewrite(substituteCTEs(query, cteMap.toMap))
     case CastExpr(expr, targetType)         => CastExpr(rewrite(expr), targetType) setType targetType
     case AliasExpr(expr, alias) => AliasExpr(rewrite(expr), alias)
@@ -951,6 +986,27 @@ private def tryIndexJoin(
     else None
   }
 
+private def containsTableRef(name: String, expr: Expr): Boolean =
+  expr match
+    case TableOperator(Ident(n)) => n.equalsIgnoreCase(name)
+    case SQLSelectExpr(exprs, from, where, _, _, _, _, _, _) =>
+      from.exists(_.exists(containsTableRef(name, _))) ||
+        where.exists(containsTableRef(name, _)) ||
+        exprs.exists(containsTableRef(name, _))
+    case SetOperationExpr(_, left, right) =>
+      containsTableRef(name, left) || containsTableRef(name, right)
+    case AliasOperator(rel, _)                => containsTableRef(name, rel)
+    case ColumnAliasOperator(rel, _, _)       => containsTableRef(name, rel)
+    case CrossOperator(r1, r2)                => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case InnerJoinOperator(r1, r2, _)         => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case LeftJoinOperator(r1, r2, _)          => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case RightJoinOperator(r1, r2, _)         => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case FullJoinOperator(r1, r2, _)          => containsTableRef(name, r1) || containsTableRef(name, r2)
+    case SubqueryExpr(q)                      => containsTableRef(name, q)
+    case CompoundQueryExpr(q, _, _, _)        => containsTableRef(name, q)
+    case WithExpr(ctes, q, _)                 => ctes.exists(c => containsTableRef(name, c.query)) || containsTableRef(name, q)
+    case _ => false
+
 private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
   if cteMap.isEmpty then return expr
 
@@ -974,8 +1030,8 @@ private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
       case CompoundQueryExpr(query, orderBy, offset, limit) =>
         CompoundQueryExpr(sub(query), orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }), offset, limit)
       case SetOperationExpr(op, left, right) => SetOperationExpr(op, sub(left), sub(right))
-      case WithExpr(ctes, query) =>
-        WithExpr(ctes.map(c => CTEDef(c.name, c.columns, sub(c.query))), sub(query))
+      case WithExpr(ctes, query, recursive) =>
+        WithExpr(ctes.map(c => CTEDef(c.name, c.columns, sub(c.query))), sub(query), recursive)
       case SubqueryExpr(query)         => SubqueryExpr(sub(query))
       case ExistsExpr(query)           => ExistsExpr(sub(query))
       case InQueryExpr(v, op, query)   => InQueryExpr(sub(v), op, sub(query))

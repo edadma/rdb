@@ -56,7 +56,7 @@ case class CompoundQueryExpr(
 ) extends Expr
 
 case class CTEDef(name: Ident, columns: Option[Seq[Ident]], query: Expr)
-case class WithExpr(ctes: Seq[CTEDef], query: Expr) extends Expr
+case class WithExpr(ctes: Seq[CTEDef], query: Expr, recursive: Boolean = false) extends Expr
 
 case class When(when: Expr, expr: Expr)
 

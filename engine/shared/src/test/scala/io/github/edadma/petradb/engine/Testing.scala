@@ -51,4 +51,5 @@ trait Testing:
         case p: RightHashJoinProcess              => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
         case p: FullHashJoinProcess               => findProcess(p.build)(pf).orElse(findProcess(p.probe)(pf))
         case p: WindowProcess                     => findProcess(p.input)(pf)
+        case p: RecursiveCTEProcess               => findProcess(p.anchor)(pf).orElse(findProcess(p.recursive)(pf))
         case _                                    => None

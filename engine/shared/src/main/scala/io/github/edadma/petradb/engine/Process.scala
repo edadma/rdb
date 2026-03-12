@@ -421,6 +421,38 @@ case class UnionProcess(input1: Process, input2: Process, all: Boolean) extends 
     val combined = input1.iterator(ctx) ++ input2.iterator(ctx).map(row => Row(row.data, meta, None, None))
     if all then combined else combined.distinctBy(_.data)
 
+class WorkingTableProcess(val meta: Metadata) extends Process:
+  private var rows: IndexedSeq[Row] = IndexedSeq.empty
+  def setRows(newRows: IndexedSeq[Row]): Unit = rows = newRows
+  def iterator(ctx: Seq[Row]): RowIterator = rows.iterator
+
+case class RecursiveCTEProcess(
+    anchor: Process,
+    recursive: Process,
+    workingTable: WorkingTableProcess,
+    all: Boolean,
+    maxIterations: Int = 1000,
+) extends Process:
+  val meta: Metadata = workingTable.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val allResults = ArrayBuffer[Row]()
+    var currentRows = anchor.iterator(ctx).map(r => Row(r.data, meta, None, None)).toVector
+    var iteration = 0
+
+    while currentRows.nonEmpty && iteration < maxIterations do
+      allResults ++= currentRows
+      workingTable.setRows(currentRows.toIndexedSeq)
+      val nextRows = recursive.iterator(ctx).map(r => Row(r.data, meta, None, None)).toVector
+      currentRows =
+        if all then nextRows
+        else
+          val seen = allResults.map(_.data).toSet
+          nextRows.filterNot(r => seen.contains(r.data))
+      iteration += 1
+
+    allResults.iterator
+
 case class IntersectProcess(input1: Process, input2: Process) extends Process:
   val meta: Metadata = input1.meta
 

@@ -168,6 +168,102 @@ class CTETests extends AnyFreeSpec with Matchers with Testing:
     }
   }
 
+  "recursive CTE" - {
+
+    "generate series 1..10" in {
+      val t = query(
+        """WITH RECURSIVE nums(n) AS (
+          |  SELECT 1
+          |  UNION ALL
+          |  SELECT n + 1 FROM nums WHERE n < 10
+          |)
+          |SELECT n FROM nums ORDER BY n""".stripMargin)
+      t.data.map(_.data(0).intValue) shouldBe (1 to 10)
+    }
+
+    "factorial" in {
+      val t = query(
+        """WITH RECURSIVE factorial(n, f) AS (
+          |  SELECT 1, 1
+          |  UNION ALL
+          |  SELECT n + 1, f * (n + 1) FROM factorial WHERE n < 5
+          |)
+          |SELECT n, f FROM factorial ORDER BY n""".stripMargin)
+      t.data.map(_.data(0).intValue) shouldBe Seq(1, 2, 3, 4, 5)
+      t.data.map(_.data(1).intValue) shouldBe Seq(1, 2, 6, 24, 120)
+    }
+
+    "fibonacci sequence" in {
+      val t = query(
+        """WITH RECURSIVE fib(n, a, b) AS (
+          |  SELECT 1, 0, 1
+          |  UNION ALL
+          |  SELECT n + 1, b, a + b FROM fib WHERE n < 8
+          |)
+          |SELECT n, a FROM fib ORDER BY n""".stripMargin)
+      t.data.map(_.data(1).intValue) shouldBe Seq(0, 1, 1, 2, 3, 5, 8, 13)
+    }
+
+    "tree traversal" in {
+      val t = query(
+        s"""$setup;
+           |CREATE TABLE tree (id INT, parent_id INT, name TEXT);
+           |INSERT INTO tree (id, parent_id, name) VALUES
+           |  (1, NULL, 'root'),
+           |  (2, 1, 'child1'),
+           |  (3, 1, 'child2'),
+           |  (4, 2, 'grandchild1'),
+           |  (5, 3, 'grandchild2');
+           |WITH RECURSIVE descendants(id, name, depth) AS (
+           |  SELECT id, name, 0 FROM tree WHERE parent_id IS NULL
+           |  UNION ALL
+           |  SELECT t.id, t.name, d.depth + 1
+           |  FROM tree t INNER JOIN descendants d ON t.parent_id = d.id
+           |)
+           |SELECT name, depth FROM descendants ORDER BY depth, name""".stripMargin)
+      t.data.map(_.data(0).asInstanceOf[TextValue].s) shouldBe Seq("root", "child1", "child2", "grandchild1", "grandchild2")
+      t.data.map(_.data(1).intValue) shouldBe Seq(0, 1, 1, 2, 2)
+    }
+
+    "UNION (deduplicated) recursive CTE" in {
+      val t = query(
+        """WITH RECURSIVE nums(n) AS (
+          |  SELECT 1
+          |  UNION
+          |  SELECT n + 1 FROM nums WHERE n < 6
+          |)
+          |SELECT n FROM nums ORDER BY n""".stripMargin)
+      t.data.map(_.data(0).intValue) shouldBe (1 to 6)
+    }
+
+    "recursive CTE with non-recursive CTE" in {
+      val t = query(
+        s"""$setup;
+           |WITH RECURSIVE
+           |  eng AS (SELECT id, name FROM employees WHERE dept = 'Engineering'),
+           |  nums(n) AS (
+           |    SELECT 1
+           |    UNION ALL
+           |    SELECT n + 1 FROM nums WHERE n < 3
+           |  )
+           |SELECT e.name, nums.n
+           |FROM eng e CROSS JOIN nums
+           |ORDER BY e.name, nums.n""".stripMargin)
+      t.data.length shouldBe 6
+    }
+
+    "recursive CTE terminates on empty result" in {
+      val t = query(
+        """WITH RECURSIVE countdown(n) AS (
+          |  SELECT 5
+          |  UNION ALL
+          |  SELECT n - 1 FROM countdown WHERE n > 1
+          |)
+          |SELECT n FROM countdown ORDER BY n""".stripMargin)
+      t.data.map(_.data(0).intValue) shouldBe Seq(1, 2, 3, 4, 5)
+    }
+  }
+
   "error cases" - {
 
     "undefined CTE reference" in {

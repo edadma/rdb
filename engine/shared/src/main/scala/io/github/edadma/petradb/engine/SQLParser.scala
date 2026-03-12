@@ -882,19 +882,19 @@ object SQLParser:
         CTEDef(id, cols.map(_.map(c => Ident(c).setPos(mkPos(loc)).asInstanceOf[Ident])), q)
     }
 
-  private def withClause[p: P]: P[Seq[CTEDef]] =
-    P(kw("with") ~ cteDef.rep(1, sep = ","))
+  private def withClause[p: P]: P[(Boolean, Seq[CTEDef])] =
+    P(kw("with") ~ kw("recursive").!.?.map(_.isDefined) ~ cteDef.rep(1, sep = ","))
 
-  // query = [WITH ...] compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+  // query = [WITH [RECURSIVE] ...] compoundSelect [ORDER BY ...] [LIMIT ...] [OFFSET ...]
   private def query[p: P]: P[Expr] =
     P(withClause.? ~ compoundSelect ~ orderByClause ~ limitClause ~ offsetClause).map {
       case (None, s: SQLSelectExpr, o, l, of) => s.copy(orderBy = o, limit = l, offset = of)
       case (None, s, None, None, None) => s
       case (None, s, o, l, of) => CompoundQueryExpr(s, o, of, l)
-      case (Some(ctes), s: SQLSelectExpr, o, l, of) =>
-        WithExpr(ctes, s.copy(orderBy = o, limit = l, offset = of))
-      case (Some(ctes), s, None, None, None) => WithExpr(ctes, s)
-      case (Some(ctes), s, o, l, of) => WithExpr(ctes, CompoundQueryExpr(s, o, of, l))
+      case (Some((rec, ctes)), s: SQLSelectExpr, o, l, of) =>
+        WithExpr(ctes, s.copy(orderBy = o, limit = l, offset = of), rec)
+      case (Some((rec, ctes)), s, None, None, None) => WithExpr(ctes, s, rec)
+      case (Some((rec, ctes)), s, o, l, of) => WithExpr(ctes, CompoundQueryExpr(s, o, of, l), rec)
     }
 
   // ── DML: INSERT ────────────────────────────────────────────────────

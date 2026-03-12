@@ -902,6 +902,7 @@ private def formatProcess(proc: Process, indent: Int): String =
     case p: RightHashJoinProcess => s"${prefix}Hash Right Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
     case p: FullHashJoinProcess  => s"${prefix}Hash Full Join\n${formatProcess(p.build, indent + 1)}\n${formatProcess(p.probe, indent + 1)}"
     case p: UnionProcess       => s"${prefix}Union${if p.all then " All" else ""}\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
+    case p: RecursiveCTEProcess  => s"${prefix}Recursive CTE${if p.all then " All" else ""}\n${formatProcess(p.anchor, indent + 1)}\n${formatProcess(p.recursive, indent + 1)}"
     case p: GenerateSeriesProcess => s"${prefix}Generate Series"
     case t: Table              => s"${prefix}Seq Scan on ${t.name}"
     case SingleProcess         => s"${prefix}Result"
@@ -953,10 +954,11 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
       CompoundQueryExpr(deepCopyExpr(q, params), ob.map(_.map(deepCopyOrderBy(_, params))),
         off.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         lim.map(c => Count(c.pos, deepCopyExpr(c.expr, params))))
-    case WithExpr(ctes, query) =>
+    case WithExpr(ctes, query, recursive) =>
       WithExpr(
         ctes.map(c => CTEDef(c.name, c.columns, deepCopyExpr(c.query, params))),
         deepCopyExpr(query, params),
+        recursive,
       )
     case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
       SQLSelectExpr(
