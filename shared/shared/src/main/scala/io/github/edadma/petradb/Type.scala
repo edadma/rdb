@@ -138,6 +138,7 @@ case class NumericType(precision: Int, scale: Int) extends Type("numeric"):
 case class VarcharType(length: Int) extends Type("varchar"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull => v
       case TextValue(s) =>
         if s.length > length then TextValue(s.substring(0, length))
         else TextValue(s)
@@ -149,6 +150,7 @@ case class VarcharType(length: Int) extends Type("varchar"):
 case class CharType(length: Int) extends Type("char"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull => v
       case TextValue(s) =>
         if s.length >= length then TextValue(s.substring(0, length))
         else TextValue(s.padTo(length, ' '))
@@ -164,6 +166,7 @@ case object UUIDType extends Type("uuid"):
 
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull => v
       case id: UUIDValue => id
       case _             =>
         val textVal = v.toText
@@ -175,12 +178,14 @@ case object UUIDType extends Type("uuid"):
 case object TextType extends Type("text"):
   override def convert(v: Value): Value =
     v match
-      case t: TextValue => t
-      case _            => v.toText
+      case _ if v.isNull => v
+      case t: TextValue  => t
+      case _             => v.toText
 
 case object TimestampType extends Type("timestamp"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull       => v
       case t: TimestampValue   => t
       case DateValue(d)        => TimestampValue(d.atStartOfDay)
       case TimestampTZValue(t) => TimestampValue(t.toLocalDateTime)
@@ -191,6 +196,7 @@ case object TimestampType extends Type("timestamp"):
 case object DateType extends Type("date"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull       => v
       case d: DateValue        => d
       case TimestampValue(t)   => DateValue(t.toLocalDate)
       case TimestampTZValue(t) => DateValue(t.toLocalDate)
@@ -205,6 +211,7 @@ case object DateType extends Type("date"):
 case object TimeType extends Type("time"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull       => v
       case t: TimeValue        => t
       case TimestampValue(t)   => TimeValue(t.toLocalTime)
       case TimestampTZValue(t) => TimeValue(t.toLocalTime)
@@ -219,6 +226,7 @@ case object TimeType extends Type("time"):
 case object TimeTZType extends Type("timetz"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull         => v
       case t: TimeTZValue        => t
       case TimeValue(t)          => TimeTZValue(t.atOffset(ZoneOffset.UTC))
       case TimestampTZValue(t)   => TimeTZValue(t.toOffsetTime)
@@ -235,6 +243,7 @@ case object IntervalType extends Type("interval"):
 
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull  => v
       case i: IntervalValue => i
       case _ =>
         val s = v.toText.s.trim
@@ -255,6 +264,7 @@ case object IntervalType extends Type("interval"):
 case object TimestampTZType extends Type("timestamptz"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull       => v
       case t: TimestampTZValue => t
       case TimestampValue(t)   => TimestampTZValue(t.atOffset(ZoneOffset.UTC))
       case DateValue(d)        => TimestampTZValue(d.atStartOfDay.atOffset(ZoneOffset.UTC))
@@ -266,6 +276,7 @@ case object TimestampTZType extends Type("timestamptz"):
 case object ByteaType extends Type("bytea"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull => v
       case b: ByteaValue => b
       case _ =>
         val s = v.toText.s
@@ -288,6 +299,7 @@ case class ArrayColumnType(elementType: Type) extends Type(s"${elementType.name}
 case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
     v match
+      case _ if v.isNull               => v
       case _: (ArrayValue | ObjectValue) => v
       case _                             =>
         val textVal = v.toText

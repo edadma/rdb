@@ -6,9 +6,10 @@ case class EnumType(enumName: String, labels: IndexedSeq[String]) extends Type(e
   val labelsMap: Map[String, Int] = labels.zipWithIndex toMap
 
   override def convert(v: Value): Value =
-    val textVal = v.toText
-
-    EnumValue(labelsMap.getOrElse(textVal.s, throw TypeException(v.pos, s"unknown label '${textVal.s}'")), this)
+    if v.isNull then v
+    else
+      val textVal = v.toText
+      EnumValue(labelsMap.getOrElse(textVal.s, throw TypeException(v.pos, s"unknown label '${textVal.s}'")), this)
 
 case class EnumValue(value: Int, typ: EnumType) extends Value(typ):
   override def toText: TextValue = TextValue(string)

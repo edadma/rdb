@@ -470,6 +470,93 @@ class NullEdgeCaseTests extends AnyFreeSpec with Matchers with Testing {
     }
   }
 
+  // ── NULL stored value integrity across types ─────────────────────
+  // Verifies that NULL inserted into typed columns is stored and
+  // retrieved as NullValue, not silently converted (e.g. TextValue("NULL")).
+
+  "NULL round-trip through typed columns" - {
+    "INSERT NULL into TEXT column yields NullValue" in {
+      val t = query("CREATE TABLE nrt1 (v TEXT); INSERT INTO nrt1 VALUES (NULL); SELECT v FROM nrt1;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into VARCHAR column yields NullValue" in {
+      val t = query("CREATE TABLE nrt2 (v VARCHAR(50)); INSERT INTO nrt2 VALUES (NULL); SELECT v FROM nrt2;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into DATE column yields NullValue" in {
+      val t = query("CREATE TABLE nrt3 (v DATE); INSERT INTO nrt3 VALUES (NULL); SELECT v FROM nrt3;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into TIMESTAMP column yields NullValue" in {
+      val t = query("CREATE TABLE nrt4 (v TIMESTAMP); INSERT INTO nrt4 VALUES (NULL); SELECT v FROM nrt4;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into BOOLEAN column yields NullValue" in {
+      val t = query("CREATE TABLE nrt5 (v BOOLEAN); INSERT INTO nrt5 VALUES (NULL); SELECT v FROM nrt5;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into UUID column yields NullValue" in {
+      val t = query("CREATE TABLE nrt6 (v UUID); INSERT INTO nrt6 VALUES (NULL); SELECT v FROM nrt6;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into JSON column yields NullValue" in {
+      val t = query("CREATE TABLE nrt7 (v JSON); INSERT INTO nrt7 VALUES (NULL); SELECT v FROM nrt7;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into NUMERIC column yields NullValue" in {
+      val t = query("CREATE TABLE nrt8 (v NUMERIC(10,2)); INSERT INTO nrt8 VALUES (NULL); SELECT v FROM nrt8;")
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "INSERT NULL into ENUM column yields NullValue" in {
+      val t = query(
+        """CREATE TYPE mood AS ENUM ('happy', 'sad');
+          |CREATE TABLE nrt9 (v mood);
+          |INSERT INTO nrt9 VALUES (NULL);
+          |SELECT v FROM nrt9;""".stripMargin
+      )
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "UPDATE to NULL on TEXT column yields NullValue" in {
+      val t = query(
+        """CREATE TABLE nrt10 (id INT, v TEXT);
+          |INSERT INTO nrt10 VALUES (1, 'hello');
+          |UPDATE nrt10 SET v = NULL WHERE id = 1;
+          |SELECT v FROM nrt10;""".stripMargin
+      )
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "UPDATE to NULL on DATE column yields NullValue" in {
+      val t = query(
+        """CREATE TABLE nrt11 (id INT, v DATE);
+          |INSERT INTO nrt11 VALUES (1, '2026-01-01');
+          |UPDATE nrt11 SET v = NULL WHERE id = 1;
+          |SELECT v FROM nrt11;""".stripMargin
+      )
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+
+    "UPDATE to NULL on ENUM column yields NullValue" in {
+      val t = query(
+        """CREATE TYPE priority AS ENUM ('low', 'high');
+          |CREATE TABLE nrt12 (id INT, v priority);
+          |INSERT INTO nrt12 VALUES (1, 'low');
+          |UPDATE nrt12 SET v = NULL WHERE id = 1;
+          |SELECT v FROM nrt12;""".stripMargin
+      )
+      t.data(0).data(0) shouldBe a[NullValue]
+    }
+  }
+
   // ── Empty string vs NULL ──────────────────────────────────────────
 
   "empty string vs NULL" - {
