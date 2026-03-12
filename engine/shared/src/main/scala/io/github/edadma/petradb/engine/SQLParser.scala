@@ -753,6 +753,7 @@ object SQLParser:
           case Some("FIRST") => true
           case Some("LAST")  => false
           case None          => !asc // SQL standard: ASC → NULLS LAST, DESC → NULLS FIRST
+          case _             => !asc
         OrderBy(e, asc, nullsFirst)
     }
 

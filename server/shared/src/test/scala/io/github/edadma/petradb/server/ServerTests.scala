@@ -121,13 +121,13 @@ class ServerTests extends AnyFreeSpec with Matchers:
     val table = results.head.asInstanceOf[QueryResult].table
     table.data.length shouldBe 2
 
-    table.data(0)("i") shouldBe NullValue()
-    table.data(0)("s") shouldBe NullValue()
-    table.data(0)("b") shouldBe BooleanValue(false)
+    table.data(0).getInt("i") shouldBe 42
+    table.data(0).getString("s") shouldBe "hello"
+    table.data(0).getBoolean("b") shouldBe true
 
-    table.data(1).getInt("i") shouldBe 42
-    table.data(1).getString("s") shouldBe "hello"
-    table.data(1).getBoolean("b") shouldBe true
+    table.data(1)("i") shouldBe NullValue()
+    table.data(1)("s") shouldBe NullValue()
+    table.data(1)("b") shouldBe BooleanValue(false)
   }
 
   "transaction rollback" in withHandler { (_, d) =>
