@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.engine
 
 import io.github.edadma.petradb.{Session as _, *}
+import io.github.edadma.{dal}
 
 //import pprint.pprintln
 
@@ -18,6 +19,37 @@ def executeSelect(query: Expr)(using session: Session) =
 def executeSQL(sql: String)(using session: Session): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
   executeCommands(cs)
+
+def executeSQL(sql: String, params: IndexedSeq[Any])(using session: Session): Seq[Result] =
+  val cs = SQLParser.parseCommands(sql)
+  val paramValues = params.map(anyToValue)
+  val bound = deepCopyCommands(cs, paramValues)
+  executeCommands(bound)
+
+private[engine] def anyToValue(a: Any): Value =
+  a match
+    case null              => NullValue()
+    case v: Value          => v
+    case b: Boolean        => BooleanValue(b)
+    case i: Int            => NumberValue(dal.IntType, i)
+    case l: Long           => NumberValue(dal.LongType, l)
+    case d: Double         => NumberValue(dal.DoubleType, d)
+    case f: Float          => NumberValue(dal.DoubleType, f.toDouble)
+    case s: Short          => NumberValue(dal.IntType, s.toInt)
+    case b: Byte           => NumberValue(dal.IntType, b.toInt)
+    case bd: BigDecimal    => NumberValue(dal.BigDecType, bd.bigDecimal)
+    case bd: java.math.BigDecimal => NumberValue(dal.BigDecType, bd)
+    case s: String         => TextValue(s)
+    case d: java.time.LocalDate     => DateValue(d)
+    case t: java.time.LocalTime     => TimeValue(t)
+    case dt: java.time.LocalDateTime => TimestampValue(dt)
+    case odt: java.time.OffsetDateTime => TimestampTZValue(odt)
+    case ot: java.time.OffsetTime   => TimeTZValue(ot)
+    case dur: java.time.Duration    => IntervalValue(dur)
+    case bytes: Array[Byte]         => ByteaValue(bytes)
+    case seq: Seq[?]       => ArrayValue(seq.map(anyToValue).toIndexedSeq)
+    case arr: Array[?]     => ArrayValue(arr.map(anyToValue).toIndexedSeq)
+    case other             => throw ExecutionException(null, s"cannot convert ${other.getClass.getName} to a database value")
 
 private[engine] def executeCommands(cs: Seq[Command])(using session: Session): Seq[Result] =
 
@@ -954,6 +986,11 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
     case WindowExpr(func, partBy, ordBy, frame) => WindowExpr(deepCopyExpr(func, params), partBy.map(deepCopyExpr(_, params)), ordBy.map { case OrderBy(f, d, n) => OrderBy(deepCopyExpr(f, params), d, n) }, frame)
     case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v, params), op, es.map(deepCopyExpr(_, params)))
     case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v, params), op, deepCopyExpr(q, params))
+    case QuantifiedCompareExpr(v, op, q, e) => QuantifiedCompareExpr(deepCopyExpr(v, params), op, q, deepCopyExpr(e, params))
+    case ScalarFunctionExpr(f, args)       => ScalarFunctionExpr(f, args.map(deepCopyExpr(_, params)))
+    case AggregateFunctionExpr(f, args, filter) => AggregateFunctionExpr(f, args.map(deepCopyExpr(_, params)), filter.map(deepCopyExpr(_, params)))
+    case v: VariableInstanceExpr           => v
+    case DefaultExpr                       => DefaultExpr
     case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q, params))
     case ExistsExpr(q)                     => ExistsExpr(deepCopyExpr(q, params))
     case ObjectExpr(props)                 => ObjectExpr(props.map { case (k, v) => (k, deepCopyExpr(v, params)) })
