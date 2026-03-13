@@ -115,7 +115,7 @@ describe('quarry', () => {
 
   describe('insert', () => {
     it('inserts a single row', async () => {
-      const result = await db.insert(users).values({ name: 'Alice', email: 'alice@test.com', age: 30 }).execute()
+      const [result] = await db.insert(users).values({ name: 'Alice', email: 'alice@test.com', age: 30 }).execute()
       assert.equal(result.name, 'Alice')
       assert.equal(result.email, 'alice@test.com')
       assert.equal(result.age, 30)
@@ -123,7 +123,7 @@ describe('quarry', () => {
     })
 
     it('inserts with explicit boolean false', async () => {
-      const result = await db
+      const [result] = await db
         .insert(users)
         .values({ name: 'Bob', email: 'bob@test.com', active: false })
         .execute()
@@ -131,7 +131,7 @@ describe('quarry', () => {
     })
 
     it('inserts with null optional field', async () => {
-      const result = await db
+      const [result] = await db
         .insert(users)
         .values({ name: 'Charlie', email: 'charlie@test.com', age: null })
         .execute()

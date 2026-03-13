@@ -44,6 +44,12 @@ object ASTConverter:
           obj.op.asInstanceOf[String],
           obj.exprs.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq,
         )
+      case "inQuery" =>
+        InQueryExpr(
+          toExpr(obj.value),
+          obj.op.asInstanceOf[String],
+          toExpr(obj.query),
+        )
       case "between" =>
         BetweenExpr(toExpr(obj.value), obj.op.asInstanceOf[String], toExpr(obj.lower), toExpr(obj.upper))
       case "case" =>
@@ -124,7 +130,20 @@ object ASTConverter:
     val returning =
       if js.isUndefined(obj.returning) || obj.returning == null then None
       else Some(obj.returning.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
-    InsertCommand(table, columns, rows, returning)
+    val onConflict =
+      if js.isUndefined(obj.onConflict) || obj.onConflict == null then None
+      else
+        val oc = obj.onConflict.asInstanceOf[js.Dynamic]
+        oc.kind.asInstanceOf[String] match
+          case "doNothing" => Some(OnConflictDoNothing)
+          case "doUpdate" =>
+            val conflictCols = oc.conflictColumns.asInstanceOf[js.Array[String]].map(c => ident(c)).toSeq
+            val updates = oc.updates.asInstanceOf[js.Array[js.Dynamic]].map { s =>
+              UpdateSet(ident(s.col.asInstanceOf[String]), toExpr(s.value))
+            }.toSeq
+            Some(OnConflictDoUpdate(conflictCols, updates))
+          case k => throw js.JavaScriptException(js.Error(s"Unknown onConflict kind: $k"))
+    InsertCommand(table, columns, rows, returning, onConflict)
 
   private def toUpdateCommand(obj: js.Dynamic): UpdateCommand =
     val table = ident(obj.table.asInstanceOf[String])
@@ -184,21 +203,39 @@ object ASTConverter:
     id.pos = NoPosition
     id
 
+  private val varcharPattern = """varchar\((\d+)\)""".r
+  private val charPattern = """char\((\d+)\)""".r
+  private val numericPattern1 = """numeric\((\d+),(\d+)\)""".r
+  private val numericPattern2 = """numeric\((\d+)\)""".r
+
   private def typeFromString(s: String): Type =
     s.toLowerCase match
-      case "serial"    => SerialType
-      case "text"      => TextType
-      case "integer"   => IntegerType
-      case "int"       => IntegerType
-      case "boolean"   => BooleanType
-      case "bool"      => BooleanType
-      case "double"    => DoubleType
-      case "bigint"    => BigintType
-      case "uuid"      => UUIDType
-      case "timestamp" => TimestampType
-      case "date"      => DateType
-      case "time"      => TimeType
-      case "json"      => JSONType
-      case "bytea"     => ByteaType
-      case "interval"  => IntervalType
-      case other       => throw js.JavaScriptException(js.Error(s"Unknown type: $other"))
+      case "serial"      => SerialType
+      case "bigserial"   => BigSerialType
+      case "smallserial" => SmallSerialType
+      case "text"        => TextType
+      case "varchar"     => VarcharType(255)
+      case "integer"     => IntegerType
+      case "int"         => IntegerType
+      case "smallint"    => SmallintType
+      case "boolean"     => BooleanType
+      case "bool"        => BooleanType
+      case "double"      => DoubleType
+      case "real"        => DoubleType
+      case "float"       => DoubleType
+      case "bigint"      => BigintType
+      case "numeric"     => NumericType(0, 0)
+      case "uuid"        => UUIDType
+      case "timestamp"   => TimestampType
+      case "timestamptz" => TimestampTZType
+      case "date"        => DateType
+      case "time"        => TimeType
+      case "timetz"      => TimeTZType
+      case "json"        => JSONType
+      case "bytea"       => ByteaType
+      case "interval"    => IntervalType
+      case varcharPattern(n)          => VarcharType(n.toInt)
+      case charPattern(n)             => CharType(n.toInt)
+      case numericPattern1(p, s)      => NumericType(p.toInt, s.toInt)
+      case numericPattern2(p)         => NumericType(p.toInt, 0)
+      case other => throw js.JavaScriptException(js.Error(s"Unknown type: $other"))

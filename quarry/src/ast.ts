@@ -15,6 +15,7 @@ export type ASTExpr =
   | ASTAlias
   | ASTApply
   | ASTIn
+  | ASTInQuery
   | ASTBetween
   | ASTCase
   | ASTSubquery
@@ -91,6 +92,13 @@ export interface ASTIn {
   value: ASTExpr
   op: string // 'IN' or 'NOT IN'
   exprs: ASTExpr[]
+}
+
+export interface ASTInQuery {
+  kind: 'inQuery'
+  value: ASTExpr
+  op: string // 'IN' or 'NOT IN'
+  query: ASTExpr
 }
 
 export interface ASTBetween {
@@ -196,12 +204,25 @@ export interface ASTUpdateSet {
   value: ASTExpr
 }
 
+export interface ASTOnConflictDoNothing {
+  kind: 'doNothing'
+}
+
+export interface ASTOnConflictDoUpdate {
+  kind: 'doUpdate'
+  conflictColumns: string[]
+  updates: ASTUpdateSet[]
+}
+
+export type ASTOnConflict = ASTOnConflictDoNothing | ASTOnConflictDoUpdate
+
 export interface ASTInsertCommand {
   kind: 'insert'
   table: string
   columns: string[]
   rows: ASTExpr[][]
   returning?: ASTExpr[]
+  onConflict?: ASTOnConflict
 }
 
 export interface ASTUpdateCommand {

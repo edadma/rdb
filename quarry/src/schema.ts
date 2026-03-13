@@ -1,16 +1,5 @@
 import type { ASTExpr, ASTColumnDef, ASTCreateTableCommand } from './ast.js'
 
-// ── Column type mapping ──
-
-type ColumnTypeMap = {
-  serial: number
-  text: string
-  integer: number
-  boolean: boolean
-}
-
-type ColumnTypeName = keyof ColumnTypeMap
-
 // ── Column definition ──
 
 export interface ColumnDef<
@@ -73,20 +62,115 @@ function createColumn<TName extends string, TType, THasDefault extends boolean>(
 
 // ── Column constructors ──
 
+// Auto-incrementing integer primary key
 export function serial<TName extends string>(name: TName): ColumnDef<TName, number, true, true> {
   return createColumn<TName, number, true>(name, 'serial', true).notNull() as any
 }
 
+// Auto-incrementing bigint primary key
+export function bigserial<TName extends string>(name: TName): ColumnDef<TName, number, true, true> {
+  return createColumn<TName, number, true>(name, 'bigserial', true).notNull() as any
+}
+
+// Variable-length text
 export function text<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
   return createColumn<TName, string, false>(name, 'text', false)
 }
 
+// Variable-length text with max length
+export function varchar<TName extends string>(name: TName, length?: number): ColumnDef<TName, string, false, false> {
+  const typeName = length !== undefined ? `varchar(${length})` : 'varchar'
+  return createColumn<TName, string, false>(name, typeName, false)
+}
+
+// Fixed-length text
+export function char<TName extends string>(name: TName, length?: number): ColumnDef<TName, string, false, false> {
+  const typeName = length !== undefined ? `char(${length})` : 'char'
+  return createColumn<TName, string, false>(name, typeName, false)
+}
+
+// 32-bit integer
 export function integer<TName extends string>(name: TName): ColumnDef<TName, number, false, false> {
   return createColumn<TName, number, false>(name, 'integer', false)
 }
 
+// 16-bit integer
+export function smallint<TName extends string>(name: TName): ColumnDef<TName, number, false, false> {
+  return createColumn<TName, number, false>(name, 'smallint', false)
+}
+
+// 64-bit integer
+export function bigint<TName extends string>(name: TName): ColumnDef<TName, number, false, false> {
+  return createColumn<TName, number, false>(name, 'bigint', false)
+}
+
+// Double-precision floating point
+export function doublePrecision<TName extends string>(name: TName): ColumnDef<TName, number, false, false> {
+  return createColumn<TName, number, false>(name, 'double', false)
+}
+
+// Single-precision floating point
+export function real<TName extends string>(name: TName): ColumnDef<TName, number, false, false> {
+  return createColumn<TName, number, false>(name, 'real', false)
+}
+
+// Arbitrary precision numeric
+export function numeric<TName extends string>(name: TName, precision?: number, scale?: number): ColumnDef<TName, number, false, false> {
+  let typeName = 'numeric'
+  if (precision !== undefined) {
+    typeName = scale !== undefined ? `numeric(${precision},${scale})` : `numeric(${precision})`
+  }
+  return createColumn<TName, number, false>(name, typeName, false)
+}
+
+// Boolean
 export function boolean<TName extends string>(name: TName): ColumnDef<TName, boolean, false, false> {
   return createColumn<TName, boolean, false>(name, 'boolean', false)
+}
+
+// UUID
+export function uuid<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'uuid', false)
+}
+
+// Timestamp without timezone
+export function timestamp<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'timestamp', false)
+}
+
+// Timestamp with timezone
+export function timestamptz<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'timestamptz', false)
+}
+
+// Date
+export function date<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'date', false)
+}
+
+// Time without timezone
+export function time<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'time', false)
+}
+
+// Time with timezone
+export function timetz<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'timetz', false)
+}
+
+// Interval
+export function interval<TName extends string>(name: TName): ColumnDef<TName, string, false, false> {
+  return createColumn<TName, string, false>(name, 'interval', false)
+}
+
+// JSON
+export function json<TName extends string>(name: TName): ColumnDef<TName, unknown, false, false> {
+  return createColumn<TName, unknown, false>(name, 'json', false)
+}
+
+// Binary data
+export function bytea<TName extends string>(name: TName): ColumnDef<TName, number[], false, false> {
+  return createColumn<TName, number[], false>(name, 'bytea', false)
 }
 
 // ── Table definition ──
@@ -96,7 +180,9 @@ export type ColumnsConfig = Record<string, ColumnDef<any, any, any, any>>
 export interface TableDef<TName extends string, TColumns extends ColumnsConfig> {
   readonly _name: TName
   readonly _columns: TColumns
+  readonly _originalName?: string
   toCreateAST(): ASTCreateTableCommand
+  as<TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns>
 }
 
 export type InferSelect<T extends TableDef<any, any>> = {
@@ -170,6 +256,19 @@ export function table<TName extends string, TColumns extends ColumnsConfig>(
         kind: 'createTable',
         table: name,
         columns: Object.keys(columns).map((key) => columnDefToAST(key, columns[key])),
+      }
+    },
+    as<TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns> {
+      return {
+        _name: alias,
+        _columns: columns,
+        _originalName: name,
+        toCreateAST() {
+          throw new Error('Cannot create table from an alias')
+        },
+        as<TAlias2 extends string>(alias2: TAlias2): TableDef<TAlias2, TColumns> {
+          return table(name, columns).as(alias2)
+        },
       }
     },
   }

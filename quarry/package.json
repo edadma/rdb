@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "node --test test/integration.mjs test/operators.mjs",
+    "test": "node --test test/integration.mjs test/operators.mjs test/schema-tx.mjs test/subqueries.mjs test/upsert.mjs test/aliases.mjs",
     "typecheck": "tsc --noEmit -p test/tsconfig.json"
   },
   "peerDependencies": {

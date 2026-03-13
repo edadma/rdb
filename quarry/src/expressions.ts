@@ -1,4 +1,4 @@
-import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists } from './ast.js'
+import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTInQuery, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery } from './ast.js'
 import type { ColumnDef, TableDef, ColumnsConfig } from './schema.js'
 
 // ── Column reference ──
@@ -293,10 +293,22 @@ export function cast(expr: ASTExpr, targetType: string): ASTCast {
   return { kind: 'cast', expr, targetType }
 }
 
-// ── EXISTS expression ──
+// ── Subquery expressions ──
+
+export function subquery(query: ASTExpr): ASTSubquery {
+  return { kind: 'subquery', query }
+}
 
 export function exists(subquery: ASTExpr): ASTExists {
   return { kind: 'exists', subquery }
+}
+
+export function inSubquery(expr: ASTExpr, query: ASTExpr): ASTInQuery {
+  return { kind: 'inQuery', value: expr, op: 'IN', query }
+}
+
+export function notInSubquery(expr: ASTExpr, query: ASTExpr): ASTInQuery {
+  return { kind: 'inQuery', value: expr, op: 'NOT IN', query }
 }
 
 // ── Aggregate functions ──

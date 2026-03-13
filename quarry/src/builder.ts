@@ -7,19 +7,30 @@ import type {
   ASTDeleteCommand,
   ASTOrderBy,
   ASTUpdateSet,
+  ASTOnConflict,
 } from './ast.js'
 import type { TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
+
+// ── Helpers ──
+
+function tableToExpr(table: TableDef<any, any>): ASTExpr {
+  if (table._originalName) {
+    return { kind: 'aliasRelation', relation: { kind: 'table', name: table._originalName }, alias: table._name }
+  }
+  return { kind: 'table', name: table._name }
+}
 
 // ── Session interface ──
 
 export interface QuarrySession {
   executeAST(ast: any, options?: { rowMode?: string }): Promise<any[]>
+  execute(sql: string, options?: { rowMode?: string }): Promise<any[]>
 }
 
 // ── Select builder ──
 
 interface SelectState {
-  tableName: string
+  tableExpr: ASTExpr
   columns: ASTExpr[]
   where?: ASTExpr
   orderBy?: ASTOrderBy[]
@@ -81,7 +92,7 @@ export class SelectBuilder<TResult> {
       ...this._state,
       joins: [
         ...this._state.joins,
-        { kind: 'joinInner', right: { kind: 'table', name: table._name }, on },
+        { kind: 'joinInner', right: tableToExpr(table), on },
       ],
     })
   }
@@ -94,19 +105,19 @@ export class SelectBuilder<TResult> {
       ...this._state,
       joins: [
         ...this._state.joins,
-        { kind: 'joinLeft', right: { kind: 'table', name: table._name }, on },
+        { kind: 'joinLeft', right: tableToExpr(table), on },
       ],
     })
   }
 
-  toAST(): ASTQueryCommand {
-    let from: ASTExpr = { kind: 'table', name: this._state.tableName }
+  toExpr(): ASTExpr {
+    let from: ASTExpr = this._state.tableExpr
 
     for (const join of this._state.joins) {
       from = { kind: join.kind, left: from, right: join.right, on: join.on }
     }
 
-    const select: ASTExpr = {
+    return {
       kind: 'select',
       exprs: this._state.columns,
       from: [from],
@@ -118,8 +129,10 @@ export class SelectBuilder<TResult> {
       having: this._state.having,
       distinct: this._state.distinct || undefined,
     }
+  }
 
-    return { kind: 'query', query: select }
+  toAST(): ASTQueryCommand {
+    return { kind: 'query', query: this.toExpr() }
   }
 
   async execute(): Promise<TResult[]> {
@@ -137,6 +150,7 @@ export class InsertBuilder<T extends TableDef<any, any>> {
   private _session: QuarrySession
   private _rows: Record<string, unknown>[] = []
   private _returning?: ASTExpr[]
+  private _onConflict?: ASTOnConflict
 
   constructor(session: QuarrySession, table: T) {
     this._session = session
@@ -150,6 +164,39 @@ export class InsertBuilder<T extends TableDef<any, any>> {
 
   returning(...exprs: ASTExpr[]): this {
     this._returning = exprs
+    return this
+  }
+
+  onConflictDoNothing(): this {
+    this._onConflict = { kind: 'doNothing' }
+    return this
+  }
+
+  onConflictDoUpdate(
+    conflictColumns: (keyof T['_columns'] & string)[],
+    updates: Partial<InferSelect<T>>,
+  ): this {
+    const columns = this._table._columns as ColumnsConfig
+    const dbConflictCols = conflictColumns.map((key) => {
+      const colDef = columns[key]
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      return colDef._columnName
+    })
+
+    const sets: ASTUpdateSet[] = []
+    for (const [key, value] of Object.entries(updates as Record<string, unknown>)) {
+      const colDef = columns[key]
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      let astValue: ASTExpr
+      if (value === null || value === undefined) astValue = { kind: 'null' }
+      else if (typeof value === 'string') astValue = { kind: 'string', value }
+      else if (typeof value === 'number') astValue = { kind: 'number', value }
+      else if (typeof value === 'boolean') astValue = { kind: 'boolean', value }
+      else astValue = { kind: 'string', value: String(value) }
+      sets.push({ col: colDef._columnName, value: astValue })
+    }
+
+    this._onConflict = { kind: 'doUpdate', conflictColumns: dbConflictCols, updates: sets }
     return this
   }
 
@@ -188,14 +235,15 @@ export class InsertBuilder<T extends TableDef<any, any>> {
       columns: dbColNames,
       rows: astRows,
       returning: this._returning ?? [{ kind: 'star' }],
+      onConflict: this._onConflict,
     }
   }
 
-  async execute(): Promise<InferSelect<T>> {
+  async execute(): Promise<InferSelect<T>[]> {
     const ast = this.toAST()
     const results = await this._session.executeAST(ast)
     const result = results[0] as any
-    return result.rows[0] as InferSelect<T>
+    return result.rows as InferSelect<T>[]
   }
 }
 
@@ -250,11 +298,15 @@ export class UpdateBuilder<T extends TableDef<any, any>> {
     }
   }
 
-  async execute(): Promise<{ rowCount: number }> {
+  async execute(): Promise<{ rowCount: number; rows: InferSelect<T>[] }> {
     const ast = this.toAST()
     const results = await this._session.executeAST(ast)
     const result = results[0] as any
-    return { rowCount: result.rowCount ?? 0 }
+    // With RETURNING, engine returns a select-style result
+    if (result.command === 'select') {
+      return { rowCount: result.rows?.length ?? 0, rows: result.rows ?? [] }
+    }
+    return { rowCount: result.rowCount ?? 0, rows: result.rows ?? [] }
   }
 }
 
@@ -290,11 +342,15 @@ export class DeleteBuilder<T extends TableDef<any, any>> {
     }
   }
 
-  async execute(): Promise<{ rowCount: number }> {
+  async execute(): Promise<{ rowCount: number; rows: InferSelect<T>[] }> {
     const ast = this.toAST()
     const results = await this._session.executeAST(ast)
     const result = results[0] as any
-    return { rowCount: result.rowCount ?? 0 }
+    // With RETURNING, engine returns a select-style result
+    if (result.command === 'select') {
+      return { rowCount: result.rows?.length ?? 0, rows: result.rows ?? [] }
+    }
+    return { rowCount: result.rowCount ?? 0, rows: result.rows ?? [] }
   }
 }
 
@@ -309,7 +365,7 @@ export class QuarryDB {
 
   select<T extends TableDef<any, any>>(table: T): SelectBuilder<InferSelect<T>> {
     return new SelectBuilder<InferSelect<T>>(this._session, {
-      tableName: table._name,
+      tableExpr: tableToExpr(table),
       columns: [{ kind: 'star' }],
       distinct: false,
       joins: [],
@@ -330,6 +386,18 @@ export class QuarryDB {
 
   async createTable<T extends TableDef<any, any>>(table: T): Promise<void> {
     await this._session.executeAST(table.toCreateAST())
+  }
+
+  async transaction<R>(fn: (tx: QuarryDB) => Promise<R>): Promise<R> {
+    await this._session.execute('BEGIN')
+    try {
+      const result = await fn(this)
+      await this._session.execute('COMMIT')
+      return result
+    } catch (e) {
+      await this._session.execute('ROLLBACK')
+      throw e
+    }
   }
 }
 

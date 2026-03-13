@@ -1,5 +1,28 @@
-export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists } from './ast.js'
-export { serial, text, integer, boolean, table } from './schema.js'
+export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
+export {
+  serial,
+  bigserial,
+  text,
+  varchar,
+  char,
+  integer,
+  smallint,
+  bigint,
+  doublePrecision,
+  real,
+  numeric,
+  boolean,
+  uuid,
+  timestamp,
+  timestamptz,
+  date,
+  time,
+  timetz,
+  interval,
+  json,
+  bytea,
+  table,
+} from './schema.js'
 export type { ColumnDef, TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 export {
   col,
@@ -70,10 +93,13 @@ export {
   jsonHasAllKeys,
   // Array operators
   arrayOverlap,
-  // CASE / CAST / EXISTS
+  // CASE / CAST / EXISTS / Subqueries
   caseWhen,
   cast,
+  subquery,
   exists,
+  inSubquery,
+  notInSubquery,
   // Aggregate functions
   count,
   sum,
