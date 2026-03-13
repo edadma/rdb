@@ -36,6 +36,7 @@ trait Testing:
         case p: TakeProcess                       => findProcess(p.input)(pf)
         case _: DropProcess                       => None
         case p: DistinctProcess                   => findProcess(p.input)(pf)
+        case p: DistinctOnProcess                 => findProcess(p.input)(pf)
         case p: HavingProcess                     => findProcess(p.input)(pf)
         case p: AliasProcess                      => findProcess(p.input)(pf)
         case p: ColumnAliasProcess                => findProcess(p.input)(pf)

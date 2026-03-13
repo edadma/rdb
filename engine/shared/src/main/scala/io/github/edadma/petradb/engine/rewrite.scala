@@ -379,7 +379,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
               ) setType BooleanType,
             ) setType BooleanType,
           ) setType BooleanType
-    case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit, _) =>
+    case SQLSelectExpr(exprs, None, where, groupBy, having, orderBy, offset, limit, _, _) =>
       if where.isDefined then throw ParseException(where.get.pos, "WHERE clause not allowed here")
       if groupBy.isDefined then throw ParseException(where.get.pos, "GROUP BY clause not allowed here")
       if having.isDefined then throw ParseException(where.get.pos, "HAVING clause not allowed here")
@@ -391,7 +391,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
 
       ProcessOperator(ProjectProcess(SingleProcess, rewritten_projs))
     case LateralExpr(rel) => rewrite(rel)
-    case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit, distinct) =>
+    case SQLSelectExpr(exprs, Some(from), where, groupBy, having, orderBy, offset, limit, distinct, distinctOn) =>
       def isLateral(e: Expr): Boolean = e match
         case LateralExpr(_)                            => true
         case AliasOperator(LateralExpr(_), _)          => true
@@ -533,7 +533,11 @@ def rewrite(expr: Expr)(using session: Session): Expr =
               case Some(cond) => HavingOperator(r3, rewrite(cond))
               case None       => r3
 
-      val r_distinct = if distinct then DistinctOperator(r_ordered) else r_ordered
+      val r_distinct =
+        if distinct then DistinctOperator(r_ordered)
+        else distinctOn match
+          case Some(keys) => DistinctOnOperator(r_ordered, keys map rewrite)
+          case None       => r_ordered
       val r5 =
         offset match
           case Some(Count(pos, expr)) =>
@@ -594,6 +598,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case OffsetOperator(rel, offset)       => ProcessOperator(DropProcess(procRewrite(rel), offset))
     case LimitOperator(rel, limit)         => ProcessOperator(TakeProcess(procRewrite(rel), limit))
     case DistinctOperator(rel)             => ProcessOperator(DistinctProcess(procRewrite(rel)))
+    case DistinctOnOperator(rel, keys)    => ProcessOperator(DistinctOnProcess(procRewrite(rel), keys))
     case LateralCrossOperator(rel1, rel2) =>
       ProcessOperator(LateralCrossProcess(procRewrite(rel1), procRewrite(rel2)))
     case InnerJoinOperator(rel1, rel2, on) if isLateralExpr(rel2) =>
@@ -994,7 +999,7 @@ private def tryIndexJoin(
 private def containsTableRef(name: String, expr: Expr): Boolean =
   expr match
     case TableOperator(Ident(n)) => n.equalsIgnoreCase(name)
-    case SQLSelectExpr(exprs, from, where, _, _, _, _, _, _) =>
+    case SQLSelectExpr(exprs, from, where, _, _, _, _, _, _, _) =>
       from.exists(_.exists(containsTableRef(name, _))) ||
         where.exists(containsTableRef(name, _)) ||
         exprs.exists(containsTableRef(name, _))
@@ -1022,7 +1027,7 @@ private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
         body match
           case _: ColumnAliasOperator => body // already has alias from column-aliased CTE
           case _ => AliasOperator(body, id)
-      case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+      case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct, distinctOn) =>
         SQLSelectExpr(
           exprs.map(sub).to(scala.collection.immutable.ArraySeq),
           from.map(_.map(sub)),
@@ -1030,7 +1035,7 @@ private def substituteCTEs(expr: Expr, cteMap: Map[String, Expr]): Expr =
           groupBy.map(_.map(sub)),
           having.map(sub),
           orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }),
-          offset, limit, distinct,
+          offset, limit, distinct, distinctOn.map(_.map(sub)),
         )
       case CompoundQueryExpr(query, orderBy, offset, limit) =>
         CompoundQueryExpr(sub(query), orderBy.map(_.map { case OrderBy(f, d, n) => OrderBy(sub(f), d, n) }), offset, limit)

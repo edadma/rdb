@@ -343,6 +343,15 @@ case class DistinctProcess(input: Process) extends Process:
 
   def iterator(ctx: Seq[Row]): RowIterator = input.iterator(ctx).distinctBy(_.data)
 
+case class DistinctOnProcess(input: Process, keyExprs: Seq[Expr]) extends Process:
+  val meta: Metadata = input.meta
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    input.iterator(ctx).distinctBy { row =>
+      val rowCtx = row :: ctx.toList
+      keyExprs.map(e => eval(e, rowCtx))
+    }
+
 object Nulls:
   val first: Ordering[Value] =
     (x: Value, y: Value) =>

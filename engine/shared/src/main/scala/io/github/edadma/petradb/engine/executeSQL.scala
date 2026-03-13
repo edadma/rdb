@@ -899,6 +899,7 @@ private def formatProcess(proc: Process, indent: Int): String =
     case p: TakeProcess        => s"${prefix}Limit\n${formatProcess(p.input, indent + 1)}"
     case _: DropProcess        => s"${prefix}Offset"
     case p: DistinctProcess    => s"${prefix}Distinct\n${formatProcess(p.input, indent + 1)}"
+    case p: DistinctOnProcess  => s"${prefix}Distinct On\n${formatProcess(p.input, indent + 1)}"
     case p: HavingProcess      => s"${prefix}Having\n${formatProcess(p.input, indent + 1)}"
     case p: CrossProcess       => s"${prefix}Cross Join\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
     case p: AliasProcess       => s"${prefix}Alias (${p.alias})\n${formatProcess(p.input, indent + 1)}"
@@ -972,7 +973,7 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
         deepCopyExpr(query, params),
         recursive,
       )
-    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct, distinctOn) =>
       SQLSelectExpr(
         exprs.map(deepCopyExpr(_, params)).to(ArraySeq),
         from.map(_.map(deepCopyExpr(_, params))),
@@ -983,6 +984,7 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
         offset.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         limit.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         distinct,
+        distinctOn.map(_.map(deepCopyExpr(_, params))),
       )
     case AliasOperator(r, a) => AliasOperator(deepCopyExpr(r, params), a)
     case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r, params), a, cs)

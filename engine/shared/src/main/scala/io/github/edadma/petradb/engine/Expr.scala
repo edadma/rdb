@@ -72,4 +72,5 @@ case class SQLSelectExpr(
     offset: Option[Count],
     limit: Option[Count],
     distinct: Boolean = false,
+    distinctOn: Option[Seq[Expr]] = None,
 ) extends Expr
