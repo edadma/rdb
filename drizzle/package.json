@@ -1,6 +1,6 @@
 {
   "name": "@petradb/drizzle",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Drizzle ORM driver for PetraDB",
   "type": "module",
   "exports": {

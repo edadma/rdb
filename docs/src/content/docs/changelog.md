@@ -2,6 +2,25 @@
 title: Changelog
 ---
 
+## v1.4-20260313
+
+### DROP TABLE IF EXISTS ... CASCADE
+
+`DROP TABLE IF EXISTS ... CASCADE` now parses and executes correctly. Previously, `IF EXISTS` and `CASCADE` were mutually exclusive in the parser — combining them caused a parse error.
+
+Additionally, `DROP TABLE ... CASCADE` now properly cleans up foreign key constraints on child tables (both table-level `FOREIGN KEY` constraints and column-level `REFERENCES`). Previously, CASCADE only skipped the FK check but left dangling constraints on child tables, causing subsequent inserts to fail with references to the dropped table. The cleanup is persisted correctly for persistent storage.
+
+### Version bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| shared | 1.4.2 | — |
+| engine | 1.4.2 | @petradb/engine 1.4.2 |
+| server | 1.4.2 | @petradb/server 1.4.2 |
+| cli | 1.4.2 | @petradb/cli 1.4.2 |
+| jdbc | 1.4.2 | — |
+| drizzle | — | @petradb/drizzle 1.4.2 |
+
 ## v1.4-20260312
 
 ### Common Table Expressions (CTEs)

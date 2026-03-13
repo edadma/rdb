@@ -1098,10 +1098,15 @@ object SQLParser:
 
   // ── DDL: DROP TABLE ────────────────────────────────────────────────
 
+  private def cascadeRestrict[p: P]: P[Boolean] =
+    P(kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false))
+
   private def dropTable[p: P]: P[Command] =
     P(
-      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ tableIdent).map(t => DropTableCommand(t, true, false))
-      | (kw("drop") ~ kw("table") ~ tableIdent ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ tableIdent ~ cascadeRestrict.?).map {
+        case (t, cascade) => DropTableCommand(t, true, cascade.getOrElse(false))
+      }
+      | (kw("drop") ~ kw("table") ~ tableIdent ~ cascadeRestrict.?).map {
           case (t, cascade) => DropTableCommand(t, false, cascade.getOrElse(false))
         }
     )

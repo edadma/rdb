@@ -569,11 +569,23 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown table: $table")
             else DropTableResult(table) // IF EXISTS allows missing table
           } else {
+            val refs = db.childForeignKeys(table)
             if !cascade then
-              val refs = db.childForeignKeys(table)
               if refs.nonEmpty then
                 val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
                 throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
+            else
+              // CASCADE: remove FK constraints from child tables that reference this table
+              for (childTable, _) <- refs do
+                childTable.constraints --= childTable.constraints.collect {
+                  case f: ForeignKeySpec if f.referencedTable == table => f
+                }
+                // Also clear column-level FK references
+                for i <- childTable.columns.indices do
+                  childTable.columns(i).fk match
+                    case Some((refTable, _, _, _)) if refTable == table =>
+                      childTable.columns(i) = childTable.columns(i).copy(fk = None)
+                    case _ =>
             // Drop owned sequences
             db.sequences.values.filter(_.ownedByTable.contains(table)).map(_.name).toSeq.foreach(db.dropSequence)
             db.dropTable(table)
