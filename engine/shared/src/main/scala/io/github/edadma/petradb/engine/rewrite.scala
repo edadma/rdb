@@ -711,6 +711,34 @@ private def isColumnOf(table: Table, expr: Expr): Option[String] =
 private def isNonColumnExpr(table: Table, expr: Expr): Boolean =
   isColumnOf(table, expr).isEmpty
 
+// Check if an expression contains correlated outer references (ColumnExpr nodes
+// that weren't resolved during the inner subquery's rewrite). After rewrite, all
+// inner columns are absorbed into the process tree; only outer refs remain as ColumnExpr.
+private def isCorrelated(expr: Expr): Boolean =
+  expr match
+    case _: ColumnExpr              => true
+    case BinaryExpr(l, _, r)        => isCorrelated(l) || isCorrelated(r)
+    case UnaryExpr(_, e)            => isCorrelated(e)
+    case CastExpr(e, _)            => isCorrelated(e)
+    case BetweenExpr(v, _, lo, hi) => isCorrelated(v) || isCorrelated(lo) || isCorrelated(hi)
+    case InSeqExpr(v, _, es)       => isCorrelated(v) || es.exists(isCorrelated)
+    case InQueryExpr(v, _, q)      => isCorrelated(v) || isCorrelated(q)
+    case CaseExpr(whens, els)      => whens.exists(w => isCorrelated(w.when) || isCorrelated(w.expr)) || els.exists(isCorrelated)
+    case ApplyExpr(_, args, f)     => args.exists(isCorrelated) || f.exists(isCorrelated)
+    case ProcessOperator(proc)     => processIsCorrelated(proc)
+    case _                         => false
+
+private def processIsCorrelated(proc: Process): Boolean =
+  proc match
+    case SeqScanProcess(input, cond)     => processIsCorrelated(input) || isCorrelated(cond)
+    case ProjectProcess(input, exprs)    => processIsCorrelated(input) || exprs.exists(isCorrelated)
+    case AliasProcess(input, _)          => processIsCorrelated(input)
+    case ColumnAliasProcess(input, _, _) => processIsCorrelated(input)
+    case SortProcess(input, _)           => processIsCorrelated(input)
+    case TakeProcess(input, _)           => processIsCorrelated(input)
+    case DistinctProcess(input)          => processIsCorrelated(input)
+    case _                               => false
+
 def tryIndexScan(table: Table, cond: Expr)(using Session): Option[Process] =
   val conjuncts = flattenAnd(cond)
 
@@ -803,7 +831,7 @@ def tryIndexScan(table: Table, cond: Expr)(using Session): Option[Process] =
               IndexScanProcess(table, tableIdx, MultiPointLookup(exprs.map(e => Seq(e))), residual)
             }
           )
-        case InQueryExpr(col, op, query) if !op.contains("NOT") =>
+        case InQueryExpr(col, op, query) if !op.contains("NOT") && !isCorrelated(query) =>
           isColumnOf(table, col).flatMap(colName =>
             findIndex(table, colName).map { case (tableIdx, _) =>
               val residualConjuncts = conjuncts.zipWithIndex.collect { case (c, i) if i != idx => c }

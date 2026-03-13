@@ -148,4 +148,58 @@ class SubqueryInWhereTest extends AnyFreeSpec with Matchers with Testing {
       table.data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 2)
     }
   }
+
+  "correlated IN subquery with PRIMARY KEY (index optimization path)" - {
+    val pkSetup =
+      """CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+        |CREATE TABLE posts (id INT PRIMARY KEY, title TEXT, author INT);
+        |INSERT INTO users VALUES (1, 'alice'), (2, 'bob'), (3, 'charlie');
+        |INSERT INTO posts VALUES (1, 'post1', 1), (2, 'post2', 2);
+        |""".stripMargin
+
+    "qualified outer ref in correlated IN subquery with PK" in {
+      val table = query(
+        s"""$pkSetup SELECT users.id FROM users
+           |WHERE users.id IN (
+           |  SELECT posts.author FROM posts WHERE posts.author = users.id
+           |) ORDER BY users.id;
+           |""".stripMargin
+      )
+      table.data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 2)
+    }
+
+    "quoted qualified outer ref with PK" in {
+      val table = query(
+        s"""$pkSetup SELECT "users"."id", "users"."name" FROM "users"
+           |WHERE "users"."id" IN (
+           |  SELECT "posts"."author" FROM "posts" WHERE "posts"."author" = "users"."id"
+           |) ORDER BY "users"."id";
+           |""".stripMargin
+      )
+      table.data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 2)
+    }
+
+    "with alias and PK" in {
+      val table = query(
+        s"""$pkSetup SELECT "users"."id" FROM "users"
+           |WHERE "users"."id" IN (
+           |  SELECT "p"."author" FROM "posts" AS "p" WHERE "p"."author" = "users"."id"
+           |) ORDER BY "users"."id";
+           |""".stripMargin
+      )
+      table.data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 2)
+    }
+
+    "full OQL pattern with PK and AND" in {
+      val table = query(
+        s"""$pkSetup SELECT "users"."id", "users"."name" FROM "users"
+           |WHERE "users"."id" IN (
+           |  SELECT "p"."author" FROM "posts" AS "p" WHERE "p"."author" = "users"."id"
+           |) AND "users"."id" IN (1, 2, 3)
+           |ORDER BY "users"."id" ASC NULLS FIRST;
+           |""".stripMargin
+      )
+      table.data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 2)
+    }
+  }
 }
