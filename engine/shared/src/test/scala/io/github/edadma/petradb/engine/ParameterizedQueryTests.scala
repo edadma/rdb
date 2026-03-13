@@ -218,5 +218,47 @@ class ParameterizedQueryTests extends AnyFreeSpec with Matchers {
       val v = TextValue("hello")
       anyToValue(v) should be theSameInstanceAs v
     }
+    "List[Int] (Iterable path)" in {
+      val v = anyToValue(List(10, 20, 30))
+      v shouldBe a[ArrayValue]
+      v.asInstanceOf[ArrayValue].data.map(_.intValue) shouldBe IndexedSeq(10, 20, 30)
+    }
+    "Set[String] (Iterable path)" in {
+      val v = anyToValue(Set("a"))
+      v shouldBe a[ArrayValue]
+      v.asInstanceOf[ArrayValue].data.map(_.string) shouldBe IndexedSeq("a")
+    }
+    "Vector[Boolean] (Iterable path)" in {
+      val v = anyToValue(Vector(true, false))
+      v shouldBe a[ArrayValue]
+      v.asInstanceOf[ArrayValue].data.map(_.asInstanceOf[BooleanValue].b) shouldBe IndexedSeq(true, false)
+    }
+    "nested Seq[Seq[Int]]" in {
+      val v = anyToValue(Seq(Seq(1, 2), Seq(3, 4)))
+      v shouldBe a[ArrayValue]
+      val outer = v.asInstanceOf[ArrayValue].data
+      outer should have length 2
+      outer(0).asInstanceOf[ArrayValue].data.map(_.intValue) shouldBe IndexedSeq(1, 2)
+      outer(1).asInstanceOf[ArrayValue].data.map(_.intValue) shouldBe IndexedSeq(3, 4)
+    }
+  }
+
+  // ── Iterable parameter in queries ─────────────────────────────────
+
+  "Iterable parameters in queries" - {
+    "ANY with List parameter" in withSession {
+      val t = queryParam("SELECT name FROM t WHERE id = ANY($1) ORDER BY id", List(1, 3))
+      t.data.map(_.data(0).string) shouldBe IndexedSeq("alice", "charlie")
+    }
+
+    "ANY with Vector parameter" in withSession {
+      val t = queryParam("SELECT name FROM t WHERE name = ANY($1) ORDER BY name", Vector("bob", "dave"))
+      t.data.map(_.data(0).string) shouldBe IndexedSeq("bob", "dave")
+    }
+
+    "ANY with empty List returns no rows" in withSession {
+      val t = queryParam("SELECT * FROM t WHERE id = ANY($1)", List.empty[Int])
+      t.data shouldBe empty
+    }
   }
 }
