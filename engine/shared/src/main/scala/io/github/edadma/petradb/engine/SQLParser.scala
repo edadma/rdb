@@ -522,7 +522,7 @@ object SQLParser:
 
   // (query) as subquery — only when followed by set ops, order, limit, offset, ), ;, or end
   private def subqueryPrimary[p: P]: P[Expr] =
-    P("(" ~ query ~ ")" ~ &(kw("union") | kw("intersect") | kw("except") | kw("order") | kw("limit") | kw("offset") | ")" | ";" | End)).map(q =>
+    P("(" ~ query ~ ")" ~ &(kw("union") | kw("intersect") | kw("except") | kw("order") | kw("limit") | kw("offset") | kw("as") | kw("then") | kw("else") | kw("end") | kw("when") | kw("and") | kw("or") | kw("from") | kw("where") | kw("group") | kw("having") | kw("on") | kw("is") | kw("not") | kw("in") | kw("between") | kw("like") | kw("ilike") | "," | ")" | ";" | End)).map(q =>
       SubqueryExpr(q).setPos(q.pos).asInstanceOf[Expr]
     )
 
