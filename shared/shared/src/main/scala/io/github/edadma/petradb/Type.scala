@@ -294,7 +294,46 @@ case class ArrayColumnType(elementType: Type) extends Type(s"${elementType.name}
   override def convert(v: Value): Value =
     v match
       case ArrayValue(data) => ArrayValue(data.map(elementType.convert))
+      case TextValue(s)     => ArrayValue(parseArrayLiteral(s.trim).map(elementType.convert).toIndexedSeq)
       case _                => super.convert(v)
+
+  private def parseArrayLiteral(s: String): Seq[Value] =
+    if !s.startsWith("{") || !s.endsWith("}") then
+      throw TypeException(null, s"malformed array literal: $s")
+    val inner = s.substring(1, s.length - 1).trim
+    if inner.isEmpty then return Seq.empty
+
+    val elements = scala.collection.mutable.ArrayBuffer[Value]()
+    var i = 0
+
+    while i < inner.length do
+      // skip whitespace
+      while i < inner.length && inner(i) == ' ' do i += 1
+      if i < inner.length then
+        if inner(i) == '"' then
+          // quoted element
+          i += 1
+          val sb = new StringBuilder
+          while i < inner.length && inner(i) != '"' do
+            if inner(i) == '\\' && i + 1 < inner.length then
+              i += 1
+              sb += inner(i)
+            else
+              sb += inner(i)
+            i += 1
+          if i < inner.length then i += 1 // skip closing quote
+          elements += TextValue(sb.toString)
+        else
+          // unquoted element — read until comma or end
+          val start = i
+          while i < inner.length && inner(i) != ',' do i += 1
+          val elem = inner.substring(start, i).trim
+          if elem.equalsIgnoreCase("NULL") then elements += NullValue()
+          else elements += TextValue(elem)
+        // skip comma
+        if i < inner.length && inner(i) == ',' then i += 1
+
+    elements.toSeq
 
 case object JSONType extends Type("JSON"):
   override def convert(v: Value): Value =
