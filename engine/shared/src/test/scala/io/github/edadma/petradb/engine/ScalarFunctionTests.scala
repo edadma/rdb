@@ -83,6 +83,21 @@ class ScalarFunctionTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0) shouldBe TextValue("ABC!")
     }
 
+    "concat with 3 args" in {
+      val table = query(s"$setup SELECT concat(name, ' ', '!') FROM t WHERE id = 1;")
+      table.data(0).data(0) shouldBe TextValue("Hello World !")
+    }
+
+    "concat with 4 args" in {
+      val table = query(s"$setup SELECT concat('a', 'b', 'c', 'd');")
+      table.data(0).data(0) shouldBe TextValue("abcd")
+    }
+
+    "concat with 1 arg" in {
+      val table = query(s"$setup SELECT concat(name) FROM t WHERE id = 3;")
+      table.data(0).data(0) shouldBe TextValue("ABC")
+    }
+
     "repeat" in {
       val table = query(s"$setup SELECT repeat(name, 3) FROM t WHERE id = 3;")
       table.data(0).data(0) shouldBe TextValue("ABCABCABC")
