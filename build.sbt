@@ -83,7 +83,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(shared)
   .settings(
     name    := "petradb-engine",
-    version := "1.4.7",
+    version := "1.4.8",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"  %%% "dllist"         % "0.0.6",
