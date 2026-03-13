@@ -50,7 +50,7 @@ private[engine] def anyToValue(a: Any): Value =
     case seq: Seq[?]       => ArrayValue(seq.map(anyToValue).toIndexedSeq)
     case arr: Array[?]     => ArrayValue(arr.map(anyToValue).toIndexedSeq)
     case iter: Iterable[?] => ArrayValue(iter.map(anyToValue).toIndexedSeq)
-    case other             => throw ExecutionException(null, s"cannot convert ${other.getClass.getName} to a database value")
+    case other             => platformAnyToValue(other)
 
 private[engine] def executeCommands(cs: Seq[Command])(using session: Session): Seq[Result] =
 
