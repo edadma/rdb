@@ -242,6 +242,48 @@ case class WindowProcess(input: Process, windows: Seq[WindowSpec]) extends Proce
               winValues(sorted(i)._2)(winIdx) = NumberValue(tile)
               count += 1
 
+          case FirstValueKind(expr) =>
+            for i <- sorted.indices do
+              val frame = spec.frame.getOrElse(FrameSpec(UnboundedPreceding, CurrentRow))
+              val frameStart = frame.start match
+                case UnboundedPreceding => 0
+                case CurrentRow         => i
+                case Preceding(n)      => math.max(0, i - n)
+                case Following(n)      => math.min(sorted.length - 1, i + n)
+                case UnboundedFollowing => sorted.length - 1
+              winValues(sorted(i)._2)(winIdx) = eval(expr, sorted(frameStart)._1 +: ctx)
+
+          case LastValueKind(expr) =>
+            for i <- sorted.indices do
+              val frame = spec.frame.getOrElse(FrameSpec(UnboundedPreceding, CurrentRow))
+              val frameEnd = frame.end match
+                case UnboundedFollowing => sorted.length - 1
+                case CurrentRow         => i
+                case Following(n)      => math.min(sorted.length - 1, i + n)
+                case Preceding(n)      => math.max(0, i - n)
+                case UnboundedPreceding => 0
+              winValues(sorted(i)._2)(winIdx) = eval(expr, sorted(frameEnd)._1 +: ctx)
+
+          case NthValueKind(expr, n) =>
+            for i <- sorted.indices do
+              val frame = spec.frame.getOrElse(FrameSpec(UnboundedPreceding, CurrentRow))
+              val frameStart = frame.start match
+                case UnboundedPreceding => 0
+                case CurrentRow         => i
+                case Preceding(pn)     => math.max(0, i - pn)
+                case Following(fn)     => math.min(sorted.length - 1, i + fn)
+                case UnboundedFollowing => sorted.length - 1
+              val frameEnd = frame.end match
+                case UnboundedFollowing => sorted.length - 1
+                case CurrentRow         => i
+                case Following(fn)     => math.min(sorted.length - 1, i + fn)
+                case Preceding(pn)     => math.max(0, i - pn)
+                case UnboundedPreceding => 0
+              val targetIdx = frameStart + n - 1 // n is 1-based
+              winValues(sorted(i)._2)(winIdx) =
+                if targetIdx >= frameStart && targetIdx <= frameEnd then eval(expr, sorted(targetIdx)._1 +: ctx)
+                else NullValue()
+
           case AggregateWindowKind(aggFactory, args, filter) =>
             spec.frame match
               case Some(FrameSpec(start, end)) =>

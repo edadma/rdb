@@ -216,13 +216,21 @@ Window functions compute a value for each row based on a group of related rows, 
 | `RANK()` | Rank with gaps for ties |
 | `DENSE_RANK()` | Rank without gaps for ties |
 
-### Value functions
+### Offset functions
 
 | Function | Description |
 |----------|-------------|
 | `LAG(expr [, offset [, default]])` | Value from a preceding row (default offset: 1) |
 | `LEAD(expr [, offset [, default]])` | Value from a following row (default offset: 1) |
 | `NTILE(n)` | Divide rows into n roughly equal groups |
+
+### Value functions
+
+| Function | Description |
+|----------|-------------|
+| `FIRST_VALUE(expr)` | Value of `expr` at the first row of the window frame |
+| `LAST_VALUE(expr)` | Value of `expr` at the last row of the window frame |
+| `NTH_VALUE(expr, n)` | Value of `expr` at the nth row of the frame (1-based), or NULL if no such row |
 
 ### Aggregate window functions
 

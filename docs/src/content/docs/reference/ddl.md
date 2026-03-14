@@ -98,12 +98,50 @@ Generated columns are recomputed on INSERT and UPDATE. They cannot be written to
 
 ### ALTER TABLE
 
+Add, drop, or rename columns:
+
 ```sql
 ALTER TABLE orders ADD COLUMN notes TEXT;
 ALTER TABLE orders DROP COLUMN notes;
 ALTER TABLE orders RENAME COLUMN amount TO total;
 ALTER TABLE orders RENAME TO purchases;
 ```
+
+Modify column properties:
+
+```sql
+ALTER TABLE orders ALTER COLUMN notes SET NOT NULL;
+ALTER TABLE orders ALTER COLUMN notes DROP NOT NULL;
+ALTER TABLE orders ALTER COLUMN notes SET DEFAULT 'none';
+ALTER TABLE orders ALTER COLUMN notes DROP DEFAULT;
+ALTER TABLE orders ALTER COLUMN amount SET DATA TYPE NUMERIC(10,2);
+```
+
+Add and drop constraints:
+
+```sql
+ALTER TABLE orders ADD CONSTRAINT chk_amount CHECK (amount > 0);
+ALTER TABLE orders ADD CONSTRAINT uq_email UNIQUE (email);
+ALTER TABLE orders ADD CONSTRAINT fk_customer
+  FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE;
+ALTER TABLE orders DROP CONSTRAINT chk_amount;
+```
+
+### CHECK Constraints
+
+Enforce conditions on column values:
+
+```sql
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  price NUMERIC CHECK (price >= 0),
+  quantity INT,
+  CONSTRAINT positive_qty CHECK (quantity >= 0)
+);
+```
+
+CHECK constraints are enforced on INSERT and UPDATE.
 
 ### TRUNCATE TABLE
 

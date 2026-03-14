@@ -47,7 +47,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-### Value functions
+### Offset functions
 
 ```sql
 SELECT name, salary,
@@ -58,6 +58,26 @@ FROM employees;
 ```
 
 `LAG(expr [, offset [, default]])` and `LEAD(expr [, offset [, default]])` accept an optional offset (default 1) and default value (default NULL).
+
+### Value functions
+
+```sql
+SELECT name, department, salary,
+  FIRST_VALUE(name) OVER (PARTITION BY department ORDER BY salary) AS lowest_paid,
+  LAST_VALUE(name) OVER (PARTITION BY department ORDER BY salary
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS highest_paid,
+  NTH_VALUE(name, 2) OVER (PARTITION BY department ORDER BY salary
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS second_lowest
+FROM employees;
+```
+
+| Function | Description |
+|----------|-------------|
+| `FIRST_VALUE(expr)` | Value of `expr` at the first row of the window frame |
+| `LAST_VALUE(expr)` | Value of `expr` at the last row of the window frame |
+| `NTH_VALUE(expr, n)` | Value of `expr` at the nth row of the frame (1-based), or NULL if no such row |
+
+The default frame is `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. For `LAST_VALUE` and `NTH_VALUE`, you typically want `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` to see the entire partition.
 
 ### Aggregate window functions
 
@@ -236,6 +256,18 @@ SELECT (DATE '2024-01-01', DATE '2024-01-31')
 ```sql
 SELECT DISTINCT category FROM products;
 ```
+
+### DISTINCT ON
+
+Return one row per distinct value of the given expressions. The first row for each group (according to `ORDER BY`) is kept:
+
+```sql
+SELECT DISTINCT ON (department) department, name, salary
+FROM employees
+ORDER BY department, salary DESC;
+```
+
+This returns the highest-paid employee per department.
 
 ## EXPLAIN
 

@@ -35,6 +35,9 @@ case object DenseRankKind extends WindowFunctionKind
 case class LagKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
 case class LeadKind(expr: Expr, offset: Int, default: Option[Expr]) extends WindowFunctionKind
 case class NtileKind(buckets: Int) extends WindowFunctionKind
+case class FirstValueKind(expr: Expr) extends WindowFunctionKind
+case class LastValueKind(expr: Expr) extends WindowFunctionKind
+case class NthValueKind(expr: Expr, n: Int) extends WindowFunctionKind
 case class AggregateWindowKind(func: AggregateFunction, args: Seq[Expr], filter: Option[Expr]) extends WindowFunctionKind
 
 sealed trait FrameBound

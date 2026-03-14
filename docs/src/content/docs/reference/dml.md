@@ -90,6 +90,27 @@ RETURNING id, status;
 DELETE FROM orders WHERE status = 'delivered';
 ```
 
+### DELETE ... USING
+
+Join other tables to determine which rows to delete:
+
+```sql
+DELETE FROM orders
+USING customers
+WHERE orders.customer_id = customers.id
+  AND customers.status = 'inactive';
+```
+
+Multiple USING tables:
+
+```sql
+DELETE FROM order_items
+USING products, categories
+WHERE order_items.product_id = products.id
+  AND products.category_id = categories.id
+  AND categories.name = 'discontinued';
+```
+
 ### DELETE with RETURNING
 
 ```sql
