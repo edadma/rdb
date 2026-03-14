@@ -2,24 +2,29 @@
 title: Changelog
 ---
 
-## v1.4-20260313
+## v1.4-20260314
 
-### DROP TABLE IF EXISTS ... CASCADE
+### Bug fixes & improvements
 
-`DROP TABLE IF EXISTS ... CASCADE` now parses and executes correctly. Previously, `IF EXISTS` and `CASCADE` were mutually exclusive in the parser — combining them caused a parse error.
-
-Additionally, `DROP TABLE ... CASCADE` now properly cleans up foreign key constraints on child tables (both table-level `FOREIGN KEY` constraints and column-level `REFERENCES`). Previously, CASCADE only skipped the FK check but left dangling constraints on child tables, causing subsequent inserts to fail with references to the dropped table. The cleanup is persisted correctly for persistent storage.
+- **Correlated IN subquery fix** — correlated `IN (SELECT ...)` with indexed tables now works correctly
+- **Qualified column resolution** — fixes for ambiguous column references in complex joins
+- **Empty IN/ANY handling** — `IN ()` and `= ANY('{}')` edge cases resolved
+- **Foreign key CASCADE cleanup** — `DROP TABLE ... CASCADE` now properly removes FK constraints on child tables
+- **DROP TABLE IF EXISTS ... CASCADE** — combining `IF EXISTS` with `CASCADE` no longer causes a parse error
+- **Array literal casting** — support for `'{1,2,3}'::integer[]` PostgreSQL array literal syntax
+- **Parameterized query fixes** — improved parameter binding for subqueries and correlated paths
 
 ### Version bumps
 
 | Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.2 | — |
-| engine | 1.4.2 | @petradb/engine 1.4.2 |
-| server | 1.4.2 | @petradb/server 1.4.2 |
-| cli | 1.4.2 | @petradb/cli 1.4.2 |
-| jdbc | 1.4.2 | — |
-| drizzle | — | @petradb/drizzle 1.4.2 |
+| engine | 1.4.9 | @petradb/engine 1.4.3 |
+| client | 1.4.2 | @petradb/client 1.4.2 |
+| server | — | @petradb/server 1.4.3 |
+| cli | — | @petradb/cli 1.4.3 |
+| jdbc | 1.4.3 | — |
+| drizzle | — | @petradb/drizzle 1.4.3 |
 
 ## v1.4-20260312
 
