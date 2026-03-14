@@ -27,6 +27,9 @@ export type ASTExpr =
   | ASTAliasRelation
   | ASTJoinInner
   | ASTJoinLeft
+  | ASTJoinRight
+  | ASTJoinFull
+  | ASTJoinCross
 
 export interface ASTColumn {
   kind: 'column'
@@ -85,6 +88,7 @@ export interface ASTApply {
   kind: 'apply'
   func: string
   args: ASTExpr[]
+  filter?: ASTExpr
 }
 
 export interface ASTIn {
@@ -183,6 +187,26 @@ export interface ASTJoinLeft {
   left: ASTExpr
   right: ASTExpr
   on: ASTExpr
+}
+
+export interface ASTJoinRight {
+  kind: 'joinRight'
+  left: ASTExpr
+  right: ASTExpr
+  on: ASTExpr
+}
+
+export interface ASTJoinFull {
+  kind: 'joinFull'
+  left: ASTExpr
+  right: ASTExpr
+  on: ASTExpr
+}
+
+export interface ASTJoinCross {
+  kind: 'joinCross'
+  left: ASTExpr
+  right: ASTExpr
 }
 
 // ── Commands ──

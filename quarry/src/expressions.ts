@@ -357,6 +357,58 @@ export function jsonObjectAgg(key: ASTExpr, value: ASTExpr): ASTApply {
   return { kind: 'apply', func: 'json_object_agg', args: [key, value] }
 }
 
+// ── Statistical aggregates ──
+
+export function variance(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'variance', args: [expr] }
+}
+
+export function varSamp(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'var_samp', args: [expr] }
+}
+
+export function varPop(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'var_pop', args: [expr] }
+}
+
+export function stddev(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'stddev', args: [expr] }
+}
+
+export function stddevSamp(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'stddev_samp', args: [expr] }
+}
+
+export function stddevPop(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'stddev_pop', args: [expr] }
+}
+
+// ── Bitwise aggregates ──
+
+export function bitAndAgg(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'bit_and', args: [expr] }
+}
+
+export function bitOrAgg(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'bit_or', args: [expr] }
+}
+
+export function bitXorAgg(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'bit_xor', args: [expr] }
+}
+
+// ── EVERY (alias for bool_and) ──
+
+export function every(expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'every', args: [expr] }
+}
+
+// ── Aggregate FILTER ──
+
+export function filter(agg: ASTApply, condition: ASTExpr): ASTApply {
+  return { ...agg, filter: condition }
+}
+
 // ── Scalar functions ──
 
 export function fn(name: string, ...args: (ASTExpr | string | number | boolean | null)[]): ASTApply {

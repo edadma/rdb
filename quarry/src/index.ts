@@ -1,4 +1,4 @@
-export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
+export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
 export {
   serial,
   bigserial,
@@ -112,6 +112,21 @@ export {
   boolOr,
   jsonAgg,
   jsonObjectAgg,
+  // Statistical aggregates
+  variance,
+  varSamp,
+  varPop,
+  stddev,
+  stddevSamp,
+  stddevPop,
+  // Bitwise aggregates
+  bitAndAgg,
+  bitOrAgg,
+  bitXorAgg,
+  // EVERY
+  every,
+  // Aggregate FILTER
+  filter,
   // Scalar functions
   fn,
   // Alias / Literal

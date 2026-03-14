@@ -94,6 +94,17 @@ import {
   boolOr,
   jsonAgg,
   jsonObjectAgg,
+  variance,
+  varSamp,
+  varPop,
+  stddev,
+  stddevSamp,
+  stddevPop,
+  bitAndAgg,
+  bitOrAgg,
+  bitXorAgg,
+  every,
+  filter,
   fn,
   alias,
   literal,
@@ -103,6 +114,7 @@ import {
 } from '@petradb/quarry'
 import type {
   ASTExpr,
+  ASTApply,
   ASTCase,
   ASTCast,
   ASTExists,
@@ -870,3 +882,87 @@ const _origName: string | undefined = u1._originalName
 const u3 = u1.as('u3')
 type U3Name = typeof u3._name
 const _u3NameCheck: U3Name = 'u3'
+
+// ══════════════════════════════════════════════════════════════════════
+// 14. RIGHT / FULL / CROSS JOIN RESULT TYPES
+// ══════════════════════════════════════════════════════════════════════
+
+// Right join: base table columns become nullable, joined table columns are not
+const rightJoinQuery = db.select(users).rightJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+type RightJoinResult = Awaited<ReturnType<typeof rightJoinQuery.execute>>[number]
+
+// Base table (users) becomes nullable after right join
+const _rjName: string | null = undefined as unknown as RightJoinResult['name']
+const _rjAge: number | null = undefined as unknown as RightJoinResult['age']
+
+// Joined table (posts) is NOT nullable
+const _rjTitle: string = undefined as unknown as RightJoinResult['title']
+// @ts-expect-error — posts.title is notNull (right side of right join)
+const _badRjTitle: RightJoinResult['title'] = null as null
+
+// Full join: both sides become nullable
+const fullJoinQuery = db.select(users).fullJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+type FullJoinResult = Awaited<ReturnType<typeof fullJoinQuery.execute>>[number]
+
+// Both sides become nullable
+const _fjName: string | null = undefined as unknown as FullJoinResult['name']
+const _fjTitle: string | null = undefined as unknown as FullJoinResult['title']
+const _fjUserId: number | null = undefined as unknown as FullJoinResult['userId']
+
+// Cross join: no nullability change
+const crossJoinQuery = db.select(users).crossJoin(posts)
+type CrossJoinResult = Awaited<ReturnType<typeof crossJoinQuery.execute>>[number]
+
+const _cjName: string = undefined as unknown as CrossJoinResult['name']
+const _cjTitle: string = undefined as unknown as CrossJoinResult['title']
+// @ts-expect-error — name is still notNull in cross join
+const _badCjName: CrossJoinResult['name'] = null as null
+// @ts-expect-error — title is still notNull in cross join
+const _badCjTitle: CrossJoinResult['title'] = null as null
+
+// Cross join takes no on argument
+// @ts-expect-error — crossJoin only takes a table, not an on condition
+db.select(users).crossJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+
+// ══════════════════════════════════════════════════════════════════════
+// 15. NULLS FIRST / LAST
+// ══════════════════════════════════════════════════════════════════════
+
+import type { ASTOrderBy } from '@petradb/quarry'
+
+// asc/desc accept optional nulls option
+const _ob1: ASTOrderBy = asc(col(users, 'id'))
+const _ob2: ASTOrderBy = asc(col(users, 'id'), { nulls: 'first' })
+const _ob3: ASTOrderBy = desc(col(users, 'id'), { nulls: 'last' })
+
+// @ts-expect-error — invalid nulls value
+const _obBad: ASTOrderBy = asc(col(users, 'id'), { nulls: 'middle' })
+
+// ══════════════════════════════════════════════════════════════════════
+// 16. STATISTICAL / BITWISE AGGREGATES + EVERY + FILTER
+// ══════════════════════════════════════════════════════════════════════
+
+// All return ASTApply (which extends ASTExpr)
+const _eVariance: ASTApply = variance(col(users, 'age'))
+const _eVarSamp: ASTApply = varSamp(col(users, 'age'))
+const _eVarPop: ASTApply = varPop(col(users, 'age'))
+const _eStddev: ASTApply = stddev(col(users, 'age'))
+const _eStddevSamp: ASTApply = stddevSamp(col(users, 'age'))
+const _eStddevPop: ASTApply = stddevPop(col(users, 'age'))
+const _eBitAndAgg: ASTApply = bitAndAgg(col(users, 'age'))
+const _eBitOrAgg: ASTApply = bitOrAgg(col(users, 'age'))
+const _eBitXorAgg: ASTApply = bitXorAgg(col(users, 'age'))
+const _eEvery: ASTApply = every(col(users, 'active'))
+
+// All are also ASTExpr
+const _eVarExpr: ASTExpr = variance(col(users, 'age'))
+const _eEveryExpr: ASTExpr = every(col(users, 'active'))
+
+// filter wraps an aggregate with a condition
+const _filtered: ASTApply = filter(count(), gt(col(users, 'age'), 20))
+const _filteredExpr: ASTExpr = filter(sum(col(users, 'age')), eq(col(users, 'active'), true))
+
+// filter preserves the original aggregate's fields
+const _filteredFunc: string = _filtered.func
+const _filteredArgs: ASTExpr[] = _filtered.args
+const _filteredFilter: ASTExpr | undefined = _filtered.filter

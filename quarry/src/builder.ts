@@ -39,7 +39,7 @@ interface SelectState {
   groupBy?: ASTExpr[]
   having?: ASTExpr
   distinct: boolean
-  joins: { kind: 'joinInner' | 'joinLeft'; right: ASTExpr; on: ASTExpr }[]
+  joins: { kind: 'joinInner' | 'joinLeft' | 'joinRight' | 'joinFull' | 'joinCross'; right: ASTExpr; on?: ASTExpr }[]
 }
 
 export class SelectBuilder<TResult> {
@@ -110,11 +110,53 @@ export class SelectBuilder<TResult> {
     })
   }
 
+  rightJoin<U extends TableDef<any, any>>(
+    table: U,
+    on: ASTExpr,
+  ): SelectBuilder<Nullable<TResult> & InferSelect<U>> {
+    return new SelectBuilder(this._session, {
+      ...this._state,
+      joins: [
+        ...this._state.joins,
+        { kind: 'joinRight', right: tableToExpr(table), on },
+      ],
+    })
+  }
+
+  fullJoin<U extends TableDef<any, any>>(
+    table: U,
+    on: ASTExpr,
+  ): SelectBuilder<Nullable<TResult> & Nullable<InferSelect<U>>> {
+    return new SelectBuilder(this._session, {
+      ...this._state,
+      joins: [
+        ...this._state.joins,
+        { kind: 'joinFull', right: tableToExpr(table), on },
+      ],
+    })
+  }
+
+  crossJoin<U extends TableDef<any, any>>(
+    table: U,
+  ): SelectBuilder<TResult & InferSelect<U>> {
+    return new SelectBuilder(this._session, {
+      ...this._state,
+      joins: [
+        ...this._state.joins,
+        { kind: 'joinCross', right: tableToExpr(table) },
+      ],
+    })
+  }
+
   toExpr(): ASTExpr {
     let from: ASTExpr = this._state.tableExpr
 
     for (const join of this._state.joins) {
-      from = { kind: join.kind, left: from, right: join.right, on: join.on }
+      if (join.kind === 'joinCross') {
+        from = { kind: 'joinCross', left: from, right: join.right }
+      } else {
+        from = { kind: join.kind, left: from, right: join.right, on: join.on! }
+      }
     }
 
     return {
@@ -407,10 +449,16 @@ export function quarry(session: QuarrySession): QuarryDB {
 
 // ── OrderBy helpers ──
 
-export function asc(expr: ASTExpr): ASTOrderBy {
-  return { expr, direction: 'asc' }
+export function asc(expr: ASTExpr, opts?: { nulls?: 'first' | 'last' }): ASTOrderBy {
+  const ob: ASTOrderBy = { expr, direction: 'asc' }
+  if (opts?.nulls === 'first') ob.nullsFirst = true
+  else if (opts?.nulls === 'last') ob.nullsFirst = false
+  return ob
 }
 
-export function desc(expr: ASTExpr): ASTOrderBy {
-  return { expr, direction: 'desc' }
+export function desc(expr: ASTExpr, opts?: { nulls?: 'first' | 'last' }): ASTOrderBy {
+  const ob: ASTOrderBy = { expr, direction: 'desc' }
+  if (opts?.nulls === 'first') ob.nullsFirst = true
+  else if (opts?.nulls === 'last') ob.nullsFirst = false
+  return ob
 }

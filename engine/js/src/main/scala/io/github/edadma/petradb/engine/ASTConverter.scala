@@ -34,9 +34,13 @@ object ASTConverter:
       case "unary"     => UnaryExpr(obj.op.asInstanceOf[String], toExpr(obj.expr))
       case "alias"     => AliasExpr(toExpr(obj.expr), ident(obj.alias.asInstanceOf[String]))
       case "apply" =>
+        val filter =
+          if js.isUndefined(obj.filter) || obj.filter == null then None
+          else Some(toExpr(obj.filter))
         ApplyExpr(
           ident(obj.func.asInstanceOf[String]),
           obj.args.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq,
+          filter,
         )
       case "in" =>
         InSeqExpr(
@@ -72,6 +76,12 @@ object ASTConverter:
         InnerJoinOperator(toExpr(obj.left), toExpr(obj.right), toExpr(obj.on))
       case "joinLeft" =>
         LeftJoinOperator(toExpr(obj.left), toExpr(obj.right), toExpr(obj.on))
+      case "joinRight" =>
+        RightJoinOperator(toExpr(obj.left), toExpr(obj.right), toExpr(obj.on))
+      case "joinFull" =>
+        FullJoinOperator(toExpr(obj.left), toExpr(obj.right), toExpr(obj.on))
+      case "joinCross" =>
+        CrossOperator(toExpr(obj.left), toExpr(obj.right))
       case k => throw js.JavaScriptException(js.Error(s"Unknown expression kind: $k"))
 
     e.pos = NoPosition
