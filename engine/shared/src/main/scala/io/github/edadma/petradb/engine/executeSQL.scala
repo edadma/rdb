@@ -591,6 +591,17 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               val seq = db.createSequence(seqName, 1, 1, Long.MaxValue / 2, Some(1), false, Some(table), Some(spec.name))
               t.backingSequences(spec.name) = seq
           CreateTableResult(table)
+      case CreateVirtualTableCommand(id @ Ident(tableName), moduleName, args) =>
+        if session.hasTable(tableName) then
+          throw SchemaException(id.pos, s"table '$tableName' already exists")
+        db.getVirtualTableModule(moduleName) match
+          case None => throw SchemaException(id.pos, s"unknown virtual table module '$moduleName'")
+          case Some(module) =>
+            val provider = module.create(tableName, args)
+            val vtable = new VirtualTable(tableName, provider)
+            db.registerVirtualTable(tableName, vtable)
+            db.onMutation()
+            CreateTableResult(tableName)
       case DropTableCommand(id @ Ident(table), ifExists, cascade) =>
         if session.hasTempTable(table) then
           session.tempTables.remove(table)

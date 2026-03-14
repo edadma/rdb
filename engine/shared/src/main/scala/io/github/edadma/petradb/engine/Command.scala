@@ -79,6 +79,7 @@ case class CreateSequenceCommand(
     cycle: Boolean = false,
     ifNotExists: Boolean = false,
 ) extends Command
+case class CreateVirtualTableCommand(name: Ident, moduleName: String, args: Seq[String]) extends Command
 case class DropSequenceCommand(name: Ident, ifExists: Boolean = false) extends Command
 
 case class UpdateSet(col: Ident, value: Expr)

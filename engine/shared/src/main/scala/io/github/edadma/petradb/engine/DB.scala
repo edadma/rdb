@@ -70,6 +70,20 @@ abstract class DB:
   protected[petradb] val schemas = new mutable.LinkedHashSet[String]
   schemas += "public"
 
+  private val virtualTableModules = new mutable.HashMap[String, VirtualTableModule]
+
+  // Register built-in virtual table modules
+  registerVirtualTableModule("csv", CsvModule)
+
+  def registerVirtualTableModule(name: String, module: VirtualTableModule): Unit =
+    virtualTableModules(name.toLowerCase) = module
+
+  def getVirtualTableModule(name: String): Option[VirtualTableModule] =
+    virtualTableModules.get(name.toLowerCase)
+
+  def registerVirtualTable(name: String, table: Table): Unit =
+    tables(resolveKey(name)) = table
+
   // ── Schema management ──────────────────────────────────────────────
 
   def hasSchema(name: String): Boolean = schemas.contains(name)

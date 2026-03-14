@@ -1133,6 +1133,13 @@ object SQLParser:
   private def tableItem[p: P]: P[ColumnDesc | TableConstraint] =
     P(columnDesc.map(_.asInstanceOf[ColumnDesc | TableConstraint]) | tableConstraint.map(_.asInstanceOf[ColumnDesc | TableConstraint]))
 
+  // CREATE VIRTUAL TABLE name USING module(arg1, arg2, ...)
+  private def createVirtualTable[p: P]: P[Command] =
+    P(kw("create") ~ kw("virtual") ~ kw("table") ~ tableIdent ~ kw("using") ~ identifier ~ "(" ~ stringLit.rep(sep = ",") ~ ")").map {
+      case (name, module, args) =>
+        CreateVirtualTableCommand(name, module.name, args)
+    }
+
   private def createTable[p: P]: P[Command] =
     P(kw("create") ~ (kw("temp") | kw("temporary")).!.? ~ kw("table") ~ (kw("if") ~ kw("not") ~ kw("exists")).!.? ~ tableIdent ~ "(" ~ tableItem.rep(1, sep = ",") ~ ")").map {
       case (temp, ine, t, items) =>
@@ -1410,7 +1417,7 @@ object SQLParser:
       .map { case (cmd, _) => DoBlockCommand(cmd) }
 
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createSequence | createView | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
+    P(createSchema | createSequence | createView | createVirtualTable | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
     P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))
