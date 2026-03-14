@@ -195,6 +195,68 @@ class CsvFileTests extends AnyFreeSpec with Matchers with Testing with BeforeAnd
     }
   }
 
+  // ── Join multiple CSVs ───────────────────────────────────────────
+
+  "join multiple CSVs" - {
+    "inner join two CSV files" in {
+      writeFile("employees.csv",
+        """name,dept_id
+          |Alice,1
+          |Bob,2
+          |Carol,1""".stripMargin)
+
+      writeFile("departments.csv",
+        """id,department
+          |1,Engineering
+          |2,Marketing""".stripMargin)
+
+      val table = query(
+        s"""SELECT e.name, d.department
+           |FROM csv_file('${csvPath("employees.csv")}') e
+           |INNER JOIN csv_file('${csvPath("departments.csv")}') d ON e.dept_id = d.id
+           |ORDER BY e.name;""".stripMargin)
+      table.data.length shouldBe 3
+      table.data(0).data(0) shouldBe TextValue("Alice")
+      table.data(0).data(1) shouldBe TextValue("Engineering")
+      table.data(1).data(0) shouldBe TextValue("Bob")
+      table.data(1).data(1) shouldBe TextValue("Marketing")
+      table.data(2).data(0) shouldBe TextValue("Carol")
+      table.data(2).data(1) shouldBe TextValue("Engineering")
+    }
+
+    "join three CSV files" in {
+      writeFile("orders.csv",
+        """order_id,emp_name,product_id
+          |1,Alice,10
+          |2,Bob,20
+          |3,Alice,20""".stripMargin)
+
+      writeFile("products.csv",
+        """id,product_name,price
+          |10,Widget,25
+          |20,Gadget,50""".stripMargin)
+
+      writeFile("staff.csv",
+        """name,title
+          |Alice,Manager
+          |Bob,Engineer""".stripMargin)
+
+      val table = query(
+        s"""SELECT o.order_id, s.title, p.product_name, p.price
+           |FROM csv_file('${csvPath("orders.csv")}') o
+           |INNER JOIN csv_file('${csvPath("products.csv")}') p ON o.product_id = p.id
+           |INNER JOIN csv_file('${csvPath("staff.csv")}') s ON o.emp_name = s.name
+           |ORDER BY o.order_id;""".stripMargin)
+      table.data.length shouldBe 3
+      table.data(0).data(1) shouldBe TextValue("Manager")
+      table.data(0).data(2) shouldBe TextValue("Widget")
+      table.data(1).data(1) shouldBe TextValue("Engineer")
+      table.data(1).data(2) shouldBe TextValue("Gadget")
+      table.data(2).data(1) shouldBe TextValue("Manager")
+      table.data(2).data(2) shouldBe TextValue("Gadget")
+    }
+  }
+
   // ── Aliasing ────────────────────────────────────────────────────
 
   "aliasing" - {
