@@ -101,7 +101,7 @@ object SQLParser:
     "action", "add", "all", "alter", "and", "any", "array", "as", "asc",
     "begin", "between", "bigint", "bigserial", "boolean", "by", "bytea",
     "cascade", "case", "cast", "char", "check", "column", "commit", "conflict", "constraint",
-    "copy", "create", "cross", "current_timestamp",
+    "copy", "create", "cross", "current_date", "current_time", "current_timestamp",
     "database", "date", "deallocate", "decimal", "default", "delete", "desc",
     "distinct", "do", "double", "drop",
     "else", "end", "enum", "except", "exec", "execute", "exists", "explain", "extract",
@@ -111,11 +111,11 @@ object SQLParser:
     "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
     "indexes", "intersect", "interval", "into", "is",
     "join", "json", "jsonb",
-    "last", "lateral", "left", "like", "limit",
+    "last", "lateral", "like", "limit",
     "no", "not", "nothing", "null", "nulls", "numeric",
     "offset", "on", "or", "order", "outer", "overlay", "overlaps",
     "placing", "precision", "prepare", "primary", "procedure",
-    "real", "references", "rename", "restrict", "returning", "right", "rollback",
+    "real", "references", "rename", "restrict", "returning", "rollback",
     "select", "serial", "set", "show", "smallint", "smallserial", "some", "symmetric",
     "columns",
     "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
@@ -156,6 +156,21 @@ object SQLParser:
     import NoWhitespace._
     P((CharPred(identStartChar) ~ CharsWhile(identChar, 0)).!)
       .map(_.toLowerCase)
+  }
+
+  // Words that cannot be used as bare aliases (without AS) because they are clause/join keywords.
+  // These are non-reserved in general but ambiguous in alias position.
+  private val aliasExcluded: Set[String] = reservedWords ++ Set(
+    "left", "right", "inner", "full", "cross", "join", "outer",
+    "natural", "using", "lateral",
+  )
+
+  // aliasIdent: identifier excluding clause keywords — for bare (without AS) alias positions
+  private def aliasIdent[p: P]: P[String] = {
+    import NoWhitespace._
+    P((CharPred(identStartChar) ~ CharsWhile(identChar, 0)).!)
+      .map(_.toLowerCase)
+      .filter(!aliasExcluded.contains(_))
   }
 
   // anyIdentOrQuoted: like anyIdent but also allows double-quoted identifiers
@@ -325,20 +340,21 @@ object SQLParser:
       rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
     }
 
-  private def castExpression[p: P]: P[Expr] =
-    P(jsonAccess ~ ("::" ~ castType).?).map {
-      case (e, Some(t)) => CastExpr(e, t).setPos(e.pos).asInstanceOf[Expr]
-      case (e, None) => e
-    }
-
   private def jsonAccessOp[p: P]: P[String] = {
     import NoWhitespace._
     P("->>".! | ("->" ~ !">").!.map(_ => "->") | "#>>".! | ("#>" ~ !">").!.map(_ => "#>"))
   }
 
-  private def jsonAccess[p: P]: P[Expr] =
-    P(primary ~ (jsonAccessOp ~ primary).rep).map { case (first, rest) =>
-      rest.foldLeft(first) { case (l, (op, r)) => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr] }
+  private sealed trait PostfixOp
+  private case class CastOp(t: Type) extends PostfixOp
+  private case class JsonOp(op: String, rhs: Expr) extends PostfixOp
+
+  private def castExpression[p: P]: P[Expr] =
+    P(primary ~ (("::" ~ castType).map(CastOp(_)) | (jsonAccessOp ~ primary).map((op, e) => JsonOp(op, e))).rep).map { case (first, ops) =>
+      ops.foldLeft(first) {
+        case (l, CastOp(t))      => CastExpr(l, t).setPos(l.pos).asInstanceOf[Expr]
+        case (l, JsonOp(op, r))  => BinaryExpr(l, op, r).setPos(l.pos).asInstanceOf[Expr]
+      }
     }
 
   // ── Extract field ──────────────────────────────────────────────────
@@ -364,12 +380,19 @@ object SQLParser:
       | jsonLiteral
     )
 
+  // INTERVAL '1 day' — typed interval literal, desugared to CAST('...' AS INTERVAL)
+  private def intervalLiteral[p: P]: P[Expr] =
+    P(Idx ~ kw("interval") ~ stringLit).map((loc, s) =>
+      pos(loc, CastExpr(StringExpr(s), IntervalType))
+    )
+
   private def primaryKeyword[p: P]: P[Expr] =
     P(
       arrayPrimary
       | castPrimary
       | extractPrimary
       | overlayPrimary
+      | intervalLiteral
       | tableConstructorPrimary
     )
 
@@ -479,10 +502,12 @@ object SQLParser:
       case (loc, t, Some(c)) => pos(loc, ColumnExpr(Some(t), c))
     }
 
-  // CURRENT_TIMESTAMP — Index ~ kw => just Int
+  // CURRENT_TIMESTAMP, CURRENT_DATE, CURRENT_TIME — SQL standard variables (with optional parens)
   private def variable[p: P]: P[VariableExpr] =
-    P(Idx ~ kw("current_timestamp")).map(loc =>
-      pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIMESTAMP"))))
+    P(
+      (Idx ~ kw("current_timestamp") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIMESTAMP")))))
+      | (Idx ~ kw("current_date") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_DATE")))))
+      | (Idx ~ kw("current_time") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIME")))))
     )
 
   private def unaryMinusPrimary[p: P]: P[Expr] =
@@ -497,7 +522,7 @@ object SQLParser:
 
   // (query) as subquery — only when followed by set ops, order, limit, offset, ), ;, or end
   private def subqueryPrimary[p: P]: P[Expr] =
-    P("(" ~ query ~ ")" ~ &(kw("union") | kw("intersect") | kw("except") | kw("order") | kw("limit") | kw("offset") | ")" | ";" | End)).map(q =>
+    P("(" ~ query ~ ")" ~ &(kw("union") | kw("intersect") | kw("except") | kw("order") | kw("limit") | kw("offset") | kw("as") | kw("then") | kw("else") | kw("end") | kw("when") | kw("and") | kw("or") | kw("from") | kw("where") | kw("group") | kw("having") | kw("on") | kw("is") | kw("not") | kw("in") | kw("between") | kw("like") | kw("ilike") | "," | ")" | ";" | End)).map(q =>
       SubqueryExpr(q).setPos(q.pos).asInstanceOf[Expr]
     )
 
@@ -792,8 +817,15 @@ object SQLParser:
     }
 
   // [AS] alias [(col1, col2, ...)]
+  // With explicit AS, any identifier is allowed. Without AS, exclude join/clause keywords to avoid ambiguity.
+  private def aliasIdentifier[p: P]: P[Ident] =
+    P(Idx ~ (quotedIdent | aliasIdent)).map((loc, name) => pos(loc, Ident(name)))
+
   private def aliasSuffix[p: P]: P[(Ident, Option[Seq[Ident]])] =
-    P(kw("as").? ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").?)
+    P(
+      (kw("as") ~ identifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").?)
+      | (aliasIdentifier ~ ("(" ~ identifier.rep(1, sep = ",") ~ ")").?)
+    )
 
   private def source[p: P]: P[Expr] = P(lateralSource | baseSource)
 
@@ -835,14 +867,25 @@ object SQLParser:
   private def selectCore[p: P]: P[Expr] =
     P(selectStmt | valuesClause | ("(" ~ compoundSelect ~ ")"))
 
-  // kw("select") ~ kw("distinct").? ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause
-  // Unit dropped for kw, so: Option[Unit] (for distinct), Seq[Expr], Option[Seq[Expr]], Option[Expr], Option[Seq[Expr]], Option[Expr]
-  // Actually kw("distinct").!.? gives Option[String], kw("distinct").? gives Option[Unit]
-  // Let's use .!.? to get Option[String] for distinct
+  // DISTINCT / DISTINCT ON (expr, ...) / nothing
+  private sealed trait DistinctSpec
+  private case object DistinctAll extends DistinctSpec
+  private case class DistinctOnSpec(keys: Seq[Expr]) extends DistinctSpec
+
+  private def distinctClause[p: P]: P[DistinctSpec] =
+    P(
+      (kw("distinct") ~ kw("on") ~ "(" ~ expression.rep(1, sep = ",") ~ ")").map(DistinctOnSpec(_))
+      | kw("distinct").map(_ => DistinctAll)
+    )
+
   private def selectStmt[p: P]: P[Expr] =
-    P(kw("select") ~ kw("distinct").!.? ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause).map {
-      case (d, p, f, w, g, h) =>
-        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = d.isDefined)
+    P(kw("select") ~ distinctClause.? ~ selectExpressions ~ fromClause ~ whereClause ~ groupByClause ~ havingClause).map {
+      case (Some(DistinctOnSpec(keys)), p, f, w, g, h) =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinctOn = Some(keys))
+      case (Some(DistinctAll), p, f, w, g, h) =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None, distinct = true)
+      case (None, p, f, w, g, h) =>
+        SQLSelectExpr(p to ArraySeq, f, w, g, h, None, None, None)
     }
 
   private def intersectSelect[p: P]: P[Expr] =
@@ -1098,10 +1141,15 @@ object SQLParser:
 
   // ── DDL: DROP TABLE ────────────────────────────────────────────────
 
+  private def cascadeRestrict[p: P]: P[Boolean] =
+    P(kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false))
+
   private def dropTable[p: P]: P[Command] =
     P(
-      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ tableIdent).map(t => DropTableCommand(t, true, false))
-      | (kw("drop") ~ kw("table") ~ tableIdent ~ (kw("cascade").!.map(_ => true) | kw("restrict").!.map(_ => false)).?).map {
+      (kw("drop") ~ kw("table") ~ kw("if") ~ kw("exists") ~ tableIdent ~ cascadeRestrict.?).map {
+        case (t, cascade) => DropTableCommand(t, true, cascade.getOrElse(false))
+      }
+      | (kw("drop") ~ kw("table") ~ tableIdent ~ cascadeRestrict.?).map {
           case (t, cascade) => DropTableCommand(t, false, cascade.getOrElse(false))
         }
     )

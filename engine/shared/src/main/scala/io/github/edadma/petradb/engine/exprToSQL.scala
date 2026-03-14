@@ -139,9 +139,12 @@ private def exprToSQLInner(expr: Expr): (String, Int) =
       }
       val recStr = if recursive then "WITH RECURSIVE" else "WITH"
       (s"$recStr ${cteParts.mkString(", ")} ${exprToSQLInner(query)._1}", 99)
-    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct, distinctOn) =>
       val sb = new StringBuilder("SELECT ")
       if distinct then sb.append("DISTINCT ")
+      distinctOn.foreach { keys =>
+        sb.append(s"DISTINCT ON (${keys.map(e => exprToSQLInner(e)._1).mkString(", ")}) ")
+      }
       sb.append(exprs.map(e => exprToSQLInner(e)._1).mkString(", "))
       from.foreach { sources =>
         sb.append(" FROM ")

@@ -389,6 +389,115 @@ class ForeignKeyTests extends AnyFreeSpec with Matchers:
       session.db.hasTable("departments") shouldBe false
     }
 
+    "DROP TABLE CASCADE removes FK constraints from child tables" in {
+      given session: Session = setup.connect()
+      executeSQL(
+        """CREATE TABLE employees (
+          |  id SERIAL,
+          |  dept_id INTEGER,
+          |  PRIMARY KEY (id),
+          |  FOREIGN KEY (dept_id) REFERENCES departments(id)
+          |);
+          |""".stripMargin
+      )
+      executeSQL("DROP TABLE departments CASCADE;")
+      session.db.hasTable("departments") shouldBe false
+      // Child table should still exist and have no FK constraints referencing departments
+      val empTable = session.db.getTable("employees").get
+      val remainingFKs = empTable.constraints.collect { case fk: ForeignKeySpec => fk }
+      remainingFKs shouldBe empty
+      // Should be able to insert with any dept_id since FK is gone
+      executeSQL("INSERT INTO employees (dept_id) VALUES (999);")
+    }
+
+    "DROP TABLE IF EXISTS CASCADE drops existing referenced table and cleans up FKs" in {
+      given session: Session = setup.connect()
+      executeSQL(
+        """CREATE TABLE employees (
+          |  id SERIAL,
+          |  dept_id INTEGER,
+          |  PRIMARY KEY (id),
+          |  FOREIGN KEY (dept_id) REFERENCES departments(id)
+          |);
+          |""".stripMargin
+      )
+      executeSQL("DROP TABLE IF EXISTS departments CASCADE;")
+      session.db.hasTable("departments") shouldBe false
+      // FK constraint should be removed from child table
+      val empTable = session.db.getTable("employees").get
+      val remainingFKs = empTable.constraints.collect { case fk: ForeignKeySpec => fk }
+      remainingFKs shouldBe empty
+      // Should be able to insert with any dept_id since FK is gone
+      executeSQL("INSERT INTO employees (dept_id) VALUES (999);")
+    }
+
+    "DROP TABLE IF EXISTS CASCADE succeeds for nonexistent table" in {
+      given session: Session = setup.connect()
+      executeSQL("DROP TABLE IF EXISTS nonexistent CASCADE;")
+      // should not throw
+    }
+
+    "DROP TABLE IF EXISTS without CASCADE still blocked by FK" in {
+      given session: Session = setup.connect()
+      executeSQL(
+        """CREATE TABLE employees (
+          |  id SERIAL,
+          |  dept_id INTEGER,
+          |  PRIMARY KEY (id),
+          |  FOREIGN KEY (dept_id) REFERENCES departments(id)
+          |);
+          |""".stripMargin
+      )
+      assertThrows[RuntimeException] {
+        executeSQL("DROP TABLE IF EXISTS departments;")
+      }
+    }
+
+    "DROP TABLE CASCADE cleans up column-level FK references" in {
+      given session: Session = new MemoryDB().connect()
+      executeSQL("CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));")
+      executeSQL("CREATE TABLE child (id SERIAL, parent_id INTEGER REFERENCES parent(id));")
+      executeSQL("INSERT INTO parent (id) VALUES (1);")
+      executeSQL("INSERT INTO child (parent_id) VALUES (1);")
+      executeSQL("DROP TABLE parent CASCADE;")
+      session.db.hasTable("parent") shouldBe false
+      // Column-level FK should be cleared
+      val childTable = session.db.getTable("child").get
+      val parentIdCol = childTable.columns(childTable.columnMap("parent_id"))
+      parentIdCol.fk shouldBe None
+      // Insert with arbitrary value should succeed since FK is gone
+      executeSQL("INSERT INTO child (parent_id) VALUES (999);")
+    }
+
+    "DROP TABLE CASCADE with multiple child tables cleans up all" in {
+      given session: Session = setup.connect()
+      executeSQL(
+        """CREATE TABLE employees (
+          |  id SERIAL,
+          |  dept_id INTEGER,
+          |  PRIMARY KEY (id),
+          |  FOREIGN KEY (dept_id) REFERENCES departments(id)
+          |);
+          |CREATE TABLE projects (
+          |  id SERIAL,
+          |  dept_id INTEGER,
+          |  PRIMARY KEY (id),
+          |  FOREIGN KEY (dept_id) REFERENCES departments(id)
+          |);
+          |""".stripMargin
+      )
+      executeSQL("DROP TABLE departments CASCADE;")
+      session.db.hasTable("departments") shouldBe false
+      // Both child tables should have FK constraints removed
+      for tableName <- Seq("employees", "projects") do
+        val t = session.db.getTable(tableName).get
+        val fks = t.constraints.collect { case fk: ForeignKeySpec => fk }
+        fks shouldBe empty
+      // Both should accept inserts with arbitrary dept_id
+      executeSQL("INSERT INTO employees (dept_id) VALUES (999);")
+      executeSQL("INSERT INTO projects (dept_id) VALUES (999);")
+    }
+
     "ON DELETE CASCADE syntax parses and is stored" in {
       given session: Session = new MemoryDB().connect()
       executeSQL("CREATE TABLE parent (id INTEGER, PRIMARY KEY (id));")

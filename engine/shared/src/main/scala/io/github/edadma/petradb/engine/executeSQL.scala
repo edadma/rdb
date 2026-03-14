@@ -1,6 +1,7 @@
 package io.github.edadma.petradb.engine
 
 import io.github.edadma.petradb.{Session as _, *}
+import io.github.edadma.{dal}
 
 //import pprint.pprintln
 
@@ -18,6 +19,38 @@ def executeSelect(query: Expr)(using session: Session) =
 def executeSQL(sql: String)(using session: Session): Seq[Result] =
   val cs = SQLParser.parseCommands(sql)
   executeCommands(cs)
+
+def executeSQL(sql: String, params: IndexedSeq[Any])(using session: Session): Seq[Result] =
+  val cs = SQLParser.parseCommands(sql)
+  val paramValues = params.map(anyToValue)
+  val bound = deepCopyCommands(cs, paramValues)
+  executeCommands(bound)
+
+private[engine] def anyToValue(a: Any): Value =
+  a match
+    case null              => NullValue()
+    case v: Value          => v
+    case b: Boolean        => BooleanValue(b)
+    case i: Int            => NumberValue(dal.IntType, i)
+    case l: Long           => NumberValue(dal.LongType, l)
+    case d: Double         => NumberValue(dal.DoubleType, d)
+    case f: Float          => NumberValue(dal.DoubleType, f.toDouble)
+    case s: Short          => NumberValue(dal.IntType, s.toInt)
+    case b: Byte           => NumberValue(dal.IntType, b.toInt)
+    case bd: BigDecimal    => NumberValue(dal.BigDecType, bd.bigDecimal)
+    case bd: java.math.BigDecimal => NumberValue(dal.BigDecType, bd)
+    case s: String         => TextValue(s)
+    case d: java.time.LocalDate     => DateValue(d)
+    case t: java.time.LocalTime     => TimeValue(t)
+    case dt: java.time.LocalDateTime => TimestampValue(dt)
+    case odt: java.time.OffsetDateTime => TimestampTZValue(odt)
+    case ot: java.time.OffsetTime   => TimeTZValue(ot)
+    case dur: java.time.Duration    => IntervalValue(dur)
+    case bytes: Array[Byte]         => ByteaValue(bytes)
+    case seq: Seq[?]       => ArrayValue(seq.map(anyToValue).toIndexedSeq)
+    case arr: Array[?]     => ArrayValue(arr.map(anyToValue).toIndexedSeq)
+    case iter: Iterable[?] => ArrayValue(iter.map(anyToValue).toIndexedSeq)
+    case other             => platformAnyToValue(other)
 
 private[engine] def executeCommands(cs: Seq[Command])(using session: Session): Seq[Result] =
 
@@ -569,11 +602,23 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             if (!ifExists) throw UndefinedReferenceException(id.pos, s"unknown table: $table")
             else DropTableResult(table) // IF EXISTS allows missing table
           } else {
+            val refs = db.childForeignKeys(table)
             if !cascade then
-              val refs = db.childForeignKeys(table)
               if refs.nonEmpty then
                 val refTableNames = refs.map(_._1.name).distinct.mkString(", ")
                 throw ConstraintException(id.pos, s"cannot drop table '$table' because it is referenced by: $refTableNames")
+            else
+              // CASCADE: remove FK constraints from child tables that reference this table
+              for (childTable, _) <- refs do
+                childTable.constraints --= childTable.constraints.collect {
+                  case f: ForeignKeySpec if f.referencedTable == table => f
+                }
+                // Also clear column-level FK references
+                for i <- childTable.columns.indices do
+                  childTable.columns(i).fk match
+                    case Some((refTable, _, _, _)) if refTable == table =>
+                      childTable.columns(i) = childTable.columns(i).copy(fk = None)
+                    case _ =>
             // Drop owned sequences
             db.sequences.values.filter(_.ownedByTable.contains(table)).map(_.name).toSeq.foreach(db.dropSequence)
             db.dropTable(table)
@@ -887,6 +932,7 @@ private def formatProcess(proc: Process, indent: Int): String =
     case p: TakeProcess        => s"${prefix}Limit\n${formatProcess(p.input, indent + 1)}"
     case _: DropProcess        => s"${prefix}Offset"
     case p: DistinctProcess    => s"${prefix}Distinct\n${formatProcess(p.input, indent + 1)}"
+    case p: DistinctOnProcess  => s"${prefix}Distinct On\n${formatProcess(p.input, indent + 1)}"
     case p: HavingProcess      => s"${prefix}Having\n${formatProcess(p.input, indent + 1)}"
     case p: CrossProcess       => s"${prefix}Cross Join\n${formatProcess(p.input1, indent + 1)}\n${formatProcess(p.input2, indent + 1)}"
     case p: AliasProcess       => s"${prefix}Alias (${p.alias})\n${formatProcess(p.input, indent + 1)}"
@@ -941,6 +987,11 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
     case WindowExpr(func, partBy, ordBy, frame) => WindowExpr(deepCopyExpr(func, params), partBy.map(deepCopyExpr(_, params)), ordBy.map { case OrderBy(f, d, n) => OrderBy(deepCopyExpr(f, params), d, n) }, frame)
     case InSeqExpr(v, op, es)              => InSeqExpr(deepCopyExpr(v, params), op, es.map(deepCopyExpr(_, params)))
     case InQueryExpr(v, op, q)             => InQueryExpr(deepCopyExpr(v, params), op, deepCopyExpr(q, params))
+    case QuantifiedCompareExpr(v, op, q, e) => QuantifiedCompareExpr(deepCopyExpr(v, params), op, q, deepCopyExpr(e, params))
+    case ScalarFunctionExpr(f, args)       => ScalarFunctionExpr(f, args.map(deepCopyExpr(_, params)))
+    case AggregateFunctionExpr(f, args, filter) => AggregateFunctionExpr(f, args.map(deepCopyExpr(_, params)), filter.map(deepCopyExpr(_, params)))
+    case v: VariableInstanceExpr           => v
+    case DefaultExpr                       => DefaultExpr
     case SubqueryExpr(q)                   => SubqueryExpr(deepCopyExpr(q, params))
     case ExistsExpr(q)                     => ExistsExpr(deepCopyExpr(q, params))
     case ObjectExpr(props)                 => ObjectExpr(props.map { case (k, v) => (k, deepCopyExpr(v, params)) })
@@ -960,7 +1011,7 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
         deepCopyExpr(query, params),
         recursive,
       )
-    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct) =>
+    case SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct, distinctOn) =>
       SQLSelectExpr(
         exprs.map(deepCopyExpr(_, params)).to(ArraySeq),
         from.map(_.map(deepCopyExpr(_, params))),
@@ -971,6 +1022,7 @@ private[engine] def deepCopyExpr(expr: Expr, params: IndexedSeq[Value] = Indexed
         offset.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         limit.map(c => Count(c.pos, deepCopyExpr(c.expr, params))),
         distinct,
+        distinctOn.map(_.map(deepCopyExpr(_, params))),
       )
     case AliasOperator(r, a) => AliasOperator(deepCopyExpr(r, params), a)
     case ColumnAliasOperator(r, a, cs) => ColumnAliasOperator(deepCopyExpr(r, params), a, cs)

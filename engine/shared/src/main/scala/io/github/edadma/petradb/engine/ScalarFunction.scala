@@ -66,7 +66,7 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(TextValue(s), TextValue(search), TextValue(repl)) => TextValue(s.replace(search, repl)) },
       TextType,
     ),
-    ScalarFunction("concat", { case Seq(a, b) => TextValue(a.string + b.string) }, TextType),
+    ScalarFunction("concat", { case args => TextValue(args.map(_.string).mkString) }, TextType),
     ScalarFunction(
       "repeat",
       { case Seq(TextValue(s), NumberValue(_, nNum)) => TextValue(s * math.max(0, nNum.intValue)) },

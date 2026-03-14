@@ -1,6 +1,6 @@
 {
   "name": "@petradb/client",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "PetraDB network client for JavaScript and TypeScript",
   "type": "module",
   "exports": {

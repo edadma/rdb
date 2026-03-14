@@ -515,6 +515,28 @@ class DDLTests extends AnyFreeSpec with Matchers:
       result should include("DropTableResult")
     }
 
+    "parses DROP TABLE IF EXISTS CASCADE syntax" in {
+      val result = test(
+        """
+          |CREATE TABLE parent (id SERIAL, PRIMARY KEY (id));
+          |CREATE TABLE child (id SERIAL, parent_id INT REFERENCES parent(id));
+          |DROP TABLE IF EXISTS parent CASCADE;
+          |""".trim.stripMargin
+      )
+
+      result should include("DropTableResult")
+    }
+
+    "DROP TABLE IF EXISTS CASCADE on nonexistent table succeeds" in {
+      val result = test(
+        """
+          |DROP TABLE IF EXISTS nonexistent_table CASCADE;
+          |""".trim.stripMargin
+      )
+
+      result should include("DropTableResult")
+    }
+
     "parses DROP INDEX syntax" in {
       val result = testExpectingError(
         """
