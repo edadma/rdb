@@ -1,15 +1,6 @@
 import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTInQuery, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery } from './ast.js'
 import type { ColumnDef, TableDef, ColumnsConfig } from './schema.js'
 
-// ── Column reference ──
-
-export function col<T extends TableDef<any, any>>(
-  table: T,
-  column: keyof T['_columns'] & string,
-): ASTExpr {
-  return { kind: 'column', table: table._name, name: table._columns[column]._columnName }
-}
-
 // ── Generic operator helpers ──
 
 export function op(left: ASTExpr, operator: string, right: ASTExpr | string | number | boolean | null): ASTBinary {

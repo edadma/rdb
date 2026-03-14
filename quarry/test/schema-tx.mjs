@@ -25,11 +25,11 @@ import {
   interval,
   json,
   bytea,
-  col,
   eq,
   alias,
   fn,
   asc,
+  ToCreateAST,
 } from '../dist/index.js'
 
 // ── Schema type tests ──
@@ -187,7 +187,7 @@ describe('schema column types', () => {
       u: timetz('u'),
     })
 
-    const ast = t.toCreateAST()
+    const ast = t[ToCreateAST]()
     const types = Object.fromEntries(ast.columns.map((c) => [c.name, c.type]))
     assert.equal(types.a, 'serial')
     assert.equal(types.b, 'bigserial')
@@ -241,11 +241,11 @@ describe('transactions', () => {
 
   it('commits on success', async () => {
     await db.transaction(async (tx) => {
-      await tx.update(accounts).set({ balance: 900 }).where(eq(col(accounts, 'name'), 'Alice')).execute()
-      await tx.update(accounts).set({ balance: 600 }).where(eq(col(accounts, 'name'), 'Bob')).execute()
+      await tx.update(accounts).set({ balance: 900 }).where(eq(accounts.name, 'Alice')).execute()
+      await tx.update(accounts).set({ balance: 600 }).where(eq(accounts.name, 'Bob')).execute()
     })
 
-    const rows = await db.select(accounts).orderBy(asc(col(accounts, 'name'))).execute()
+    const rows = await db.select(accounts).orderBy(asc(accounts.name)).execute()
     assert.equal(rows[0].name, 'Alice')
     assert.equal(rows[0].balance, 900)
     assert.equal(rows[1].name, 'Bob')
@@ -253,22 +253,22 @@ describe('transactions', () => {
   })
 
   it('rolls back on error', async () => {
-    const aliceBefore = (await db.select(accounts).where(eq(col(accounts, 'name'), 'Alice')).execute())[0].balance
+    const aliceBefore = (await db.select(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
 
     await assert.rejects(async () => {
       await db.transaction(async (tx) => {
-        await tx.update(accounts).set({ balance: 0 }).where(eq(col(accounts, 'name'), 'Alice')).execute()
+        await tx.update(accounts).set({ balance: 0 }).where(eq(accounts.name, 'Alice')).execute()
         throw new Error('simulated failure')
       })
     }, /simulated failure/)
 
-    const aliceAfter = (await db.select(accounts).where(eq(col(accounts, 'name'), 'Alice')).execute())[0].balance
+    const aliceAfter = (await db.select(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
     assert.equal(aliceAfter, aliceBefore)
   })
 
   it('returns the value from the callback', async () => {
     const result = await db.transaction(async (tx) => {
-      const rows = await tx.select(accounts).where(eq(col(accounts, 'name'), 'Alice')).execute()
+      const rows = await tx.select(accounts).where(eq(accounts.name, 'Alice')).execute()
       return rows[0].balance
     })
     assert.equal(typeof result, 'number')
@@ -279,14 +279,14 @@ describe('transactions', () => {
       const [inserted] = await tx.insert(accounts).values({ name: 'Charlie', balance: 200 }).execute()
       assert.equal(inserted.name, 'Charlie')
 
-      await tx.update(accounts).set({ balance: 300 }).where(eq(col(accounts, 'name'), 'Charlie')).execute()
+      await tx.update(accounts).set({ balance: 300 }).where(eq(accounts.name, 'Charlie')).execute()
 
-      const rows = await tx.select(accounts).where(eq(col(accounts, 'name'), 'Charlie')).execute()
+      const rows = await tx.select(accounts).where(eq(accounts.name, 'Charlie')).execute()
       assert.equal(rows[0].balance, 300)
     })
 
     // Verify committed
-    const rows = await db.select(accounts).where(eq(col(accounts, 'name'), 'Charlie')).execute()
+    const rows = await db.select(accounts).where(eq(accounts.name, 'Charlie')).execute()
     assert.equal(rows.length, 1)
     assert.equal(rows[0].balance, 300)
   })
@@ -330,8 +330,8 @@ describe('returning', () => {
     const result = await db
       .update(items)
       .set({ price: 99 })
-      .where(eq(col(items, 'name'), 'A'))
-      .returning(col(items, 'id'), col(items, 'name'), col(items, 'price'))
+      .where(eq(items.name, 'A'))
+      .returning(items.id, items.name, items.price)
       .execute()
     assert.equal(result.rowCount, 1)
     assert.equal(result.rows.length, 1)
@@ -342,8 +342,8 @@ describe('returning', () => {
   it('delete returns rows in result', async () => {
     const result = await db
       .delete(items)
-      .where(eq(col(items, 'name'), 'C'))
-      .returning(col(items, 'id'), col(items, 'name'), col(items, 'price'))
+      .where(eq(items.name, 'C'))
+      .returning(items.id, items.name, items.price)
       .execute()
     assert.equal(result.rowCount, 1)
     assert.equal(result.rows.length, 1)

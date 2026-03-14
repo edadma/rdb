@@ -7,7 +7,6 @@ import {
   serial,
   text,
   integer,
-  col,
   eq,
   gt,
   lt,
@@ -84,14 +83,14 @@ describe('subqueries', () => {
       // Employees in Engineering department
       const engDeptQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(eq(col(departments, 'name'), 'Engineering'))
+        .columns(departments.id)
+        .where(eq(departments.name, 'Engineering'))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(inSubquery(col(employees, 'departmentId'), engDeptQuery))
-        .orderBy(asc(col(employees, 'name')))
+        .where(inSubquery(employees.departmentId, engDeptQuery))
+        .orderBy(asc(employees.name))
         .execute()
 
       assert.equal(rows.length, 2)
@@ -103,14 +102,14 @@ describe('subqueries', () => {
       // Employees in Engineering OR Marketing
       const deptQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(lt(col(departments, 'id'), 3))
+        .columns(departments.id)
+        .where(lt(departments.id, 3))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(inSubquery(col(employees, 'departmentId'), deptQuery))
-        .orderBy(asc(col(employees, 'name')))
+        .where(inSubquery(employees.departmentId, deptQuery))
+        .orderBy(asc(employees.name))
         .execute()
 
       assert.equal(rows.length, 4) // Alice, Bob, Carol, Dave
@@ -125,21 +124,21 @@ describe('subqueries', () => {
     it('returns empty when subquery matches nothing', async () => {
       const emptyQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(eq(col(departments, 'name'), 'Nonexistent'))
+        .columns(departments.id)
+        .where(eq(departments.name, 'Nonexistent'))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(inSubquery(col(employees, 'departmentId'), emptyQuery))
+        .where(inSubquery(employees.departmentId, emptyQuery))
         .execute()
 
       assert.equal(rows.length, 0)
     })
 
     it('produces correct AST structure', () => {
-      const subq = db.select(departments).columns(col(departments, 'id')).toExpr()
-      const expr = inSubquery(col(employees, 'departmentId'), subq)
+      const subq = db.select(departments).columns(departments.id).toExpr()
+      const expr = inSubquery(employees.departmentId, subq)
 
       assert.equal(expr.kind, 'inQuery')
       assert.equal(expr.op, 'IN')
@@ -155,14 +154,14 @@ describe('subqueries', () => {
       // Employees NOT in Engineering
       const engDeptQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(eq(col(departments, 'name'), 'Engineering'))
+        .columns(departments.id)
+        .where(eq(departments.name, 'Engineering'))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(notInSubquery(col(employees, 'departmentId'), engDeptQuery))
-        .orderBy(asc(col(employees, 'name')))
+        .where(notInSubquery(employees.departmentId, engDeptQuery))
+        .orderBy(asc(employees.name))
         .execute()
 
       assert.equal(rows.length, 3)
@@ -177,21 +176,21 @@ describe('subqueries', () => {
     it('returns all rows when subquery matches nothing', async () => {
       const emptyQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(eq(col(departments, 'name'), 'Nonexistent'))
+        .columns(departments.id)
+        .where(eq(departments.name, 'Nonexistent'))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(notInSubquery(col(employees, 'departmentId'), emptyQuery))
+        .where(notInSubquery(employees.departmentId, emptyQuery))
         .execute()
 
       assert.equal(rows.length, 5)
     })
 
     it('produces correct AST structure', () => {
-      const subq = db.select(departments).columns(col(departments, 'id')).toExpr()
-      const expr = notInSubquery(col(employees, 'departmentId'), subq)
+      const subq = db.select(departments).columns(departments.id).toExpr()
+      const expr = notInSubquery(employees.departmentId, subq)
 
       assert.equal(expr.kind, 'inQuery')
       assert.equal(expr.op, 'NOT IN')
@@ -205,13 +204,13 @@ describe('subqueries', () => {
       // Employees earning above average
       const avgSalaryQuery = db
         .select(employees)
-        .columns(avg(col(employees, 'salary')))
+        .columns(avg(employees.salary))
         .toExpr()
 
       const rows = await db
         .select(employees)
-        .where(gt(col(employees, 'salary'), subquery(avgSalaryQuery)))
-        .orderBy(asc(col(employees, 'name')))
+        .where(gt(employees.salary, subquery(avgSalaryQuery)))
+        .orderBy(asc(employees.name))
         .execute()
 
       // Average is (120000+100000+90000+85000+95000)/5 = 98000
@@ -225,14 +224,14 @@ describe('subqueries', () => {
       // Select each department with its max salary
       const maxSalQuery = db
         .select(employees)
-        .columns(max(col(employees, 'salary')))
-        .where(eq(col(employees, 'departmentId'), col(departments, 'id')))
+        .columns(max(employees.salary))
+        .where(eq(employees.departmentId, departments.id))
         .toExpr()
 
       const rows = await db
         .select(departments)
-        .columns(col(departments, 'name'), alias(subquery(maxSalQuery), 'max_salary'))
-        .orderBy(asc(col(departments, 'name')))
+        .columns(departments.name, alias(subquery(maxSalQuery), 'max_salary'))
+        .orderBy(asc(departments.name))
         .execute()
 
       assert.equal(rows.length, 3)
@@ -245,7 +244,7 @@ describe('subqueries', () => {
     })
 
     it('produces correct AST structure', () => {
-      const subq = db.select(employees).columns(avg(col(employees, 'salary'))).toExpr()
+      const subq = db.select(employees).columns(avg(employees.salary)).toExpr()
       const expr = subquery(subq)
 
       assert.equal(expr.kind, 'subquery')
@@ -260,14 +259,14 @@ describe('subqueries', () => {
       // Employees who lead a project
       const projectQuery = db
         .select(projects)
-        .columns(col(projects, 'id'))
-        .where(eq(col(projects, 'leadId'), col(employees, 'id')))
+        .columns(projects.id)
+        .where(eq(projects.leadId, employees.id))
         .toExpr()
 
       const rows = await db
         .select(employees)
         .where(exists(projectQuery))
-        .orderBy(asc(col(employees, 'name')))
+        .orderBy(asc(employees.name))
         .execute()
 
       // Alice (id=1) leads Alpha, Carol (id=3) leads Beta
@@ -280,8 +279,8 @@ describe('subqueries', () => {
       // EXISTS with impossible condition
       const impossibleQuery = db
         .select(projects)
-        .columns(col(projects, 'id'))
-        .where(eq(col(projects, 'name'), 'Nonexistent Project XYZ'))
+        .columns(projects.id)
+        .where(eq(projects.name, 'Nonexistent Project XYZ'))
         .toExpr()
 
       const rows = await db
@@ -293,7 +292,7 @@ describe('subqueries', () => {
     })
 
     it('produces correct AST structure', () => {
-      const subq = db.select(projects).columns(col(projects, 'id')).toExpr()
+      const subq = db.select(projects).columns(projects.id).toExpr()
       const expr = exists(subq)
 
       assert.equal(expr.kind, 'exists')
@@ -305,14 +304,14 @@ describe('subqueries', () => {
 
   describe('toExpr', () => {
     it('returns ASTSelect node (not wrapped in ASTQueryCommand)', () => {
-      const expr = db.select(employees).columns(col(employees, 'id')).toExpr()
+      const expr = db.select(employees).columns(employees.id).toExpr()
       assert.equal(expr.kind, 'select')
       assert.ok(Array.isArray(expr.exprs))
       assert.ok(Array.isArray(expr.from))
     })
 
     it('toExpr is different from toAST', () => {
-      const builder = db.select(employees).columns(col(employees, 'id'))
+      const builder = db.select(employees).columns(employees.id)
       const expr = builder.toExpr()
       const ast = builder.toAST()
 
@@ -324,9 +323,9 @@ describe('subqueries', () => {
     it('preserves where/orderBy/limit in toExpr', () => {
       const expr = db
         .select(employees)
-        .columns(col(employees, 'id'))
-        .where(gt(col(employees, 'salary'), 100000))
-        .orderBy(asc(col(employees, 'id')))
+        .columns(employees.id)
+        .where(gt(employees.salary, 100000))
+        .orderBy(asc(employees.id))
         .limit(5)
         .toExpr()
 
@@ -344,16 +343,16 @@ describe('subqueries', () => {
       // Employees in Engineering AND salary > 110000
       const engQuery = db
         .select(departments)
-        .columns(col(departments, 'id'))
-        .where(eq(col(departments, 'name'), 'Engineering'))
+        .columns(departments.id)
+        .where(eq(departments.name, 'Engineering'))
         .toExpr()
 
       const rows = await db
         .select(employees)
         .where(
           and(
-            inSubquery(col(employees, 'departmentId'), engQuery),
-            gt(col(employees, 'salary'), 110000),
+            inSubquery(employees.departmentId, engQuery),
+            gt(employees.salary, 110000),
           ),
         )
         .execute()
@@ -366,15 +365,15 @@ describe('subqueries', () => {
       // Employees whose department has employees earning above overall average
       const avgQuery = db
         .select(employees)
-        .columns(avg(col(employees, 'salary')))
+        .columns(avg(employees.salary))
         .toExpr()
 
       // This is a non-correlated subquery: departments that have any employee above avg
       // We use a simpler approach: find employees above average salary
       const rows = await db
         .select(employees)
-        .where(gt(col(employees, 'salary'), subquery(avgQuery)))
-        .orderBy(asc(col(employees, 'salary')))
+        .where(gt(employees.salary, subquery(avgQuery)))
+        .orderBy(asc(employees.salary))
         .execute()
 
       // avg = 98000, above: Bob (100000), Alice (120000)

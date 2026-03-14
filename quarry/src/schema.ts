@@ -1,4 +1,12 @@
-import type { ASTExpr, ASTColumnDef, ASTCreateTableCommand } from './ast.js'
+import type { ASTExpr, ASTColumn, ASTColumnDef, ASTCreateTableCommand } from './ast.js'
+
+// ── Symbols for internal properties ──
+
+export const TableName = Symbol('quarry.tableName')
+export const Columns = Symbol('quarry.columns')
+export const OriginalName = Symbol('quarry.originalName')
+export const ToCreateAST = Symbol('quarry.toCreateAST')
+export const TableAs = Symbol('quarry.as')
 
 // ── Column definition ──
 
@@ -177,16 +185,16 @@ export function bytea<TName extends string>(name: TName): ColumnDef<TName, numbe
 
 export type ColumnsConfig = Record<string, ColumnDef<any, any, any, any>>
 
-export interface TableDef<TName extends string, TColumns extends ColumnsConfig> {
-  readonly _name: TName
-  readonly _columns: TColumns
-  readonly _originalName?: string
-  toCreateAST(): ASTCreateTableCommand
-  as<TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns>
-}
+export type TableDef<TName extends string, TColumns extends ColumnsConfig> = {
+  readonly [TableName]: TName
+  readonly [Columns]: TColumns
+  readonly [OriginalName]?: string
+  [ToCreateAST](): ASTCreateTableCommand
+  [TableAs]<TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns>
+} & { readonly [K in keyof TColumns & string]: ASTColumn }
 
 export type InferSelect<T extends TableDef<any, any>> = {
-  [K in keyof T['_columns']]: T['_columns'][K] extends ColumnDef<any, infer TType, infer TNotNull, any>
+  [K in keyof T[typeof Columns]]: T[typeof Columns][K] extends ColumnDef<any, infer TType, infer TNotNull, any>
     ? TNotNull extends true
       ? TType
       : TType | null
@@ -206,11 +214,11 @@ type RequiredInsertKeys<T extends ColumnsConfig> = {
 type OptionalInsertKeys<T extends ColumnsConfig> = Exclude<keyof T, RequiredInsertKeys<T>>
 
 export type InferInsert<T extends TableDef<any, any>> = {
-  [K in RequiredInsertKeys<T['_columns']>]: T['_columns'][K] extends ColumnDef<any, infer TType, any, any>
+  [K in RequiredInsertKeys<T[typeof Columns]>]: T[typeof Columns][K] extends ColumnDef<any, infer TType, any, any>
     ? TType
     : never
 } & {
-  [K in OptionalInsertKeys<T['_columns']>]?: T['_columns'][K] extends ColumnDef<any, infer TType, infer TNotNull, any>
+  [K in OptionalInsertKeys<T[typeof Columns]>]?: T[typeof Columns][K] extends ColumnDef<any, infer TType, infer TNotNull, any>
     ? TNotNull extends true
       ? TType
       : TType | null
@@ -244,32 +252,57 @@ function columnDefToAST(key: string, col: ColumnDef<any, any, any, any>): ASTCol
 
 export type Nullable<T> = { [K in keyof T]: T[K] | null }
 
+function buildTable<TName extends string, TColumns extends ColumnsConfig>(
+  name: TName,
+  columns: TColumns,
+  originalName?: string,
+): TableDef<TName, TColumns> {
+  const obj: any = {}
+
+  // Symbol-keyed internal properties
+  obj[TableName] = name
+  obj[Columns] = columns
+  if (originalName !== undefined) {
+    obj[OriginalName] = originalName
+  }
+
+  obj[ToCreateAST] = function (): ASTCreateTableCommand {
+    if (originalName !== undefined) {
+      throw new Error('Cannot create table from an alias')
+    }
+    return {
+      kind: 'createTable',
+      table: originalName ?? name,
+      columns: Object.keys(columns).map((key) => columnDefToAST(key, columns[key])),
+    }
+  }
+
+  obj[TableAs] = function <TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns> {
+    return buildTable(alias, columns, originalName ?? name)
+  }
+
+  // Column accessors — each key maps to an ASTColumn
+  for (const key of Object.keys(columns)) {
+    obj[key] = Object.freeze({
+      kind: 'column' as const,
+      table: name,
+      name: columns[key]._columnName,
+    })
+  }
+
+  return obj as TableDef<TName, TColumns>
+}
+
 export function table<TName extends string, TColumns extends ColumnsConfig>(
   name: TName,
   columns: TColumns,
 ): TableDef<TName, TColumns> {
-  return {
-    _name: name,
-    _columns: columns,
-    toCreateAST(): ASTCreateTableCommand {
-      return {
-        kind: 'createTable',
-        table: name,
-        columns: Object.keys(columns).map((key) => columnDefToAST(key, columns[key])),
-      }
-    },
-    as<TAlias extends string>(alias: TAlias): TableDef<TAlias, TColumns> {
-      return {
-        _name: alias,
-        _columns: columns,
-        _originalName: name,
-        toCreateAST() {
-          throw new Error('Cannot create table from an alias')
-        },
-        as<TAlias2 extends string>(alias2: TAlias2): TableDef<TAlias2, TColumns> {
-          return table(name, columns).as(alias2)
-        },
-      }
-    },
-  }
+  return buildTable(name, columns)
+}
+
+export function tableAs<T extends TableDef<any, any>, TAlias extends string>(
+  t: T,
+  alias: TAlias,
+): TableDef<TAlias, T[typeof Columns]> {
+  return t[TableAs](alias) as TableDef<TAlias, T[typeof Columns]>
 }

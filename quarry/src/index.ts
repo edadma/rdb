@@ -1,4 +1,4 @@
-export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTInsertCommand, ASTUpdateCommand, ASTDeleteCommand, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
+export type { ASTExpr, ASTColumn, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTInsertCommand, ASTUpdateCommand, ASTDeleteCommand, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
 export {
   serial,
   bigserial,
@@ -22,10 +22,15 @@ export {
   json,
   bytea,
   table,
+  tableAs,
+  TableName,
+  Columns,
+  OriginalName,
+  ToCreateAST,
+  TableAs,
 } from './schema.js'
 export type { ColumnDef, TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 export {
-  col,
   // Generic operator helpers
   op,
   unaryOp,

@@ -12,7 +12,7 @@ npm install @petradb/quarry @petradb/engine
 
 ```typescript
 import { Session } from '@petradb/engine'
-import { quarry, table, serial, text, integer, boolean, col, eq, asc } from '@petradb/quarry'
+import { quarry, table, serial, text, integer, boolean, eq, asc } from '@petradb/quarry'
 import type { InferSelect, InferInsert } from '@petradb/quarry'
 
 const users = table('users', {
@@ -34,14 +34,14 @@ await db.createTable(users)
 const [user] = await db.insert(users).values({ name: 'Alice', email: 'alice@example.com', age: 30 }).execute()
 
 const rows = await db.select(users)
-  .where(eq(col(users, 'active'), true))
-  .orderBy(asc(col(users, 'name')))
+  .where(eq(users.active, true))
+  .orderBy(asc(users.name))
   .limit(10)
   .execute()
 
-await db.update(users).set({ age: 31 }).where(eq(col(users, 'name'), 'Alice')).execute()
+await db.update(users).set({ age: 31 }).where(eq(users.name, 'Alice')).execute()
 
-await db.delete(users).where(eq(col(users, 'id'), 1)).execute()
+await db.delete(users).where(eq(users.id, 1)).execute()
 ```
 
 ## Features

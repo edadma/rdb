@@ -8,7 +8,6 @@ import {
   text,
   integer,
   boolean,
-  col,
   eq,
   gt,
   isNull,
@@ -82,11 +81,11 @@ describe('joins and aggregates (round 1)', () => {
       const rows = await db
         .select(employees)
         .columns(
-          alias(col(departments, 'name'), 'dept_name'),
-          alias(col(employees, 'name'), 'emp_name'),
+          alias(departments.name, 'dept_name'),
+          alias(employees.name, 'emp_name'),
         )
-        .rightJoin(departments, eq(col(employees, 'deptId'), col(departments, 'id')))
-        .orderBy(asc(col(departments, 'name')))
+        .rightJoin(departments, eq(employees.deptId, departments.id))
+        .orderBy(asc(departments.name))
         .execute()
 
       const deptNames = rows.map((r) => r.dept_name)
@@ -99,7 +98,7 @@ describe('joins and aggregates (round 1)', () => {
     it('AST structure is correct', () => {
       const ast = db
         .select(employees)
-        .rightJoin(departments, eq(col(employees, 'deptId'), col(departments, 'id')))
+        .rightJoin(departments, eq(employees.deptId, departments.id))
         .toAST()
       assert.equal(ast.query.from[0].kind, 'joinRight')
     })
@@ -112,10 +111,10 @@ describe('joins and aggregates (round 1)', () => {
       const rows = await db
         .select(employees)
         .columns(
-          alias(col(employees, 'name'), 'emp_name'),
-          alias(col(departments, 'name'), 'dept_name'),
+          alias(employees.name, 'emp_name'),
+          alias(departments.name, 'dept_name'),
         )
-        .fullJoin(departments, eq(col(employees, 'deptId'), col(departments, 'id')))
+        .fullJoin(departments, eq(employees.deptId, departments.id))
         .execute()
 
       // Should include: Alice+Eng, Bob+Eng, Charlie+Mkt, Dave+null, null+Sales
@@ -131,7 +130,7 @@ describe('joins and aggregates (round 1)', () => {
     it('AST structure is correct', () => {
       const ast = db
         .select(employees)
-        .fullJoin(departments, eq(col(employees, 'deptId'), col(departments, 'id')))
+        .fullJoin(departments, eq(employees.deptId, departments.id))
         .toAST()
       assert.equal(ast.query.from[0].kind, 'joinFull')
     })
@@ -160,8 +159,8 @@ describe('joins and aggregates (round 1)', () => {
     it('asc with nulls first puts nulls at top', async () => {
       const rows = await db
         .select(employees)
-        .columns(col(employees, 'name'), col(employees, 'deptId'))
-        .orderBy(asc(col(employees, 'deptId'), { nulls: 'first' }))
+        .columns(employees.name, employees.deptId)
+        .orderBy(asc(employees.deptId, { nulls: 'first' }))
         .execute()
       assert.equal(rows[0].dept_id, null)
     })
@@ -169,8 +168,8 @@ describe('joins and aggregates (round 1)', () => {
     it('asc with nulls last puts nulls at bottom', async () => {
       const rows = await db
         .select(employees)
-        .columns(col(employees, 'name'), col(employees, 'deptId'))
-        .orderBy(asc(col(employees, 'deptId'), { nulls: 'last' }))
+        .columns(employees.name, employees.deptId)
+        .orderBy(asc(employees.deptId, { nulls: 'last' }))
         .execute()
       assert.equal(rows[rows.length - 1].dept_id, null)
     })
@@ -178,8 +177,8 @@ describe('joins and aggregates (round 1)', () => {
     it('desc with nulls first puts nulls at top', async () => {
       const rows = await db
         .select(employees)
-        .columns(col(employees, 'name'), col(employees, 'deptId'))
-        .orderBy(desc(col(employees, 'deptId'), { nulls: 'first' }))
+        .columns(employees.name, employees.deptId)
+        .orderBy(desc(employees.deptId, { nulls: 'first' }))
         .execute()
       assert.equal(rows[0].dept_id, null)
     })
@@ -187,23 +186,23 @@ describe('joins and aggregates (round 1)', () => {
     it('desc with nulls last puts nulls at bottom', async () => {
       const rows = await db
         .select(employees)
-        .columns(col(employees, 'name'), col(employees, 'deptId'))
-        .orderBy(desc(col(employees, 'deptId'), { nulls: 'last' }))
+        .columns(employees.name, employees.deptId)
+        .orderBy(desc(employees.deptId, { nulls: 'last' }))
         .execute()
       assert.equal(rows[rows.length - 1].dept_id, null)
     })
 
     it('AST has nullsFirst field', () => {
-      const ob1 = asc(col(employees, 'id'), { nulls: 'first' })
+      const ob1 = asc(employees.id, { nulls: 'first' })
       assert.equal(ob1.nullsFirst, true)
-      const ob2 = desc(col(employees, 'id'), { nulls: 'last' })
+      const ob2 = desc(employees.id, { nulls: 'last' })
       assert.equal(ob2.nullsFirst, false)
     })
 
     it('AST omits nullsFirst when not specified', () => {
-      const ob1 = asc(col(employees, 'id'))
+      const ob1 = asc(employees.id)
       assert.equal(ob1.nullsFirst, undefined)
-      const ob2 = desc(col(employees, 'id'))
+      const ob2 = desc(employees.id)
       assert.equal(ob2.nullsFirst, undefined)
     })
   })
@@ -216,7 +215,7 @@ describe('joins and aggregates (round 1)', () => {
         .select(employees)
         .columns(
           alias(count(), 'total'),
-          alias(filter(count(), gt(col(employees, 'salary'), 90)), 'high_salary_count'),
+          alias(filter(count(), gt(employees.salary, 90)), 'high_salary_count'),
         )
         .execute()
       assert.equal(rows[0].total, 4)
@@ -227,14 +226,14 @@ describe('joins and aggregates (round 1)', () => {
       const rows = await db
         .select(employees)
         .columns(
-          alias(filter(sum(col(employees, 'salary')), eq(col(employees, 'active'), true)), 'active_salary_sum'),
+          alias(filter(sum(employees.salary), eq(employees.active, true)), 'active_salary_sum'),
         )
         .execute()
       assert.equal(rows[0].active_salary_sum, 310) // Alice(100) + Bob(120) + Dave(90)
     })
 
     it('AST has filter field', () => {
-      const expr = filter(count(), gt(col(employees, 'salary'), 90))
+      const expr = filter(count(), gt(employees.salary, 90))
       assert.equal(expr.kind, 'apply')
       assert.equal(expr.func, 'count')
       assert.ok(expr.filter)
@@ -249,7 +248,7 @@ describe('joins and aggregates (round 1)', () => {
     it('variance computes sample variance', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(variance(col(employees, 'salary')), 'v'))
+        .columns(alias(variance(employees.salary), 'v'))
         .execute()
       assert.equal(typeof rows[0].v, 'number')
       assert.ok(rows[0].v > 0)
@@ -258,7 +257,7 @@ describe('joins and aggregates (round 1)', () => {
     it('varPop computes population variance', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(varPop(col(employees, 'salary')), 'v'))
+        .columns(alias(varPop(employees.salary), 'v'))
         .execute()
       assert.equal(typeof rows[0].v, 'number')
       assert.ok(rows[0].v > 0)
@@ -267,7 +266,7 @@ describe('joins and aggregates (round 1)', () => {
     it('stddev computes sample standard deviation', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(stddev(col(employees, 'salary')), 's'))
+        .columns(alias(stddev(employees.salary), 's'))
         .execute()
       assert.equal(typeof rows[0].s, 'number')
       assert.ok(rows[0].s > 0)
@@ -276,7 +275,7 @@ describe('joins and aggregates (round 1)', () => {
     it('stddevPop computes population standard deviation', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(stddevPop(col(employees, 'salary')), 's'))
+        .columns(alias(stddevPop(employees.salary), 's'))
         .execute()
       assert.equal(typeof rows[0].s, 'number')
       assert.ok(rows[0].s > 0)
@@ -289,7 +288,7 @@ describe('joins and aggregates (round 1)', () => {
     it('bitAndAgg computes bitwise AND across rows', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(bitAndAgg(col(employees, 'flags')), 'result'))
+        .columns(alias(bitAndAgg(employees.flags), 'result'))
         .execute()
       // 6 & 3 & 5 & 7 = (0b110 & 0b011 & 0b101 & 0b111) = 0b000 = 0
       assert.equal(rows[0].result, 6 & 3 & 5 & 7)
@@ -298,7 +297,7 @@ describe('joins and aggregates (round 1)', () => {
     it('bitOrAgg computes bitwise OR across rows', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(bitOrAgg(col(employees, 'flags')), 'result'))
+        .columns(alias(bitOrAgg(employees.flags), 'result'))
         .execute()
       // 6 | 3 | 5 | 7 = 0b111 = 7
       assert.equal(rows[0].result, 6 | 3 | 5 | 7)
@@ -311,7 +310,7 @@ describe('joins and aggregates (round 1)', () => {
     it('returns false when not all rows satisfy condition', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(every(col(employees, 'active')), 'all_active'))
+        .columns(alias(every(employees.active), 'all_active'))
         .execute()
       assert.equal(rows[0].all_active, false) // Charlie is inactive
     })
@@ -319,8 +318,8 @@ describe('joins and aggregates (round 1)', () => {
     it('returns true when filtered to matching rows', async () => {
       const rows = await db
         .select(employees)
-        .columns(alias(every(col(employees, 'active')), 'all_active'))
-        .where(isNotNull(col(employees, 'deptId')))
+        .columns(alias(every(employees.active), 'all_active'))
+        .where(isNotNull(employees.deptId))
         .execute()
       // dept employees: Alice(true), Bob(true), Charlie(false)
       assert.equal(rows[0].all_active, false)

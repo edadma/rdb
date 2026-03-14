@@ -8,7 +8,6 @@ import {
   text,
   integer,
   boolean,
-  col,
   eq,
   ne,
   gt,
@@ -36,6 +35,7 @@ import {
   desc,
   add,
   sub,
+  ToCreateAST,
 } from '../dist/index.js'
 
 // ── Schema definitions ──
@@ -98,7 +98,7 @@ describe('quarry', () => {
     })
 
     it('toCreateAST produces correct structure', () => {
-      const ast = users.toCreateAST()
+      const ast = users[ToCreateAST]()
       assert.equal(ast.kind, 'createTable')
       assert.equal(ast.table, 'users')
       assert.equal(ast.columns.length, 5)
@@ -148,7 +148,7 @@ describe('quarry', () => {
         .execute()
       const rows = await db
         .select(users)
-        .where(or(eq(col(users, 'name'), 'Dave'), eq(col(users, 'name'), 'Eve')))
+        .where(or(eq(users.name, 'Dave'), eq(users.name, 'Eve')))
         .execute()
       assert.equal(rows.length, 2)
     })
@@ -186,27 +186,27 @@ describe('quarry', () => {
     })
 
     it('selects with where clause', async () => {
-      const rows = await db.select(users).where(eq(col(users, 'name'), 'Alice')).execute()
+      const rows = await db.select(users).where(eq(users.name, 'Alice')).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Alice')
     })
 
     it('selects specific columns', async () => {
-      const rows = await db.select(users).columns(col(users, 'name'), col(users, 'email')).execute()
+      const rows = await db.select(users).columns(users.name, users.email).execute()
       assert.ok(rows.length > 0)
       assert.ok('name' in rows[0])
       assert.ok('email' in rows[0])
     })
 
     it('selects with orderBy asc', async () => {
-      const rows = await db.select(users).orderBy(asc(col(users, 'name'))).execute()
+      const rows = await db.select(users).orderBy(asc(users.name)).execute()
       for (let i = 1; i < rows.length; i++) {
         assert.ok(rows[i].name >= rows[i - 1].name)
       }
     })
 
     it('selects with orderBy desc', async () => {
-      const rows = await db.select(users).orderBy(desc(col(users, 'name'))).execute()
+      const rows = await db.select(users).orderBy(desc(users.name)).execute()
       for (let i = 1; i < rows.length; i++) {
         assert.ok(rows[i].name <= rows[i - 1].name)
       }
@@ -218,20 +218,20 @@ describe('quarry', () => {
     })
 
     it('selects with offset and limit', async () => {
-      const all = await db.select(users).orderBy(asc(col(users, 'id'))).execute()
-      const offset = await db.select(users).orderBy(asc(col(users, 'id'))).offset(2).limit(2).execute()
+      const all = await db.select(users).orderBy(asc(users.id)).execute()
+      const offset = await db.select(users).orderBy(asc(users.id)).offset(2).limit(2).execute()
       assert.equal(offset.length, 2)
       assert.equal(offset[0].id, all[2].id)
     })
 
     it('selects with distinct', async () => {
-      const rows = await db.select(users).columns(col(users, 'active')).distinct().execute()
+      const rows = await db.select(users).columns(users.active).distinct().execute()
       const values = rows.map((r) => r.active)
       assert.equal(new Set(values).size, values.length)
     })
 
     it('selects with greater than', async () => {
-      const rows = await db.select(users).where(gt(col(users, 'age'), 30)).execute()
+      const rows = await db.select(users).where(gt(users.age, 30)).execute()
       for (const row of rows) {
         assert.ok(row.age > 30)
       }
@@ -240,7 +240,7 @@ describe('quarry', () => {
     it('selects with AND condition', async () => {
       const rows = await db
         .select(users)
-        .where(and(eq(col(users, 'active'), true), gt(col(users, 'age'), 25)))
+        .where(and(eq(users.active, true), gt(users.age, 25)))
         .execute()
       for (const row of rows) {
         assert.equal(row.active, true)
@@ -251,69 +251,69 @@ describe('quarry', () => {
     it('selects with OR condition', async () => {
       const rows = await db
         .select(users)
-        .where(or(eq(col(users, 'name'), 'Alice'), eq(col(users, 'name'), 'Bob')))
+        .where(or(eq(users.name, 'Alice'), eq(users.name, 'Bob')))
         .execute()
       assert.equal(rows.length, 2)
     })
 
     it('selects with NOT', async () => {
-      const rows = await db.select(users).where(not(eq(col(users, 'name'), 'Alice'))).execute()
+      const rows = await db.select(users).where(not(eq(users.name, 'Alice'))).execute()
       for (const row of rows) {
         assert.notEqual(row.name, 'Alice')
       }
     })
 
     it('selects with IS NULL', async () => {
-      const rows = await db.select(users).where(isNull(col(users, 'age'))).execute()
+      const rows = await db.select(users).where(isNull(users.age)).execute()
       for (const row of rows) {
         assert.equal(row.age, null)
       }
     })
 
     it('selects with IS NOT NULL', async () => {
-      const rows = await db.select(users).where(isNotNull(col(users, 'age'))).execute()
+      const rows = await db.select(users).where(isNotNull(users.age)).execute()
       for (const row of rows) {
         assert.notEqual(row.age, null)
       }
     })
 
     it('selects with IN list', async () => {
-      const rows = await db.select(users).where(inList(col(users, 'name'), ['Alice', 'Bob'])).execute()
+      const rows = await db.select(users).where(inList(users.name, ['Alice', 'Bob'])).execute()
       assert.equal(rows.length, 2)
     })
 
     it('selects with NOT IN list', async () => {
-      const rows = await db.select(users).where(notInList(col(users, 'name'), ['Alice', 'Bob'])).execute()
+      const rows = await db.select(users).where(notInList(users.name, ['Alice', 'Bob'])).execute()
       for (const row of rows) {
         assert.ok(row.name !== 'Alice' && row.name !== 'Bob')
       }
     })
 
     it('selects with BETWEEN', async () => {
-      const rows = await db.select(users).where(between(col(users, 'age'), 25, 35)).execute()
+      const rows = await db.select(users).where(between(users.age, 25, 35)).execute()
       for (const row of rows) {
         assert.ok(row.age >= 25 && row.age <= 35)
       }
     })
 
     it('selects with LIKE', async () => {
-      const rows = await db.select(users).where(like(col(users, 'name'), 'A%')).execute()
+      const rows = await db.select(users).where(like(users.name, 'A%')).execute()
       for (const row of rows) {
         assert.ok(row.name.startsWith('A'))
       }
     })
 
     it('selects with comparison operators', async () => {
-      const r1 = await db.select(users).where(gte(col(users, 'age'), 30)).execute()
+      const r1 = await db.select(users).where(gte(users.age, 30)).execute()
       for (const row of r1) assert.ok(row.age >= 30)
 
-      const r2 = await db.select(users).where(lt(col(users, 'age'), 30)).execute()
+      const r2 = await db.select(users).where(lt(users.age, 30)).execute()
       for (const row of r2) assert.ok(row.age < 30)
 
-      const r3 = await db.select(users).where(lte(col(users, 'age'), 30)).execute()
+      const r3 = await db.select(users).where(lte(users.age, 30)).execute()
       for (const row of r3) assert.ok(row.age <= 30)
 
-      const r4 = await db.select(users).where(ne(col(users, 'name'), 'Alice')).execute()
+      const r4 = await db.select(users).where(ne(users.name, 'Alice')).execute()
       for (const row of r4) assert.notEqual(row.name, 'Alice')
     })
 
@@ -325,8 +325,8 @@ describe('quarry', () => {
     it('selects with groupBy and aggregate', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'active'), alias(count(), 'cnt'))
-        .groupBy(col(users, 'active'))
+        .columns(users.active, alias(count(), 'cnt'))
+        .groupBy(users.active)
         .execute()
       assert.ok(rows.length > 0)
       for (const row of rows) {
@@ -338,8 +338,8 @@ describe('quarry', () => {
     it('selects with arithmetic expressions', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), alias(add(col(users, 'age'), 10), 'age_plus_10'))
-        .where(eq(col(users, 'name'), 'Alice'))
+        .columns(users.name, alias(add(users.age, 10), 'age_plus_10'))
+        .where(eq(users.name, 'Alice'))
         .execute()
       assert.equal(rows[0].age_plus_10, 40) // Alice is 30
     })
@@ -347,8 +347,8 @@ describe('quarry', () => {
     it('selects with function call', async () => {
       const rows = await db
         .select(users)
-        .columns(alias(fn('upper', col(users, 'name')), 'upper_name'))
-        .where(eq(col(users, 'name'), 'Alice'))
+        .columns(alias(fn('upper', users.name), 'upper_name'))
+        .where(eq(users.name, 'Alice'))
         .execute()
       assert.equal(rows[0].upper_name, 'ALICE')
     })
@@ -356,8 +356,8 @@ describe('quarry', () => {
     it('toAST produces correct select structure', () => {
       const ast = db
         .select(users)
-        .where(eq(col(users, 'name'), 'Alice'))
-        .orderBy(asc(col(users, 'id')))
+        .where(eq(users.name, 'Alice'))
+        .orderBy(asc(users.id))
         .limit(10)
         .toAST()
 
@@ -383,9 +383,9 @@ describe('quarry', () => {
     it('inner join returns matching rows', async () => {
       const rows = await db
         .select(posts)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .innerJoin(users, eq(col(posts, 'userId'), col(users, 'id')))
-        .where(eq(col(users, 'name'), 'Alice'))
+        .columns(users.name, posts.title)
+        .innerJoin(users, eq(posts.userId, users.id))
+        .where(eq(users.name, 'Alice'))
         .execute()
       assert.equal(rows.length, 2)
       for (const row of rows) {
@@ -397,9 +397,9 @@ describe('quarry', () => {
       // Charlie has no posts, so inner join should return nothing for Charlie
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .where(eq(col(users, 'name'), 'Charlie'))
+        .columns(users.name, posts.title)
+        .innerJoin(posts, eq(users.id, posts.userId))
+        .where(eq(users.name, 'Charlie'))
         .execute()
       assert.equal(rows.length, 0)
     })
@@ -407,9 +407,9 @@ describe('quarry', () => {
     it('inner join returns columns from both tables', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), col(users, 'email'), col(posts, 'title'), col(posts, 'body'))
-        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .where(eq(col(users, 'name'), 'Bob'))
+        .columns(users.name, users.email, posts.title, posts.body)
+        .innerJoin(posts, eq(users.id, posts.userId))
+        .where(eq(users.name, 'Bob'))
         .execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Bob')
@@ -421,9 +421,9 @@ describe('quarry', () => {
     it('left join returns all base rows', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .where(eq(col(users, 'name'), 'Charlie'))
+        .columns(users.name, posts.title)
+        .leftJoin(posts, eq(users.id, posts.userId))
+        .where(eq(users.name, 'Charlie'))
         .execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Charlie')
@@ -433,9 +433,9 @@ describe('quarry', () => {
     it('left join returns null for all joined columns when no match', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), col(posts, 'title'), col(posts, 'body'), col(posts, 'userId'))
-        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .where(eq(col(users, 'name'), 'Charlie'))
+        .columns(users.name, posts.title, posts.body, posts.userId)
+        .leftJoin(posts, eq(users.id, posts.userId))
+        .where(eq(users.name, 'Charlie'))
         .execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].title, null)
@@ -446,10 +446,10 @@ describe('quarry', () => {
     it('left join returns non-null for matching rows', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .where(eq(col(users, 'name'), 'Alice'))
-        .orderBy(asc(col(posts, 'title')))
+        .columns(users.name, posts.title)
+        .leftJoin(posts, eq(users.id, posts.userId))
+        .where(eq(users.name, 'Alice'))
+        .orderBy(asc(posts.title))
         .execute()
       assert.equal(rows.length, 2)
       for (const row of rows) {
@@ -461,9 +461,9 @@ describe('quarry', () => {
     it('inner join with orderBy', async () => {
       const rows = await db
         .select(posts)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .innerJoin(users, eq(col(posts, 'userId'), col(users, 'id')))
-        .orderBy(asc(col(posts, 'title')))
+        .columns(users.name, posts.title)
+        .innerJoin(users, eq(posts.userId, users.id))
+        .orderBy(asc(posts.title))
         .execute()
       for (let i = 1; i < rows.length; i++) {
         assert.ok(rows[i].title >= rows[i - 1].title)
@@ -473,8 +473,8 @@ describe('quarry', () => {
     it('inner join with limit', async () => {
       const rows = await db
         .select(posts)
-        .columns(col(users, 'name'), col(posts, 'title'))
-        .innerJoin(users, eq(col(posts, 'userId'), col(users, 'id')))
+        .columns(users.name, posts.title)
+        .innerJoin(users, eq(posts.userId, users.id))
         .limit(1)
         .execute()
       assert.equal(rows.length, 1)
@@ -483,9 +483,9 @@ describe('quarry', () => {
     it('inner join with aggregate', async () => {
       const rows = await db
         .select(users)
-        .columns(col(users, 'name'), alias(count(), 'post_count'))
-        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .groupBy(col(users, 'name'))
+        .columns(users.name, alias(count(), 'post_count'))
+        .innerJoin(posts, eq(users.id, posts.userId))
+        .groupBy(users.name)
         .orderBy(desc(alias(count(), 'post_count')))
         .execute()
       assert.ok(rows.length > 0)
@@ -499,8 +499,8 @@ describe('quarry', () => {
     it('join AST structure is correct', () => {
       const ast = db
         .select(users)
-        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-        .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .innerJoin(posts, eq(users.id, posts.userId))
+        .leftJoin(posts, eq(users.id, posts.userId))
         .toAST()
 
       // Should be nested: leftJoin(innerJoin(table, posts), posts)
@@ -518,8 +518,8 @@ describe('quarry', () => {
     it('chaining preserves builder state', async () => {
       // Build a query step by step, verify each step returns a new builder
       const base = db.select(users)
-      const joined = base.innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-      const filtered = joined.where(eq(col(users, 'name'), 'Alice'))
+      const joined = base.innerJoin(posts, eq(users.id, posts.userId))
+      const filtered = joined.where(eq(users.name, 'Alice'))
       const limited = filtered.limit(1)
 
       // Each should produce a valid AST independently
@@ -545,11 +545,11 @@ describe('quarry', () => {
       const result = await db
         .update(users)
         .set({ age: 31 })
-        .where(eq(col(users, 'name'), 'Alice'))
+        .where(eq(users.name, 'Alice'))
         .execute()
       assert.equal(result.rowCount, 1)
 
-      const rows = await db.select(users).where(eq(col(users, 'name'), 'Alice')).execute()
+      const rows = await db.select(users).where(eq(users.name, 'Alice')).execute()
       assert.equal(rows[0].age, 31)
     })
 
@@ -557,25 +557,25 @@ describe('quarry', () => {
       await db
         .update(users)
         .set({ name: 'Alice Smith', age: 32 })
-        .where(eq(col(users, 'name'), 'Alice'))
+        .where(eq(users.name, 'Alice'))
         .execute()
 
-      const rows = await db.select(users).where(eq(col(users, 'name'), 'Alice Smith')).execute()
+      const rows = await db.select(users).where(eq(users.name, 'Alice Smith')).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].age, 32)
 
       // Restore original name for other tests
-      await db.update(users).set({ name: 'Alice' }).where(eq(col(users, 'name'), 'Alice Smith')).execute()
+      await db.update(users).set({ name: 'Alice' }).where(eq(users.name, 'Alice Smith')).execute()
     })
 
     it('updates with null', async () => {
-      await db.update(users).set({ age: null }).where(eq(col(users, 'name'), 'Dave')).execute()
-      const rows = await db.select(users).where(eq(col(users, 'name'), 'Dave')).execute()
+      await db.update(users).set({ age: null }).where(eq(users.name, 'Dave')).execute()
+      const rows = await db.select(users).where(eq(users.name, 'Dave')).execute()
       assert.equal(rows[0].age, null)
     })
 
     it('throws on empty set', () => {
-      assert.throws(() => db.update(users).where(eq(col(users, 'name'), 'Alice')).toAST(), /update requires at least one set clause/)
+      assert.throws(() => db.update(users).where(eq(users.name, 'Alice')).toAST(), /update requires at least one set clause/)
     })
 
     it('throws on unknown column', () => {
@@ -583,7 +583,7 @@ describe('quarry', () => {
     })
 
     it('toAST produces correct update structure', () => {
-      const ast = db.update(users).set({ name: 'Test' }).where(eq(col(users, 'id'), 1)).toAST()
+      const ast = db.update(users).set({ name: 'Test' }).where(eq(users.id, 1)).toAST()
       assert.equal(ast.kind, 'update')
       assert.equal(ast.table, 'users')
       assert.equal(ast.sets.length, 1)
@@ -597,15 +597,15 @@ describe('quarry', () => {
   describe('delete', () => {
     it('deletes rows with where clause', async () => {
       await db.insert(users).values({ name: 'Temp', email: 'temp@test.com' }).execute()
-      const result = await db.delete(users).where(eq(col(users, 'name'), 'Temp')).execute()
+      const result = await db.delete(users).where(eq(users.name, 'Temp')).execute()
       assert.equal(result.rowCount, 1)
 
-      const rows = await db.select(users).where(eq(col(users, 'name'), 'Temp')).execute()
+      const rows = await db.select(users).where(eq(users.name, 'Temp')).execute()
       assert.equal(rows.length, 0)
     })
 
     it('toAST produces correct delete structure', () => {
-      const ast = db.delete(users).where(eq(col(users, 'id'), 1)).toAST()
+      const ast = db.delete(users).where(eq(users.id, 1)).toAST()
       assert.equal(ast.kind, 'delete')
       assert.equal(ast.table, 'users')
       assert.ok(ast.where)
@@ -624,12 +624,12 @@ describe('quarry', () => {
     })
 
     it('and with single expression returns it directly', () => {
-      const expr = col(users, 'name')
+      const expr = users.name
       assert.strictEqual(and(expr), expr)
     })
 
     it('or with single expression returns it directly', () => {
-      const expr = col(users, 'name')
+      const expr = users.name
       assert.strictEqual(or(expr), expr)
     })
 
@@ -642,14 +642,14 @@ describe('quarry', () => {
     })
 
     it('col produces correct column reference', () => {
-      const c = col(users, 'name')
+      const c = users.name
       assert.deepStrictEqual(c, { kind: 'column', table: 'users', name: 'name' })
     })
 
     it('nested and/or builds correct tree', () => {
       const expr = and(
-        or(eq(col(users, 'name'), 'A'), eq(col(users, 'name'), 'B')),
-        gt(col(users, 'age'), 20),
+        or(eq(users.name, 'A'), eq(users.name, 'B')),
+        gt(users.age, 20),
       )
       assert.equal(expr.kind, 'binary')
       assert.equal(expr.op, 'AND')
@@ -664,11 +664,11 @@ describe('quarry', () => {
     it('select with all clauses', () => {
       const ast = db
         .select(users)
-        .columns(col(users, 'name'), alias(count(), 'cnt'))
-        .where(gt(col(users, 'age'), 20))
-        .groupBy(col(users, 'name'))
+        .columns(users.name, alias(count(), 'cnt'))
+        .where(gt(users.age, 20))
+        .groupBy(users.name)
         .having(gt(alias(count(), 'cnt'), 1))
-        .orderBy(desc(col(users, 'name')))
+        .orderBy(desc(users.name))
         .limit(10)
         .offset(5)
         .distinct()
@@ -703,7 +703,7 @@ describe('quarry', () => {
     it('join builds nested from clause', () => {
       const ast = db
         .select(users)
-        .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+        .innerJoin(posts, eq(users.id, posts.userId))
         .toAST()
 
       const from = ast.query.from[0]

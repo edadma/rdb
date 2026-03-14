@@ -9,15 +9,16 @@ import type {
   ASTUpdateSet,
   ASTOnConflict,
 } from './ast.js'
+import { TableName, Columns, OriginalName, ToCreateAST } from './schema.js'
 import type { TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 
 // ── Helpers ──
 
 function tableToExpr(table: TableDef<any, any>): ASTExpr {
-  if (table._originalName) {
-    return { kind: 'aliasRelation', relation: { kind: 'table', name: table._originalName }, alias: table._name }
+  if (table[OriginalName]) {
+    return { kind: 'aliasRelation', relation: { kind: 'table', name: table[OriginalName] }, alias: table[TableName] }
   }
-  return { kind: 'table', name: table._name }
+  return { kind: 'table', name: table[TableName] }
 }
 
 // ── Session interface ──
@@ -221,20 +222,20 @@ export class InsertBuilder<T extends TableDef<any, any>> {
   }
 
   onConflictDoUpdate(
-    conflictColumns: (keyof T['_columns'] & string)[],
+    conflictColumns: (keyof T[typeof Columns] & string)[],
     updates: Partial<InferSelect<T>>,
   ): this {
-    const columns = this._table._columns as ColumnsConfig
+    const columns = this._table[Columns] as ColumnsConfig
     const dbConflictCols = conflictColumns.map((key) => {
       const colDef = columns[key]
-      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table[TableName]}'`)
       return colDef._columnName
     })
 
     const sets: ASTUpdateSet[] = []
     for (const [key, value] of Object.entries(updates as Record<string, unknown>)) {
       const colDef = columns[key]
-      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table[TableName]}'`)
       let astValue: ASTExpr
       if (value === null || value === undefined) astValue = { kind: 'null' }
       else if (typeof value === 'string') astValue = { kind: 'string', value }
@@ -251,7 +252,7 @@ export class InsertBuilder<T extends TableDef<any, any>> {
   toAST(): ASTInsertCommand {
     if (this._rows.length === 0) throw new Error('insert requires at least one row')
 
-    const columns = this._table._columns as ColumnsConfig
+    const columns = this._table[Columns] as ColumnsConfig
     const allKeys = new Set<string>()
     for (const row of this._rows) {
       for (const key of Object.keys(row)) allKeys.add(key)
@@ -261,7 +262,7 @@ export class InsertBuilder<T extends TableDef<any, any>> {
     const dbColNames: string[] = []
     for (const key of allKeys) {
       const colDef = columns[key]
-      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table[TableName]}'`)
       colNames.push(key)
       dbColNames.push(colDef._columnName)
     }
@@ -279,7 +280,7 @@ export class InsertBuilder<T extends TableDef<any, any>> {
 
     return {
       kind: 'insert',
-      table: this._table._name,
+      table: this._table[TableName],
       columns: dbColNames,
       rows: astRows,
       returning: this._returning ?? [{ kind: 'star' }],
@@ -325,7 +326,7 @@ export class InsertSelectBuilder<T extends TableDef<any, any>> {
   toAST(): ASTInsertCommand {
     return {
       kind: 'insert',
-      table: this._table._name,
+      table: this._table[TableName],
       columns: this._columns,
       query: this._query,
       returning: this._returning ?? [{ kind: 'star' }],
@@ -362,10 +363,10 @@ export class UpdateBuilder<T extends TableDef<any, any>> {
   }
 
   set(values: Partial<InferSelect<T>>): this {
-    const columns = this._table._columns as ColumnsConfig
+    const columns = this._table[Columns] as ColumnsConfig
     for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
       const colDef = columns[key]
-      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table._name}'`)
+      if (!colDef) throw new Error(`Unknown column '${key}' in table '${this._table[TableName]}'`)
       let astValue: ASTExpr
       if (value === null || value === undefined) astValue = { kind: 'null' }
       else if (typeof value === 'string') astValue = { kind: 'string', value }
@@ -391,7 +392,7 @@ export class UpdateBuilder<T extends TableDef<any, any>> {
     if (this._sets.length === 0) throw new Error('update requires at least one set clause')
     return {
       kind: 'update',
-      table: this._table._name,
+      table: this._table[TableName],
       sets: this._sets,
       from: this._from,
       where: this._where,
@@ -443,7 +444,7 @@ export class DeleteBuilder<T extends TableDef<any, any>> {
   toAST(): ASTDeleteCommand {
     return {
       kind: 'delete',
-      table: this._table._name,
+      table: this._table[TableName],
       using: this._using,
       where: this._where,
       returning: this._returning,
@@ -487,12 +488,12 @@ export class QuarryDB {
   insertFrom<T extends TableDef<any, any>>(
     table: T,
     query: ASTExpr,
-    columns?: (keyof T['_columns'] & string)[],
+    columns?: (keyof T[typeof Columns] & string)[],
   ): InsertSelectBuilder<T> {
     const cols = columns
       ? columns.map((key) => {
-          const colDef = (table._columns as ColumnsConfig)[key]
-          if (!colDef) throw new Error(`Unknown column '${key}' in table '${table._name}'`)
+          const colDef = (table[Columns] as ColumnsConfig)[key]
+          if (!colDef) throw new Error(`Unknown column '${key}' in table '${table[TableName]}'`)
           return colDef._columnName
         })
       : undefined
@@ -508,7 +509,7 @@ export class QuarryDB {
   }
 
   async createTable<T extends TableDef<any, any>>(table: T): Promise<void> {
-    await this._session.executeAST(table.toCreateAST())
+    await this._session.executeAST(table[ToCreateAST]())
   }
 
   async transaction<R>(fn: (tx: QuarryDB) => Promise<R>): Promise<R> {

@@ -8,7 +8,6 @@ import {
   text,
   integer,
   boolean,
-  col,
   eq,
   gt,
   and,
@@ -88,8 +87,8 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       // Archive all active products
       const selectExpr = db
         .select(products)
-        .columns(col(products, 'name'), col(products, 'price'), col(products, 'category'))
-        .where(eq(col(products, 'active'), true))
+        .columns(products.name, products.price, products.category)
+        .where(eq(products.active, true))
         .toExpr()
 
       await db
@@ -97,14 +96,14 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
         .execute()
 
       // Verify rows were inserted by querying the archive
-      const archived = await db.select(archive).orderBy(asc(col(archive, 'name'))).execute()
+      const archived = await db.select(archive).orderBy(asc(archive.name)).execute()
       assert.equal(archived.length, 4) // Widget, Gadget, Doohickey, Thingamajig
       const names = archived.map((r) => r.name).sort()
       assert.deepStrictEqual(names, ['Doohickey', 'Gadget', 'Thingamajig', 'Widget'])
     })
 
     it('inserted rows are queryable', async () => {
-      const rows = await db.select(archive).orderBy(asc(col(archive, 'name'))).execute()
+      const rows = await db.select(archive).orderBy(asc(archive.name)).execute()
       assert.equal(rows.length, 4)
       assert.equal(rows[0].name, 'Doohickey')
     })
@@ -112,7 +111,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
     it('AST has query field instead of rows', () => {
       const selectExpr = db
         .select(products)
-        .columns(col(products, 'name'), col(products, 'price'), col(products, 'category'))
+        .columns(products.name, products.price, products.category)
         .toExpr()
 
       const ast = db.insertFrom(archive, selectExpr, ['name', 'price', 'category']).toAST()
@@ -131,8 +130,8 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       // Use a subquery that produces all 4 columns
       const selectExpr = db
         .select(products)
-        .columns(col(products, 'id'), col(products, 'name'), col(products, 'price'), col(products, 'category'))
-        .where(eq(col(products, 'name'), 'Gadget'))
+        .columns(products.id, products.name, products.price, products.category)
+        .where(eq(products.name, 'Gadget'))
         .toExpr()
 
       const rows = await db.insertFrom(archive, selectExpr).execute()
@@ -141,7 +140,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
     })
 
     it('supports onConflictDoNothing', () => {
-      const selectExpr = db.select(products).columns(col(products, 'name'), col(products, 'price'), col(products, 'category')).toExpr()
+      const selectExpr = db.select(products).columns(products.name, products.price, products.category).toExpr()
       const ast = db.insertFrom(archive, selectExpr, ['name', 'price', 'category']).onConflictDoNothing().toAST()
       assert.ok(ast.onConflict)
       assert.equal(ast.onConflict.kind, 'doNothing')
@@ -156,13 +155,13 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
         .update(products)
         .set({ price: 999 }) // placeholder, actual update uses col reference
         .from(priceUpdates)
-        .where(eq(col(products, 'name'), col(priceUpdates, 'productName')))
+        .where(eq(products.name, priceUpdates.productName))
         .execute()
 
       // Verify Widget was updated (but to 999 since we used .set() with a literal)
       // For real FROM updates we'd need expression-based set values,
       // but this verifies the FROM clause is wired correctly
-      const widget = await db.select(products).where(eq(col(products, 'name'), 'Widget')).execute()
+      const widget = await db.select(products).where(eq(products.name, 'Widget')).execute()
       assert.equal(widget[0].price, 999)
     })
 
@@ -171,7 +170,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
         .update(products)
         .set({ price: 100 })
         .from(priceUpdates)
-        .where(eq(col(products, 'name'), col(priceUpdates, 'productName')))
+        .where(eq(products.name, priceUpdates.productName))
         .toAST()
 
       assert.equal(ast.kind, 'update')
@@ -186,7 +185,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
         .update(products)
         .set({ price: 100 })
         .from(priceUpdates, archive)
-        .where(eq(col(products, 'name'), 'test'))
+        .where(eq(products.name, 'test'))
         .toAST()
 
       assert.equal(ast.from.length, 2)
@@ -200,13 +199,13 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       const result = await db
         .delete(products)
         .using(deleteList)
-        .where(eq(col(products, 'name'), col(deleteList, 'productName')))
+        .where(eq(products.name, deleteList.productName))
         .execute()
 
       assert.equal(result.rowCount, 1)
 
       // Verify Gizmo was deleted
-      const remaining = await db.select(products).where(eq(col(products, 'name'), 'Gizmo')).execute()
+      const remaining = await db.select(products).where(eq(products.name, 'Gizmo')).execute()
       assert.equal(remaining.length, 0)
     })
 
@@ -214,7 +213,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       const ast = db
         .delete(products)
         .using(deleteList)
-        .where(eq(col(products, 'name'), col(deleteList, 'productName')))
+        .where(eq(products.name, deleteList.productName))
         .toAST()
 
       assert.equal(ast.kind, 'delete')
@@ -233,8 +232,8 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       // Gizmo was deleted by delete using test
       const rows = await db
         .select(products)
-        .distinctOn(col(products, 'category'))
-        .orderBy(asc(col(products, 'category')), asc(col(products, 'name')))
+        .distinctOn(products.category)
+        .orderBy(asc(products.category), asc(products.name))
         .execute()
 
       const categories = rows.map((r) => r.category).sort()
@@ -247,8 +246,8 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       // For each category, get the cheapest product
       const rows = await db
         .select(products)
-        .distinctOn(col(products, 'category'))
-        .orderBy(asc(col(products, 'category')), asc(col(products, 'price')))
+        .distinctOn(products.category)
+        .orderBy(asc(products.category), asc(products.price))
         .execute()
 
       const electronics = rows.find((r) => r.category === 'electronics')
@@ -261,8 +260,8 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
     it('AST has distinctOn field', () => {
       const ast = db
         .select(products)
-        .distinctOn(col(products, 'category'))
-        .orderBy(asc(col(products, 'category')))
+        .distinctOn(products.category)
+        .orderBy(asc(products.category))
         .toAST()
 
       assert.ok(ast.query.distinctOn, 'AST should have distinctOn field')
@@ -274,7 +273,7 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
     it('supports multiple distinctOn columns', () => {
       const ast = db
         .select(products)
-        .distinctOn(col(products, 'category'), col(products, 'active'))
+        .distinctOn(products.category, products.active)
         .toAST()
 
       assert.equal(ast.query.distinctOn.length, 2)

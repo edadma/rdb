@@ -145,7 +145,7 @@ By default, insert returns all columns (`*`). Use `.returning()` to select speci
 const [{ id }] = await db
   .insert(users)
   .values({ name: "Alice", email: "alice@example.com" })
-  .returning(col(users, "id"))
+  .returning(users.id)
   .execute();
 ```
 
@@ -179,8 +179,8 @@ Insert rows from a query instead of literal values:
 // Archive all active users
 const query = db
   .select(users)
-  .columns(col(users, "name"), col(users, "email"))
-  .where(eq(col(users, "active"), true))
+  .columns(users.name, users.email)
+  .where(eq(users.active, true))
   .toExpr();
 
 await db.insertFrom(archive, query, ["name", "email"]).execute();
@@ -199,7 +199,7 @@ await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().exe
 ## Select
 
 ```typescript
-import { col, eq, gt, asc, desc } from "@petradb/quarry";
+import { eq, gt, asc, desc } from "@petradb/quarry";
 
 // All rows
 const allUsers = await db.select(users).execute();
@@ -207,19 +207,19 @@ const allUsers = await db.select(users).execute();
 // Where clause
 const alice = await db
   .select(users)
-  .where(eq(col(users, "name"), "Alice"))
+  .where(eq(users.name, "Alice"))
   .execute();
 
 // Specific columns
 const names = await db
   .select(users)
-  .columns(col(users, "name"), col(users, "email"))
+  .columns(users.name, users.email)
   .execute();
 
 // Order, limit, offset
 const page = await db
   .select(users)
-  .orderBy(asc(col(users, "name")))
+  .orderBy(asc(users.name))
   .limit(10)
   .offset(20)
   .execute();
@@ -227,26 +227,26 @@ const page = await db
 // Distinct
 const statuses = await db
   .select(users)
-  .columns(col(users, "active"))
+  .columns(users.active)
   .distinct()
   .execute();
 
 // Distinct on — one row per distinct value of the given columns
 const perCategory = await db
   .select(products)
-  .distinctOn(col(products, "category"))
-  .orderBy(asc(col(products, "category")), asc(col(products, "price")))
+  .distinctOn(products.category)
+  .orderBy(asc(products.category), asc(products.price))
   .execute();
 // Returns the cheapest product in each category
 ```
 
 ### Column references
 
-The `col()` function creates a type-safe column reference. TypeScript enforces that the column name exists on the table:
+Columns are accessed directly as properties on the table object. TypeScript prevents accessing columns that don't exist in the schema:
 
 ```typescript
-col(users, "name");  // ✓ compiles
-col(users, "title"); // ✗ compile error — 'title' not in users
+users.name;  // ✓ compiles
+users.title; // ✗ compile error — 'title' not in users
 ```
 
 ## Expressions
@@ -257,20 +257,20 @@ col(users, "title"); // ✗ compile error — 'title' not in users
 import { eq, ne, gt, gte, lt, lte, like, ilike } from "@petradb/quarry";
 import { notLike, notIlike, isDistinctFrom, isNotDistinctFrom } from "@petradb/quarry";
 
-eq(col(users, "name"), "Alice")     // name = 'Alice'
-ne(col(users, "name"), "Bob")       // name != 'Bob'
-gt(col(users, "age"), 21)           // age > 21
-gte(col(users, "age"), 18)          // age >= 18
-lt(col(users, "age"), 65)           // age < 65
-lte(col(users, "age"), 30)          // age <= 30
-like(col(users, "name"), "A%")      // name LIKE 'A%'
-notLike(col(users, "name"), "A%")   // name NOT LIKE 'A%'
-ilike(col(users, "email"), "%@x%")  // email ILIKE '%@x%'
-notIlike(col(users, "email"), "%@x%")
+eq(users.name, "Alice")     // name = 'Alice'
+ne(users.name, "Bob")       // name != 'Bob'
+gt(users.age, 21)           // age > 21
+gte(users.age, 18)          // age >= 18
+lt(users.age, 65)           // age < 65
+lte(users.age, 30)          // age <= 30
+like(users.name, "A%")      // name LIKE 'A%'
+notLike(users.name, "A%")   // name NOT LIKE 'A%'
+ilike(users.email, "%@x%")  // email ILIKE '%@x%'
+notIlike(users.email, "%@x%")
 
 // Null-safe comparison
-isDistinctFrom(col(users, "age"), null)     // age IS DISTINCT FROM NULL
-isNotDistinctFrom(col(users, "age"), null)  // age IS NOT DISTINCT FROM NULL
+isDistinctFrom(users.age, null)     // age IS DISTINCT FROM NULL
+isNotDistinctFrom(users.age, null)  // age IS NOT DISTINCT FROM NULL
 ```
 
 ### Logical
@@ -278,9 +278,9 @@ isNotDistinctFrom(col(users, "age"), null)  // age IS NOT DISTINCT FROM NULL
 ```typescript
 import { and, or, not } from "@petradb/quarry";
 
-and(eq(col(users, "active"), true), gt(col(users, "age"), 18))
-or(eq(col(users, "name"), "Alice"), eq(col(users, "name"), "Bob"))
-not(eq(col(users, "active"), false))
+and(eq(users.active, true), gt(users.age, 18))
+or(eq(users.name, "Alice"), eq(users.name, "Bob"))
+not(eq(users.active, false))
 ```
 
 `and()` and `or()` accept any number of arguments:
@@ -294,8 +294,8 @@ and(cond1, cond2, cond3) // cond1 AND cond2 AND cond3
 ```typescript
 import { isNull, isNotNull } from "@petradb/quarry";
 
-isNull(col(users, "age"))     // age IS NULL
-isNotNull(col(users, "age"))  // age IS NOT NULL
+isNull(users.age)     // age IS NULL
+isNotNull(users.age)  // age IS NOT NULL
 ```
 
 ### Boolean tests
@@ -303,12 +303,12 @@ isNotNull(col(users, "age"))  // age IS NOT NULL
 ```typescript
 import { isTrue, isNotTrue, isFalse, isNotFalse, isUnknown, isNotUnknown } from "@petradb/quarry";
 
-isTrue(col(users, "active"))       // active IS TRUE
-isNotTrue(col(users, "active"))    // active IS NOT TRUE
-isFalse(col(users, "active"))      // active IS FALSE
-isNotFalse(col(users, "active"))   // active IS NOT FALSE
-isUnknown(col(users, "active"))    // active IS UNKNOWN
-isNotUnknown(col(users, "active")) // active IS NOT UNKNOWN
+isTrue(users.active)       // active IS TRUE
+isNotTrue(users.active)    // active IS NOT TRUE
+isFalse(users.active)      // active IS FALSE
+isNotFalse(users.active)   // active IS NOT FALSE
+isUnknown(users.active)    // active IS UNKNOWN
+isNotUnknown(users.active) // active IS NOT UNKNOWN
 ```
 
 ### Collections
@@ -316,12 +316,12 @@ isNotUnknown(col(users, "active")) // active IS NOT UNKNOWN
 ```typescript
 import { inList, notInList, between, notBetween, betweenSymmetric } from "@petradb/quarry";
 
-inList(col(users, "name"), ["Alice", "Bob", "Charlie"])  // name IN (...)
-notInList(col(users, "id"), [1, 2, 3])                   // id NOT IN (...)
-between(col(users, "age"), 18, 65)                       // age BETWEEN 18 AND 65
-notBetween(col(users, "age"), 18, 65)                    // age NOT BETWEEN 18 AND 65
-betweenSymmetric(col(users, "age"), 65, 18)              // age BETWEEN SYMMETRIC 65 AND 18
-notBetweenSymmetric(col(users, "age"), 65, 18)           // age NOT BETWEEN SYMMETRIC 65 AND 18
+inList(users.name, ["Alice", "Bob", "Charlie"])  // name IN (...)
+notInList(users.id, [1, 2, 3])                   // id NOT IN (...)
+between(users.age, 18, 65)                       // age BETWEEN 18 AND 65
+notBetween(users.age, 18, 65)                    // age NOT BETWEEN 18 AND 65
+betweenSymmetric(users.age, 65, 18)              // age BETWEEN SYMMETRIC 65 AND 18
+notBetweenSymmetric(users.age, 65, 18)           // age NOT BETWEEN SYMMETRIC 65 AND 18
 ```
 
 ### Arithmetic
@@ -329,13 +329,13 @@ notBetweenSymmetric(col(users, "age"), 65, 18)           // age NOT BETWEEN SYMM
 ```typescript
 import { add, sub, mul, div, mod, pow, neg } from "@petradb/quarry";
 
-add(col(users, "age"), 10)  // age + 10
-sub(col(users, "age"), 5)   // age - 5
-mul(col(users, "age"), 2)   // age * 2
-div(col(users, "age"), 3)   // age / 3
-mod(col(users, "age"), 2)   // age % 2
-pow(col(users, "age"), 2)   // age ^ 2
-neg(col(users, "age"))      // -age
+add(users.age, 10)  // age + 10
+sub(users.age, 5)   // age - 5
+mul(users.age, 2)   // age * 2
+div(users.age, 3)   // age / 3
+mod(users.age, 2)   // age % 2
+pow(users.age, 2)   // age ^ 2
+neg(users.age)      // -age
 ```
 
 ### String operators
@@ -343,7 +343,7 @@ neg(col(users, "age"))      // -age
 ```typescript
 import { concat } from "@petradb/quarry";
 
-concat(col(users, "name"), " Jr.")  // name || ' Jr.'
+concat(users.name, " Jr.")  // name || ' Jr.'
 ```
 
 ### Bitwise operators
@@ -351,12 +351,12 @@ concat(col(users, "name"), " Jr.")  // name || ' Jr.'
 ```typescript
 import { bitAnd, bitOr, bitXor, bitNot, leftShift, rightShift } from "@petradb/quarry";
 
-bitAnd(col(users, "flags"), 0xFF)   // flags & 255
-bitOr(col(users, "flags"), 1)       // flags | 1
-bitXor(col(users, "flags"), 0xFF)   // flags # 255
-bitNot(col(users, "flags"))         // ~flags
-leftShift(col(users, "flags"), 2)   // flags << 2
-rightShift(col(users, "flags"), 1)  // flags >> 1
+bitAnd(users.flags, 0xFF)   // flags & 255
+bitOr(users.flags, 1)       // flags | 1
+bitXor(users.flags, 0xFF)   // flags # 255
+bitNot(users.flags)         // ~flags
+leftShift(users.flags, 2)   // flags << 2
+rightShift(users.flags, 1)  // flags >> 1
 ```
 
 ### JSON operators
@@ -365,15 +365,15 @@ rightShift(col(users, "flags"), 1)  // flags >> 1
 import { jsonGet, jsonGetText, jsonPath, jsonPathText } from "@petradb/quarry";
 import { jsonContains, jsonContainedBy, jsonHasKey, jsonHasAnyKey, jsonHasAllKeys } from "@petradb/quarry";
 
-jsonGet(col(t, "data"), "name")       // data -> 'name'
-jsonGetText(col(t, "data"), "name")   // data ->> 'name'
-jsonPath(col(t, "data"), path)        // data #> path
-jsonPathText(col(t, "data"), path)    // data #>> path
-jsonContains(col(t, "data"), other)   // data @> other
-jsonContainedBy(col(t, "data"), other) // data <@ other
-jsonHasKey(col(t, "data"), "key")     // data ? 'key'
-jsonHasAnyKey(col(t, "data"), keys)   // data ?| keys
-jsonHasAllKeys(col(t, "data"), keys)  // data ?& keys
+jsonGet(t.data, "name")       // data -> 'name'
+jsonGetText(t.data, "name")   // data ->> 'name'
+jsonPath(t.data, path)        // data #> path
+jsonPathText(t.data, path)    // data #>> path
+jsonContains(t.data, other)   // data @> other
+jsonContainedBy(t.data, other) // data <@ other
+jsonHasKey(t.data, "key")     // data ? 'key'
+jsonHasAnyKey(t.data, keys)   // data ?| keys
+jsonHasAllKeys(t.data, keys)  // data ?& keys
 ```
 
 ### Array operators
@@ -381,7 +381,7 @@ jsonHasAllKeys(col(t, "data"), keys)  // data ?& keys
 ```typescript
 import { arrayOverlap } from "@petradb/quarry";
 
-arrayOverlap(col(t, "tags"), col(t, "otherTags"))  // tags && otherTags (arrays overlap)
+arrayOverlap(t.tags, t.otherTags)  // tags && otherTags (arrays overlap)
 ```
 
 ### Generic operators
@@ -391,8 +391,8 @@ For operators not covered by a named helper, use `op()` and `unaryOp()`:
 ```typescript
 import { op, unaryOp } from "@petradb/quarry";
 
-op(col(users, "age"), ">=", 18)       // age >= 18
-unaryOp("NOT", eq(col(users, "active"), true))
+op(users.age, ">=", 18)       // age >= 18
+unaryOp("NOT", eq(users.active, true))
 ```
 
 ### CASE expression
@@ -402,8 +402,8 @@ import { caseWhen, literal } from "@petradb/quarry";
 
 caseWhen(
   [
-    { when: gt(col(users, "age"), 60), then: literal("senior") },
-    { when: gt(col(users, "age"), 18), then: literal("adult") },
+    { when: gt(users.age, 60), then: literal("senior") },
+    { when: gt(users.age, 18), then: literal("adult") },
   ],
   "minor", // else
 )
@@ -414,8 +414,8 @@ caseWhen(
 ```typescript
 import { cast } from "@petradb/quarry";
 
-cast(col(users, "age"), "text")    // CAST(age AS TEXT)
-cast(col(users, "age"), "double")  // CAST(age AS DOUBLE)
+cast(users.age, "text")    // CAST(age AS TEXT)
+cast(users.age, "double")  // CAST(age AS DOUBLE)
 ```
 
 ### Aliases and literals
@@ -423,7 +423,7 @@ cast(col(users, "age"), "double")  // CAST(age AS DOUBLE)
 ```typescript
 import { alias, literal } from "@petradb/quarry";
 
-alias(add(col(users, "age"), 10), "age_plus_10")
+alias(add(users.age, 10), "age_plus_10")
 
 literal("hello")  // string
 literal(42)        // number
@@ -448,29 +448,29 @@ const [{ total }] = await db
 // Group by with aggregate
 const stats = await db
   .select(users)
-  .columns(col(users, "active"), alias(count(), "cnt"))
-  .groupBy(col(users, "active"))
+  .columns(users.active, alias(count(), "cnt"))
+  .groupBy(users.active)
   .execute();
 
 // Having
 const popular = await db
   .select(users)
-  .columns(col(users, "active"), alias(count(), "cnt"))
-  .groupBy(col(users, "active"))
+  .columns(users.active, alias(count(), "cnt"))
+  .groupBy(users.active)
   .having(gt(alias(count(), "cnt"), 5))
   .execute();
 
 // Other aggregates
-sum(col(users, "age"))                              // SUM(age)
-avg(col(users, "age"))                              // AVG(age)
-min(col(users, "age"))                              // MIN(age)
-max(col(users, "age"))                              // MAX(age)
-stringAgg(col(users, "name"), ", ")                 // STRING_AGG(name, ', ')
-arrayAgg(col(users, "name"))                        // ARRAY_AGG(name)
-boolAnd(col(users, "active"))                       // BOOL_AND(active)
-boolOr(col(users, "active"))                        // BOOL_OR(active)
-jsonAgg(col(users, "name"))                         // JSON_AGG(name)
-jsonObjectAgg(col(users, "name"), col(users, "age")) // JSON_OBJECT_AGG(name, age)
+sum(users.age)                              // SUM(age)
+avg(users.age)                              // AVG(age)
+min(users.age)                              // MIN(age)
+max(users.age)                              // MAX(age)
+stringAgg(users.name, ", ")                 // STRING_AGG(name, ', ')
+arrayAgg(users.name)                        // ARRAY_AGG(name)
+boolAnd(users.active)                       // BOOL_AND(active)
+boolOr(users.active)                        // BOOL_OR(active)
+jsonAgg(users.name)                         // JSON_AGG(name)
+jsonObjectAgg(users.name, users.age)        // JSON_OBJECT_AGG(name, age)
 ```
 
 ### Statistical aggregates
@@ -478,12 +478,12 @@ jsonObjectAgg(col(users, "name"), col(users, "age")) // JSON_OBJECT_AGG(name, ag
 ```typescript
 import { variance, varSamp, varPop, stddev, stddevSamp, stddevPop } from "@petradb/quarry";
 
-variance(col(emp, "salary"))   // VARIANCE(salary) — sample variance
-varSamp(col(emp, "salary"))    // VAR_SAMP(salary) — same as variance
-varPop(col(emp, "salary"))     // VAR_POP(salary) — population variance
-stddev(col(emp, "salary"))     // STDDEV(salary) — sample standard deviation
-stddevSamp(col(emp, "salary")) // STDDEV_SAMP(salary) — same as stddev
-stddevPop(col(emp, "salary"))  // STDDEV_POP(salary) — population standard deviation
+variance(emp.salary)   // VARIANCE(salary) — sample variance
+varSamp(emp.salary)    // VAR_SAMP(salary) — same as variance
+varPop(emp.salary)     // VAR_POP(salary) — population variance
+stddev(emp.salary)     // STDDEV(salary) — sample standard deviation
+stddevSamp(emp.salary) // STDDEV_SAMP(salary) — same as stddev
+stddevPop(emp.salary)  // STDDEV_POP(salary) — population standard deviation
 ```
 
 ### Bitwise aggregates
@@ -491,9 +491,9 @@ stddevPop(col(emp, "salary"))  // STDDEV_POP(salary) — population standard dev
 ```typescript
 import { bitAndAgg, bitOrAgg, bitXorAgg } from "@petradb/quarry";
 
-bitAndAgg(col(emp, "flags"))  // BIT_AND(flags)
-bitOrAgg(col(emp, "flags"))   // BIT_OR(flags)
-bitXorAgg(col(emp, "flags"))  // BIT_XOR(flags)
+bitAndAgg(emp.flags)  // BIT_AND(flags)
+bitOrAgg(emp.flags)   // BIT_OR(flags)
+bitXorAgg(emp.flags)  // BIT_XOR(flags)
 ```
 
 ### EVERY
@@ -501,7 +501,7 @@ bitXorAgg(col(emp, "flags"))  // BIT_XOR(flags)
 ```typescript
 import { every } from "@petradb/quarry";
 
-every(col(emp, "active"))  // EVERY(active) — true when all rows are true
+every(emp.active)  // EVERY(active) — true when all rows are true
 ```
 
 ### Aggregate FILTER
@@ -512,10 +512,10 @@ Restrict which rows an aggregate processes with `filter()`:
 import { filter } from "@petradb/quarry";
 
 // COUNT(*) FILTER (WHERE salary > 100)
-filter(count(), gt(col(emp, "salary"), 100))
+filter(count(), gt(emp.salary, 100))
 
 // SUM(salary) FILTER (WHERE active = true)
-filter(sum(col(emp, "salary")), eq(col(emp, "active"), true))
+filter(sum(emp.salary), eq(emp.active, true))
 ```
 
 Example with multiple filtered aggregates:
@@ -525,8 +525,8 @@ const [row] = await db
   .select(employees)
   .columns(
     alias(count(), "total"),
-    alias(filter(count(), gt(col(employees, "salary"), 100)), "high_earners"),
-    alias(filter(sum(col(employees, "salary")), eq(col(employees, "active"), true)), "active_payroll"),
+    alias(filter(count(), gt(employees.salary, 100)), "high_earners"),
+    alias(filter(sum(employees.salary), eq(employees.active, true)), "active_payroll"),
   )
   .execute();
 ```
@@ -538,12 +538,12 @@ Call any SQL function with `fn()`:
 ```typescript
 import { fn } from "@petradb/quarry";
 
-fn("upper", col(users, "name"))        // UPPER(name)
-fn("coalesce", col(users, "age"), 0)   // COALESCE(age, 0)
-fn("length", col(users, "name"))       // LENGTH(name)
-fn("lower", col(users, "email"))       // LOWER(email)
-fn("abs", col(users, "age"))           // ABS(age)
-fn("round", col(users, "score"), 2)    // ROUND(score, 2)
+fn("upper", users.name)        // UPPER(name)
+fn("coalesce", users.age, 0)   // COALESCE(age, 0)
+fn("length", users.name)       // LENGTH(name)
+fn("lower", users.email)       // LOWER(email)
+fn("abs", users.age)           // ABS(age)
+fn("round", users.score, 2)    // ROUND(score, 2)
 ```
 
 ## Joins
@@ -564,8 +564,8 @@ const posts = table("posts", {
 
 const rows = await db
   .select(users)
-  .innerJoin(posts, eq(col(users, "id"), col(posts, "userId")))
-  .where(eq(col(users, "name"), "Alice"))
+  .innerJoin(posts, eq(users.id, posts.userId))
+  .where(eq(users.name, "Alice"))
   .execute();
 
 // Result type: (InferSelect<users> & InferSelect<posts>)[]
@@ -581,7 +581,7 @@ The joined table's columns all become nullable, since unmatched rows produce `nu
 ```typescript
 const rows = await db
   .select(users)
-  .leftJoin(posts, eq(col(users, "id"), col(posts, "userId")))
+  .leftJoin(posts, eq(users.id, posts.userId))
   .execute();
 
 // Result type: (InferSelect<users> & Nullable<InferSelect<posts>>)[]
@@ -597,7 +597,7 @@ The base table's columns become nullable, the joined table's columns preserve th
 ```typescript
 const rows = await db
   .select(users)
-  .rightJoin(posts, eq(col(users, "id"), col(posts, "userId")))
+  .rightJoin(posts, eq(users.id, posts.userId))
   .execute();
 
 // Result type: (Nullable<InferSelect<users>> & InferSelect<posts>)[]
@@ -612,7 +612,7 @@ Both sides become nullable:
 ```typescript
 const rows = await db
   .select(users)
-  .fullJoin(posts, eq(col(users, "id"), col(posts, "userId")))
+  .fullJoin(posts, eq(users.id, posts.userId))
   .execute();
 
 // Result type: (Nullable<InferSelect<users>> & Nullable<InferSelect<posts>>)[]
@@ -647,8 +647,8 @@ const comments = table("comments", {
 
 const rows = await db
   .select(users)
-  .innerJoin(posts, eq(col(users, "id"), col(posts, "userId")))
-  .leftJoin(comments, eq(col(posts, "id"), col(comments, "postId")))
+  .innerJoin(posts, eq(users.id, posts.userId))
+  .leftJoin(comments, eq(posts.id, comments.postId))
   .execute();
 
 // posts columns: non-null (inner join)
@@ -662,8 +662,8 @@ const rows = await db
 ```typescript
 const rows = await db
   .select(users)
-  .columns(col(users, "name"), col(posts, "title"))
-  .innerJoin(posts, eq(col(users, "id"), col(posts, "userId")))
+  .columns(users.name, posts.title)
+  .innerJoin(posts, eq(users.id, posts.userId))
   .execute();
 ```
 
@@ -672,32 +672,34 @@ const rows = await db
 ```typescript
 const rows = await db
   .select(users)
-  .columns(col(users, "name"), alias(count(), "post_count"))
-  .innerJoin(posts, eq(col(users, "id"), col(posts, "userId")))
-  .groupBy(col(users, "name"))
+  .columns(users.name, alias(count(), "post_count"))
+  .innerJoin(posts, eq(users.id, posts.userId))
+  .groupBy(users.name)
   .orderBy(desc(alias(count(), "post_count")))
   .execute();
 ```
 
 ## Table aliases
 
-Use `.as()` to create aliased tables for self-joins or when the same table appears multiple times:
+Use `tableAs()` to create aliased tables for self-joins or when the same table appears multiple times:
 
 ```typescript
-const mgr = employees.as("mgr");
-const emp = employees.as("emp");
+import { tableAs } from "@petradb/quarry";
+
+const mgr = tableAs(employees, "mgr");
+const emp = tableAs(employees, "emp");
 
 const rows = await db
   .select(emp)
   .columns(
-    alias(col(emp, "name"), "employee"),
-    alias(col(mgr, "name"), "manager"),
+    alias(emp.name, "employee"),
+    alias(mgr.name, "manager"),
   )
-  .leftJoin(mgr, eq(col(emp, "managerId"), col(mgr, "id")))
+  .leftJoin(mgr, eq(emp.managerId, mgr.id))
   .execute();
 ```
 
-Aliases are type-safe — `col(mgr, "name")` still enforces that `name` exists in the employees schema.
+Aliases are type-safe — `mgr.name` still enforces that `name` exists in the employees schema.
 
 ## Subqueries
 
@@ -711,8 +713,8 @@ const rows = await db
   .select(users)
   .where(
     inSubquery(
-      col(users, "id"),
-      db.select(posts).columns(col(posts, "userId")).toExpr(),
+      users.id,
+      db.select(posts).columns(posts.userId).toExpr(),
     ),
   )
   .execute();
@@ -722,8 +724,8 @@ const rows = await db
   .select(users)
   .where(
     notInSubquery(
-      col(users, "id"),
-      db.select(posts).columns(col(posts, "userId")).toExpr(),
+      users.id,
+      db.select(posts).columns(posts.userId).toExpr(),
     ),
   )
   .execute();
@@ -741,7 +743,7 @@ const rows = await db
       db
         .select(posts)
         .columns(literal(1))
-        .where(eq(col(posts, "userId"), col(users, "id")))
+        .where(eq(posts.userId, users.id))
         .toExpr(),
     ),
   )
@@ -760,8 +762,8 @@ const rows = await db
   .select(users)
   .where(
     gt(
-      col(users, "age"),
-      subquery(db.select(users).columns(avg(col(users, "age"))).toExpr()),
+      users.age,
+      subquery(db.select(users).columns(avg(users.age)).toExpr()),
     ),
   )
   .execute();
@@ -777,15 +779,15 @@ Use `.toExpr()` (not `.toAST()`) when embedding a select as a subquery. `.toExpr
 import { asc, desc } from "@petradb/quarry";
 
 // Basic ordering
-db.select(users).orderBy(asc(col(users, "name")))
-db.select(users).orderBy(desc(col(users, "age")))
+db.select(users).orderBy(asc(users.name))
+db.select(users).orderBy(desc(users.age))
 
 // Multiple columns
-db.select(users).orderBy(asc(col(users, "name")), desc(col(users, "age")))
+db.select(users).orderBy(asc(users.name), desc(users.age))
 
 // NULLS FIRST / NULLS LAST
-db.select(users).orderBy(asc(col(users, "age"), { nulls: "first" }))
-db.select(users).orderBy(desc(col(users, "age"), { nulls: "last" }))
+db.select(users).orderBy(asc(users.age, { nulls: "first" }))
+db.select(users).orderBy(desc(users.age, { nulls: "last" }))
 ```
 
 When `nulls` is not specified, the engine uses the default behavior (nulls sort last in ascending order, first in descending order).
@@ -797,7 +799,7 @@ When `nulls` is not specified, the engine uses the default behavior (nulls sort 
 const result = await db
   .update(users)
   .set({ age: 31 })
-  .where(eq(col(users, "name"), "Alice"))
+  .where(eq(users.name, "Alice"))
   .execute();
 // result.rowCount → 1
 
@@ -805,14 +807,14 @@ const result = await db
 await db
   .update(users)
   .set({ name: "Alice Smith", age: 32, active: false })
-  .where(eq(col(users, "id"), 1))
+  .where(eq(users.id, 1))
   .execute();
 
 // Set to null
 await db
   .update(users)
   .set({ age: null })
-  .where(eq(col(users, "name"), "Bob"))
+  .where(eq(users.name, "Bob"))
   .execute();
 ```
 
@@ -833,7 +835,7 @@ await db
   .update(products)
   .set({ price: 0 }) // set value; use col references in WHERE for conditional logic
   .from(priceUpdates)
-  .where(eq(col(products, "name"), col(priceUpdates, "productName")))
+  .where(eq(products.name, priceUpdates.productName))
   .execute();
 ```
 
@@ -851,8 +853,8 @@ Update and delete support `.returning()` to get back the affected rows:
 const result = await db
   .update(users)
   .set({ active: false })
-  .where(lt(col(users, "age"), 18))
-  .returning(col(users, "id"), col(users, "name"))
+  .where(lt(users.age, 18))
+  .returning(users.id, users.name)
   .execute();
 // result.rows → [{ id: 3, name: "Charlie" }, ...]
 ```
@@ -862,7 +864,7 @@ const result = await db
 ```typescript
 const result = await db
   .delete(users)
-  .where(eq(col(users, "name"), "Alice"))
+  .where(eq(users.name, "Alice"))
   .execute();
 // result.rowCount → 1
 ```
@@ -880,7 +882,7 @@ const deleteList = table("delete_list", {
 await db
   .delete(users)
   .using(deleteList)
-  .where(eq(col(users, "name"), col(deleteList, "userName")))
+  .where(eq(users.name, deleteList.userName))
   .execute();
 ```
 
@@ -920,8 +922,8 @@ Every builder has a `.toAST()` method that returns the raw AST object without ex
 ```typescript
 const ast = db
   .select(users)
-  .where(eq(col(users, "name"), "Alice"))
-  .orderBy(asc(col(users, "id")))
+  .where(eq(users.name, "Alice"))
+  .orderBy(asc(users.id))
   .limit(10)
   .toAST();
 

@@ -24,7 +24,6 @@ import {
   interval,
   json,
   bytea,
-  col,
   eq,
   ne,
   gt,
@@ -112,9 +111,14 @@ import {
   desc,
   quarry,
   InsertSelectBuilder,
+  tableAs,
+  TableName,
+  Columns,
+  OriginalName,
 } from '@petradb/quarry'
 import type {
   ASTExpr,
+  ASTColumn,
   ASTApply,
   ASTCase,
   ASTCast,
@@ -345,38 +349,24 @@ const uBadIns3: UserInsert = { name: 123, email: 'a@b.com' }
 const uBadIns4: UserInsert = { name: 'X', email: 'x@x.com', active: 'yes' }
 
 // ══════════════════════════════════════════════════════════════════════
-// 4. col() TYPE SAFETY
-// ══════════════════════════════════════════════════════════════════════
-
-const _colId = col(users, 'id')
-const _colName = col(users, 'name')
-const _colAge = col(users, 'age')
-// @ts-expect-error — 'nonexistent' is not a column
-const _badCol = col(users, 'nonexistent')
-// @ts-expect-error — 'title' is a posts column, not users
-const _wrongTable = col(users, 'title')
-const _postTitle = col(posts, 'title')
-const _postUserId = col(posts, 'userId')
-
-// ══════════════════════════════════════════════════════════════════════
 // 5. EXPRESSION COMPOSITION — all operators return ASTExpr-compatible
 // ══════════════════════════════════════════════════════════════════════
 
 // Comparison
-const _e1: ASTExpr = eq(col(users, 'id'), 1)
-const _e2: ASTExpr = ne(col(users, 'id'), 1)
-const _e3: ASTExpr = gt(col(users, 'age'), 20)
-const _e4: ASTExpr = gte(col(users, 'age'), 20)
-const _e5: ASTExpr = lt(col(users, 'age'), 20)
-const _e6: ASTExpr = lte(col(users, 'age'), 20)
-const _e7: ASTExpr = isDistinctFrom(col(users, 'age'), null)
-const _e8: ASTExpr = isNotDistinctFrom(col(users, 'age'), null)
+const _e1: ASTExpr = eq(users.id, 1)
+const _e2: ASTExpr = ne(users.id, 1)
+const _e3: ASTExpr = gt(users.age, 20)
+const _e4: ASTExpr = gte(users.age, 20)
+const _e5: ASTExpr = lt(users.age, 20)
+const _e6: ASTExpr = lte(users.age, 20)
+const _e7: ASTExpr = isDistinctFrom(users.age, null)
+const _e8: ASTExpr = isNotDistinctFrom(users.age, null)
 
 // Pattern matching
-const _e9: ASTExpr = like(col(users, 'name'), '%a%')
-const _e10: ASTExpr = notLike(col(users, 'name'), '%a%')
-const _e11: ASTExpr = ilike(col(users, 'name'), '%a%')
-const _e12: ASTExpr = notIlike(col(users, 'name'), '%a%')
+const _e9: ASTExpr = like(users.name, '%a%')
+const _e10: ASTExpr = notLike(users.name, '%a%')
+const _e11: ASTExpr = ilike(users.name, '%a%')
+const _e12: ASTExpr = notIlike(users.name, '%a%')
 
 // Logical
 const _e13: ASTExpr = and(_e1, _e2, _e3)
@@ -384,80 +374,80 @@ const _e14: ASTExpr = or(_e1, _e2, _e3)
 const _e15: ASTExpr = not(_e1)
 
 // Null checks
-const _e16: ASTExpr = isNull(col(users, 'age'))
-const _e17: ASTExpr = isNotNull(col(users, 'age'))
+const _e16: ASTExpr = isNull(users.age)
+const _e17: ASTExpr = isNotNull(users.age)
 
 // Boolean tests
-const _e18: ASTExpr = isTrue(col(users, 'active'))
-const _e19: ASTExpr = isNotTrue(col(users, 'active'))
-const _e20: ASTExpr = isFalse(col(users, 'active'))
-const _e21: ASTExpr = isNotFalse(col(users, 'active'))
-const _e22: ASTExpr = isUnknown(col(users, 'active'))
-const _e23: ASTExpr = isNotUnknown(col(users, 'active'))
+const _e18: ASTExpr = isTrue(users.active)
+const _e19: ASTExpr = isNotTrue(users.active)
+const _e20: ASTExpr = isFalse(users.active)
+const _e21: ASTExpr = isNotFalse(users.active)
+const _e22: ASTExpr = isUnknown(users.active)
+const _e23: ASTExpr = isNotUnknown(users.active)
 
 // IN / BETWEEN
-const _e24: ASTExpr = inList(col(users, 'name'), ['Alice', 'Bob'])
-const _e25: ASTExpr = notInList(col(users, 'name'), ['Alice', 'Bob'])
-const _e26: ASTExpr = between(col(users, 'age'), 20, 30)
-const _e27: ASTExpr = notBetween(col(users, 'age'), 20, 30)
-const _e28: ASTExpr = betweenSymmetric(col(users, 'age'), 30, 20)
-const _e29: ASTExpr = notBetweenSymmetric(col(users, 'age'), 30, 20)
+const _e24: ASTExpr = inList(users.name, ['Alice', 'Bob'])
+const _e25: ASTExpr = notInList(users.name, ['Alice', 'Bob'])
+const _e26: ASTExpr = between(users.age, 20, 30)
+const _e27: ASTExpr = notBetween(users.age, 20, 30)
+const _e28: ASTExpr = betweenSymmetric(users.age, 30, 20)
+const _e29: ASTExpr = notBetweenSymmetric(users.age, 30, 20)
 
 // Arithmetic
-const _e30: ASTExpr = add(col(users, 'age'), 10)
-const _e31: ASTExpr = sub(col(users, 'age'), 10)
-const _e32: ASTExpr = mul(col(users, 'age'), 2)
-const _e33: ASTExpr = div(col(users, 'age'), 2)
-const _e34: ASTExpr = mod(col(users, 'age'), 2)
-const _e35: ASTExpr = pow(col(users, 'age'), 2)
-const _e36: ASTExpr = neg(col(users, 'age'))
+const _e30: ASTExpr = add(users.age, 10)
+const _e31: ASTExpr = sub(users.age, 10)
+const _e32: ASTExpr = mul(users.age, 2)
+const _e33: ASTExpr = div(users.age, 2)
+const _e34: ASTExpr = mod(users.age, 2)
+const _e35: ASTExpr = pow(users.age, 2)
+const _e36: ASTExpr = neg(users.age)
 
 // String
-const _e37: ASTExpr = concat(col(users, 'name'), ' suffix')
+const _e37: ASTExpr = concat(users.name, ' suffix')
 
 // Bitwise
-const _e38: ASTExpr = bitAnd(col(users, 'age'), 0xFF)
-const _e39: ASTExpr = bitOr(col(users, 'age'), 1)
-const _e40: ASTExpr = bitXor(col(users, 'age'), 1)
-const _e41: ASTExpr = bitNot(col(users, 'age'))
-const _e42: ASTExpr = leftShift(col(users, 'age'), 2)
-const _e43: ASTExpr = rightShift(col(users, 'age'), 2)
+const _e38: ASTExpr = bitAnd(users.age, 0xFF)
+const _e39: ASTExpr = bitOr(users.age, 1)
+const _e40: ASTExpr = bitXor(users.age, 1)
+const _e41: ASTExpr = bitNot(users.age)
+const _e42: ASTExpr = leftShift(users.age, 2)
+const _e43: ASTExpr = rightShift(users.age, 2)
 
 // JSON
-const _e44: ASTExpr = jsonGet(col(users, 'name'), 'key')
-const _e45: ASTExpr = jsonGetText(col(users, 'name'), 'key')
-const _e46: ASTExpr = jsonPath(col(users, 'name'), col(users, 'name'))
-const _e47: ASTExpr = jsonPathText(col(users, 'name'), col(users, 'name'))
-const _e48: ASTExpr = jsonContains(col(users, 'name'), col(users, 'name'))
-const _e49: ASTExpr = jsonContainedBy(col(users, 'name'), col(users, 'name'))
-const _e50: ASTExpr = jsonHasKey(col(users, 'name'), 'key')
-const _e51: ASTExpr = jsonHasAnyKey(col(users, 'name'), col(users, 'name'))
-const _e52: ASTExpr = jsonHasAllKeys(col(users, 'name'), col(users, 'name'))
+const _e44: ASTExpr = jsonGet(users.name, 'key')
+const _e45: ASTExpr = jsonGetText(users.name, 'key')
+const _e46: ASTExpr = jsonPath(users.name, users.name)
+const _e47: ASTExpr = jsonPathText(users.name, users.name)
+const _e48: ASTExpr = jsonContains(users.name, users.name)
+const _e49: ASTExpr = jsonContainedBy(users.name, users.name)
+const _e50: ASTExpr = jsonHasKey(users.name, 'key')
+const _e51: ASTExpr = jsonHasAnyKey(users.name, users.name)
+const _e52: ASTExpr = jsonHasAllKeys(users.name, users.name)
 
 // Array
-const _e53: ASTExpr = arrayOverlap(col(users, 'name'), col(users, 'name'))
+const _e53: ASTExpr = arrayOverlap(users.name, users.name)
 
 // Generic
-const _e54: ASTExpr = op(col(users, 'age'), '@@', 'test')
-const _e55: ASTExpr = unaryOp('~', col(users, 'age'))
+const _e54: ASTExpr = op(users.age, '@@', 'test')
+const _e55: ASTExpr = unaryOp('~', users.age)
 
 // Aggregates
 const _e56: ASTExpr = count()
-const _e57: ASTExpr = count(col(users, 'age'))
-const _e58: ASTExpr = sum(col(users, 'age'))
-const _e59: ASTExpr = avg(col(users, 'age'))
-const _e60: ASTExpr = min(col(users, 'age'))
-const _e61: ASTExpr = max(col(users, 'age'))
-const _e62: ASTExpr = stringAgg(col(users, 'name'), ', ')
-const _e63: ASTExpr = arrayAgg(col(users, 'name'))
-const _e64: ASTExpr = boolAnd(col(users, 'active'))
-const _e65: ASTExpr = boolOr(col(users, 'active'))
-const _e66: ASTExpr = jsonAgg(col(users, 'name'))
-const _e67: ASTExpr = jsonObjectAgg(col(users, 'name'), col(users, 'age'))
+const _e57: ASTExpr = count(users.age)
+const _e58: ASTExpr = sum(users.age)
+const _e59: ASTExpr = avg(users.age)
+const _e60: ASTExpr = min(users.age)
+const _e61: ASTExpr = max(users.age)
+const _e62: ASTExpr = stringAgg(users.name, ', ')
+const _e63: ASTExpr = arrayAgg(users.name)
+const _e64: ASTExpr = boolAnd(users.active)
+const _e65: ASTExpr = boolOr(users.active)
+const _e66: ASTExpr = jsonAgg(users.name)
+const _e67: ASTExpr = jsonObjectAgg(users.name, users.age)
 
 // fn() for arbitrary functions
-const _e68: ASTExpr = fn('upper', col(users, 'name'))
-const _e69: ASTExpr = fn('coalesce', col(users, 'age'), 0)
+const _e68: ASTExpr = fn('upper', users.name)
+const _e69: ASTExpr = fn('coalesce', users.age, 0)
 
 // Alias and literal
 const _e70: ASTExpr = alias(count(), 'total')
@@ -468,10 +458,10 @@ const _e74: ASTExpr = literal(null)
 
 // Nested composition — all expression types compose with each other
 const _complex: ASTExpr = and(
-  or(eq(col(users, 'name'), 'A'), like(col(users, 'email'), '%@test%')),
-  not(isNull(col(users, 'age'))),
-  between(add(col(users, 'age'), 1), 20, 40),
-  gt(fn('length', col(users, 'name')), 3),
+  or(eq(users.name, 'A'), like(users.email, '%@test%')),
+  not(isNull(users.age)),
+  between(add(users.age, 1), 20, 40),
+  gt(fn('length', users.name), 3),
 )
 
 // ══════════════════════════════════════════════════════════════════════
@@ -480,19 +470,19 @@ const _complex: ASTExpr = and(
 
 // caseWhen returns ASTCase
 const _case1: ASTCase = caseWhen(
-  [{ when: gt(col(users, 'age'), 30), then: literal('old') }],
+  [{ when: gt(users.age, 30), then: literal('old') }],
   'young',
 )
 
 // caseWhen without else
-const _case2: ASTCase = caseWhen([{ when: isNull(col(users, 'age')), then: literal('unknown') }])
+const _case2: ASTCase = caseWhen([{ when: isNull(users.age), then: literal('unknown') }])
 
 // caseWhen is also ASTExpr (usable in any expression context)
-const _case3: ASTExpr = caseWhen([{ when: gt(col(users, 'age'), 30), then: literal('old') }], 'young')
+const _case3: ASTExpr = caseWhen([{ when: gt(users.age, 30), then: literal('old') }], 'young')
 
 // cast returns ASTCast
-const _cast1: ASTCast = cast(col(users, 'age'), 'text')
-const _cast2: ASTExpr = cast(col(users, 'age'), 'double')
+const _cast1: ASTCast = cast(users.age, 'text')
+const _cast2: ASTExpr = cast(users.age, 'double')
 
 // exists returns ASTExists
 const _exists1: ASTExists = exists({ kind: 'select', exprs: [{ kind: 'star' }], from: [{ kind: 'table', name: 'users' }] })
@@ -525,7 +515,7 @@ const _irElem: InferSelect<typeof users> = undefined as unknown as InsertReturn[
 
 // -- Update returns { rowCount, rows } --
 
-const updateResult = db.update(users).set({ age: 31 }).where(eq(col(users, 'id'), 1)).execute()
+const updateResult = db.update(users).set({ age: 31 }).where(eq(users.id, 1)).execute()
 type UpdateReturn = Awaited<typeof updateResult>
 const _ur: UpdateReturn = { rowCount: 1, rows: [{ id: 1, name: 'A', email: 'a@b.com', age: 31, bio: null, active: true }] }
 const _urCount: number = _ur.rowCount
@@ -533,7 +523,7 @@ const _urRows: InferSelect<typeof users>[] = _ur.rows
 
 // -- Delete returns { rowCount, rows } --
 
-const deleteResult = db.delete(users).where(eq(col(users, 'id'), 1)).execute()
+const deleteResult = db.delete(users).where(eq(users.id, 1)).execute()
 type DeleteReturn = Awaited<typeof deleteResult>
 const _dr: DeleteReturn = { rowCount: 1, rows: [{ id: 1, name: 'A', email: 'a@b.com', age: null, bio: null, active: true }] }
 const _drCount: number = _dr.rowCount
@@ -560,7 +550,7 @@ const _tx2: InferSelect<typeof users> = undefined as unknown as TxReturn2
 // ══════════════════════════════════════════════════════════════════════
 
 // Inner join: result is intersection
-const innerJoinQuery = db.select(users).innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+const innerJoinQuery = db.select(users).innerJoin(posts, eq(users.id, posts.userId))
 type InnerJoinResult = Awaited<ReturnType<typeof innerJoinQuery.execute>>[number]
 
 const ijRow: InnerJoinResult = {
@@ -577,7 +567,7 @@ const _badIjTitle: InnerJoinResult['title'] = null as null
 const _badIjName: InnerJoinResult['name'] = null as null
 
 // Left join: joined table columns become nullable
-const leftJoinQuery = db.select(users).leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+const leftJoinQuery = db.select(users).leftJoin(posts, eq(users.id, posts.userId))
 type LeftJoinResult = Awaited<ReturnType<typeof leftJoinQuery.execute>>[number]
 
 const ljRowNulls: LeftJoinResult = {
@@ -592,8 +582,8 @@ const _badLjName: LeftJoinResult['name'] = null as null
 // Multi-join: inner + left
 const multiJoinQuery = db
   .select(users)
-  .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-  .leftJoin(comments, eq(col(posts, 'id'), col(comments, 'postId')))
+  .innerJoin(posts, eq(users.id, posts.userId))
+  .leftJoin(comments, eq(posts.id, comments.postId))
 type MultiJoinResult = Awaited<ReturnType<typeof multiJoinQuery.execute>>[number]
 
 const mjRow: MultiJoinResult = {
@@ -614,9 +604,9 @@ const _badMjTitle: MultiJoinResult['title'] = null as null
 // Chaining preserves types
 const chainedQuery = db
   .select(users)
-  .innerJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-  .where(eq(col(users, 'name'), 'Alice'))
-  .orderBy(asc(col(posts, 'title')))
+  .innerJoin(posts, eq(users.id, posts.userId))
+  .where(eq(users.name, 'Alice'))
+  .orderBy(asc(posts.title))
   .limit(10)
 type ChainedResult = Awaited<ReturnType<typeof chainedQuery.execute>>[number]
 const _chainedName: string = undefined as unknown as ChainedResult['name']
@@ -629,8 +619,8 @@ const np: NullablePosts = { id: null, userId: null, title: null, body: null }
 // Double left join
 const doubleLeftQuery = db
   .select(users)
-  .leftJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
-  .leftJoin(comments, eq(col(posts, 'id'), col(comments, 'postId')))
+  .leftJoin(posts, eq(users.id, posts.userId))
+  .leftJoin(comments, eq(posts.id, comments.postId))
 type DoubleLeftResult = Awaited<ReturnType<typeof doubleLeftQuery.execute>>[number]
 const dlRow: DoubleLeftResult = {
   id: 1, name: 'Alice', email: 'a@b.com', age: null, bio: null, active: true,
@@ -648,36 +638,36 @@ type UsersTable = typeof users
 type _CheckTableDef = UsersTable extends TableDef<'users', any> ? true : never
 const _checkTable: _CheckTableDef = true
 
-type _IdCol = (typeof users)['_columns']['id']
+type _IdCol = (typeof users)[typeof Columns]['id']
 type _CheckSerial = _IdCol extends ColumnDef<'id', number, true, true> ? true : never
 const _checkSerial: _CheckSerial = true
 
-type _NameCol = (typeof users)['_columns']['name']
+type _NameCol = (typeof users)[typeof Columns]['name']
 type _CheckText = _NameCol extends ColumnDef<'name', string, true, false> ? true : never
 const _checkText: _CheckText = true
 
-type _AgeCol = (typeof users)['_columns']['age']
+type _AgeCol = (typeof users)[typeof Columns]['age']
 type _CheckNullable = _AgeCol extends ColumnDef<'age', number, false, false> ? true : never
 const _checkNullable: _CheckNullable = true
 
-type _ActiveCol = (typeof users)['_columns']['active']
+type _ActiveCol = (typeof users)[typeof Columns]['active']
 type _CheckDefault = _ActiveCol extends ColumnDef<'active', boolean, true, true> ? true : never
 const _checkDefault: _CheckDefault = true
 
 // New type ColumnDef checks
-type _UuidCol = (typeof allTypes)['_columns']['m']
+type _UuidCol = (typeof allTypes)[typeof Columns]['m']
 type _CheckUuid = _UuidCol extends ColumnDef<'m', string, false, false> ? true : never
 const _checkUuid: _CheckUuid = true
 
-type _JsonCol = (typeof allTypes)['_columns']['t']
+type _JsonCol = (typeof allTypes)[typeof Columns]['t']
 type _CheckJson = _JsonCol extends ColumnDef<'t', unknown, false, false> ? true : never
 const _checkJson: _CheckJson = true
 
-type _ByteaCol = (typeof allTypes)['_columns']['u']
+type _ByteaCol = (typeof allTypes)[typeof Columns]['u']
 type _CheckBytea = _ByteaCol extends ColumnDef<'u', number[], false, false> ? true : never
 const _checkBytea: _CheckBytea = true
 
-type _BigserialCol = (typeof allTypes)['_columns']['b']
+type _BigserialCol = (typeof allTypes)[typeof Columns]['b']
 type _CheckBigserial = _BigserialCol extends ColumnDef<'b', number, true, true> ? true : never
 const _checkBigserial: _CheckBigserial = true
 
@@ -705,15 +695,15 @@ import { subquery, inSubquery, notInSubquery } from '@petradb/quarry'
 
 // -- SelectBuilder.toExpr() returns ASTExpr (specifically ASTSelect) --
 
-const selectExpr = db.select(users).columns(col(users, 'id')).toExpr()
+const selectExpr = db.select(users).columns(users.id).toExpr()
 const _seKind: typeof selectExpr.kind = 'select'
 const _seAssign: ASTExpr = selectExpr
 
 // toExpr preserves clauses
 const selectExprFull = db
   .select(users)
-  .columns(col(users, 'id'))
-  .where(gt(col(users, 'age'), 20))
+  .columns(users.id)
+  .where(gt(users.age, 20))
   .limit(10)
   .toExpr()
 const _sefAssign: ASTExpr = selectExprFull
@@ -731,22 +721,22 @@ const _subqKind: typeof subq.kind = 'subquery'
 
 // -- inSubquery() returns ASTInQuery --
 
-const inSubq = inSubquery(col(users, 'id'), selectExpr)
+const inSubq = inSubquery(users.id, selectExpr)
 const _inSubqType: ASTInQuery = inSubq
 const _inSubqExpr: ASTExpr = inSubq // ASTInQuery is ASTExpr
 const _inSubqKind: typeof inSubq.kind = 'inQuery'
 
 // -- notInSubquery() returns ASTInQuery --
 
-const notInSubq = notInSubquery(col(users, 'id'), selectExpr)
+const notInSubq = notInSubquery(users.id, selectExpr)
 const _notInSubqType: ASTInQuery = notInSubq
 const _notInSubqExpr: ASTExpr = notInSubq
 const _notInSubqKind: typeof notInSubq.kind = 'inQuery'
 
 // -- Subqueries compose with other expressions --
 
-const _subqWhere: ASTExpr = gt(col(users, 'age'), subq)
-const _inSubqWhere: ASTExpr = and(inSubq, gt(col(users, 'age'), 20))
+const _subqWhere: ASTExpr = gt(users.age, subq)
+const _inSubqWhere: ASTExpr = and(inSubq, gt(users.age, 20))
 const _existsSubq: ASTExpr = exists(selectExpr)
 
 // -- Subquery can be aliased --
@@ -762,10 +752,10 @@ const _badSubq1 = subquery('SELECT 1')
 const _badSubq2 = inSubquery('id', selectExpr)
 
 // @ts-expect-error — inSubquery requires ASTExpr for query arg
-const _badSubq3 = inSubquery(col(users, 'id'), 'SELECT id FROM users')
+const _badSubq3 = inSubquery(users.id, 'SELECT id FROM users')
 
 // @ts-expect-error — notInSubquery requires ASTExpr for query arg
-const _badSubq4 = notInSubquery(col(users, 'id'), 42)
+const _badSubq4 = notInSubquery(users.id, 42)
 
 // ══════════════════════════════════════════════════════════════════════
 // 12. UPSERT TYPES
@@ -819,7 +809,7 @@ const _fullChain = db
   .insert(users)
   .values({ name: 'A', email: 'a@b.com' })
   .onConflictDoNothing()
-  .returning(col(users, 'id'))
+  .returning(users.id)
   .execute()
 
 // ══════════════════════════════════════════════════════════════════════
@@ -828,11 +818,11 @@ const _fullChain = db
 
 // -- as() returns a TableDef with the alias name --
 
-const u1 = users.as('u1')
-type U1Name = typeof u1._name
+const u1 = tableAs(users, 'u1')
+type U1Name = typeof u1[typeof TableName]
 const _u1NameCheck: U1Name = 'u1'
 // @ts-expect-error — alias name is 'u1', not 'users'
-const _u1BadName: U1Name = 'users'
+const _u1BadName: U1Name = 'users' as 'users'
 
 // -- Aliased table preserves column types --
 
@@ -841,17 +831,17 @@ const _u1Row: U1Select = { id: 1, name: 'Alice', email: 'a@b.com', age: 30, bio:
 // @ts-expect-error — name is still required string
 const _u1BadRow: U1Select = { id: 1, name: null, email: 'a@b.com', age: null, bio: null, active: true }
 
-// -- col() with aliased table is type-safe --
+// -- Direct access on aliased table is type-safe --
 
-const _u1Col = col(u1, 'name')
+const _u1Col = u1.name
 const _u1ColExpr: ASTExpr = _u1Col
 // @ts-expect-error — 'nonexistent' is not a column
-const _u1BadCol = col(u1, 'nonexistent')
+const _u1BadCol = u1.nonexistent
 
 // -- Two aliases have different name types --
 
-const u2 = users.as('u2')
-type U2Name = typeof u2._name
+const u2 = tableAs(users, 'u2')
+type U2Name = typeof u2[typeof TableName]
 const _u2NameCheck: U2Name = 'u2'
 
 // -- Aliased table works with select --
@@ -862,7 +852,7 @@ const _asrCheck: AliasedSelectResult = undefined as unknown as InferSelect<typeo
 
 // -- Self-join preserves both aliases' types --
 
-const selfJoinQuery = db.select(u1).innerJoin(u2, eq(col(u1, 'id'), col(u2, 'id')))
+const selfJoinQuery = db.select(u1).innerJoin(u2, eq(u1.id, u2.id))
 type SelfJoinResult = Awaited<ReturnType<typeof selfJoinQuery.execute>>[number]
 // Both aliases have InferSelect<users> shape
 const _sjName: string = undefined as unknown as SelfJoinResult['name']
@@ -870,18 +860,18 @@ const _sjAge: number | null = undefined as unknown as SelfJoinResult['age']
 
 // -- Left join with alias makes joined columns nullable --
 
-const leftAliasQuery = db.select(u1).leftJoin(u2, eq(col(u1, 'id'), col(u2, 'id')))
+const leftAliasQuery = db.select(u1).leftJoin(u2, eq(u1.id, u2.id))
 type LeftAliasResult = Awaited<ReturnType<typeof leftAliasQuery.execute>>[number]
 const _laName: string | null = undefined as unknown as LeftAliasResult['name'] // nullable from left join
 
-// -- _originalName exists on aliased tables --
+// -- OriginalName exists on aliased tables --
 
-const _origName: string | undefined = u1._originalName
+const _origName: string | undefined = u1[OriginalName]
 
-// -- as() is chainable (re-aliasing) --
+// -- tableAs is chainable (re-aliasing) --
 
-const u3 = u1.as('u3')
-type U3Name = typeof u3._name
+const u3 = tableAs(u1, 'u3')
+type U3Name = typeof u3[typeof TableName]
 const _u3NameCheck: U3Name = 'u3'
 
 // ══════════════════════════════════════════════════════════════════════
@@ -889,7 +879,7 @@ const _u3NameCheck: U3Name = 'u3'
 // ══════════════════════════════════════════════════════════════════════
 
 // Right join: base table columns become nullable, joined table columns are not
-const rightJoinQuery = db.select(users).rightJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+const rightJoinQuery = db.select(users).rightJoin(posts, eq(users.id, posts.userId))
 type RightJoinResult = Awaited<ReturnType<typeof rightJoinQuery.execute>>[number]
 
 // Base table (users) becomes nullable after right join
@@ -902,7 +892,7 @@ const _rjTitle: string = undefined as unknown as RightJoinResult['title']
 const _badRjTitle: RightJoinResult['title'] = null as null
 
 // Full join: both sides become nullable
-const fullJoinQuery = db.select(users).fullJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+const fullJoinQuery = db.select(users).fullJoin(posts, eq(users.id, posts.userId))
 type FullJoinResult = Awaited<ReturnType<typeof fullJoinQuery.execute>>[number]
 
 // Both sides become nullable
@@ -923,7 +913,7 @@ const _badCjTitle: CrossJoinResult['title'] = null as null
 
 // Cross join takes no on argument
 // @ts-expect-error — crossJoin only takes a table, not an on condition
-db.select(users).crossJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
+db.select(users).crossJoin(posts, eq(users.id, posts.userId))
 
 // ══════════════════════════════════════════════════════════════════════
 // 15. NULLS FIRST / LAST
@@ -932,36 +922,36 @@ db.select(users).crossJoin(posts, eq(col(users, 'id'), col(posts, 'userId')))
 import type { ASTOrderBy } from '@petradb/quarry'
 
 // asc/desc accept optional nulls option
-const _ob1: ASTOrderBy = asc(col(users, 'id'))
-const _ob2: ASTOrderBy = asc(col(users, 'id'), { nulls: 'first' })
-const _ob3: ASTOrderBy = desc(col(users, 'id'), { nulls: 'last' })
+const _ob1: ASTOrderBy = asc(users.id)
+const _ob2: ASTOrderBy = asc(users.id, { nulls: 'first' })
+const _ob3: ASTOrderBy = desc(users.id, { nulls: 'last' })
 
 // @ts-expect-error — invalid nulls value
-const _obBad: ASTOrderBy = asc(col(users, 'id'), { nulls: 'middle' })
+const _obBad: ASTOrderBy = asc(users.id, { nulls: 'middle' })
 
 // ══════════════════════════════════════════════════════════════════════
 // 16. STATISTICAL / BITWISE AGGREGATES + EVERY + FILTER
 // ══════════════════════════════════════════════════════════════════════
 
 // All return ASTApply (which extends ASTExpr)
-const _eVariance: ASTApply = variance(col(users, 'age'))
-const _eVarSamp: ASTApply = varSamp(col(users, 'age'))
-const _eVarPop: ASTApply = varPop(col(users, 'age'))
-const _eStddev: ASTApply = stddev(col(users, 'age'))
-const _eStddevSamp: ASTApply = stddevSamp(col(users, 'age'))
-const _eStddevPop: ASTApply = stddevPop(col(users, 'age'))
-const _eBitAndAgg: ASTApply = bitAndAgg(col(users, 'age'))
-const _eBitOrAgg: ASTApply = bitOrAgg(col(users, 'age'))
-const _eBitXorAgg: ASTApply = bitXorAgg(col(users, 'age'))
-const _eEvery: ASTApply = every(col(users, 'active'))
+const _eVariance: ASTApply = variance(users.age)
+const _eVarSamp: ASTApply = varSamp(users.age)
+const _eVarPop: ASTApply = varPop(users.age)
+const _eStddev: ASTApply = stddev(users.age)
+const _eStddevSamp: ASTApply = stddevSamp(users.age)
+const _eStddevPop: ASTApply = stddevPop(users.age)
+const _eBitAndAgg: ASTApply = bitAndAgg(users.age)
+const _eBitOrAgg: ASTApply = bitOrAgg(users.age)
+const _eBitXorAgg: ASTApply = bitXorAgg(users.age)
+const _eEvery: ASTApply = every(users.active)
 
 // All are also ASTExpr
-const _eVarExpr: ASTExpr = variance(col(users, 'age'))
-const _eEveryExpr: ASTExpr = every(col(users, 'active'))
+const _eVarExpr: ASTExpr = variance(users.age)
+const _eEveryExpr: ASTExpr = every(users.active)
 
 // filter wraps an aggregate with a condition
-const _filtered: ASTApply = filter(count(), gt(col(users, 'age'), 20))
-const _filteredExpr: ASTExpr = filter(sum(col(users, 'age')), eq(col(users, 'active'), true))
+const _filtered: ASTApply = filter(count(), gt(users.age, 20))
+const _filteredExpr: ASTExpr = filter(sum(users.age), eq(users.active, true))
 
 // filter preserves the original aggregate's fields
 const _filteredFunc: string = _filtered.func
@@ -973,19 +963,19 @@ const _filteredFilter: ASTExpr | undefined = _filtered.filter
 // ══════════════════════════════════════════════════════════════════════
 
 // distinctOn returns SelectBuilder with same result type
-const distinctOnQuery = db.select(users).distinctOn(col(users, 'name'))
+const distinctOnQuery = db.select(users).distinctOn(users.name)
 type DistinctOnResult = Awaited<ReturnType<typeof distinctOnQuery.execute>>[number]
 const _doName: string = undefined as unknown as DistinctOnResult['name']
 const _doAge: number | null = undefined as unknown as DistinctOnResult['age']
 
 // distinctOn accepts multiple expressions
-const _doMulti = db.select(users).distinctOn(col(users, 'name'), col(users, 'active'))
+const _doMulti = db.select(users).distinctOn(users.name, users.active)
 
 // distinctOn is chainable with other clauses
 const _doChained = db
   .select(users)
-  .distinctOn(col(users, 'name'))
-  .orderBy(asc(col(users, 'name')))
+  .distinctOn(users.name)
+  .orderBy(asc(users.name))
   .limit(10)
 
 // ══════════════════════════════════════════════════════════════════════
@@ -995,7 +985,7 @@ const _doChained = db
 // insertFrom returns InsertSelectBuilder with correct table type
 const insertFromBuilder = db.insertFrom(
   users,
-  db.select(users).columns(col(users, 'name'), col(users, 'email')).toExpr(),
+  db.select(users).columns(users.name, users.email).toExpr(),
   ['name', 'email'],
 )
 const _isb: InsertSelectBuilder<typeof users> = insertFromBuilder
@@ -1016,7 +1006,7 @@ const _isfNoCol = db.insertFrom(users, db.select(users).toExpr())
 const _isfChain = db
   .insertFrom(users, db.select(users).toExpr(), ['name', 'email'])
   .onConflictDoNothing()
-  .returning(col(users, 'id'))
+  .returning(users.id)
 
 // ══════════════════════════════════════════════════════════════════════
 // 19. UPDATE...FROM
@@ -1029,17 +1019,17 @@ const _ufChain = db
   .update(users)
   .set({ age: 30 })
   .from(posts)
-  .where(eq(col(users, 'id'), col(posts, 'userId')))
+  .where(eq(users.id, posts.userId))
 
 // from() accepts multiple tables
 const _ufMulti = db
   .update(users)
   .set({ age: 30 })
   .from(posts, comments)
-  .where(eq(col(users, 'id'), col(posts, 'userId')))
+  .where(eq(users.id, posts.userId))
 
 // AST has from field
-const ufAST = db.update(users).set({ age: 30 }).from(posts).where(eq(col(users, 'id'), 1)).toAST()
+const ufAST = db.update(users).set({ age: 30 }).from(posts).where(eq(users.id, 1)).toAST()
 const _ufFrom: ASTExpr[] | undefined = ufAST.from
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1050,14 +1040,112 @@ const _ufFrom: ASTExpr[] | undefined = ufAST.from
 const _duChain = db
   .delete(users)
   .using(posts)
-  .where(eq(col(users, 'id'), col(posts, 'userId')))
+  .where(eq(users.id, posts.userId))
 
 // using() accepts multiple tables
 const _duMulti = db
   .delete(users)
   .using(posts, comments)
-  .where(eq(col(users, 'id'), col(posts, 'userId')))
+  .where(eq(users.id, posts.userId))
 
 // AST has using field
-const duAST = db.delete(users).using(posts).where(eq(col(users, 'id'), 1)).toAST()
+const duAST = db.delete(users).using(posts).where(eq(users.id, 1)).toAST()
 const _duUsing: ASTExpr[] | undefined = duAST.using
+
+// ══════════════════════════════════════════════════════════════════════
+// 21. DIRECT COLUMN ACCESS (no col() wrapper needed)
+// ══════════════════════════════════════════════════════════════════════
+
+// Direct access returns ASTColumn (which is ASTExpr)
+const _directId: ASTColumn = users.id
+const _directName: ASTColumn = users.name
+const _directAge: ASTColumn = users.age
+const _directActive: ASTColumn = users.active
+
+// ASTColumn is assignable to ASTExpr
+const _directAsExpr: ASTExpr = users.id
+
+// Direct access has correct kind
+const _directKind: 'column' = users.id.kind
+
+// Direct access works in expressions — no col() needed
+const _directEq: ASTExpr = eq(users.name, 'Alice')
+const _directGt: ASTExpr = gt(users.age, 21)
+const _directAnd: ASTExpr = and(eq(users.active, true), gt(users.age, 18))
+
+// Direct access works in builders
+const _directSelect = db.select(users).where(eq(users.name, 'Alice')).columns(users.name, users.email)
+const _directOrderBy = db.select(users).orderBy(asc(users.name))
+
+// @ts-expect-error — 'nonexistent' is not a column
+const _badDirect = users.nonexistent
+
+// Direct access works as ASTExpr
+const _directAsExpr2: ASTExpr = users.name
+
+// ══════════════════════════════════════════════════════════════════════
+// 22. ALIASED TABLE COLUMN ACCESS
+// ══════════════════════════════════════════════════════════════════════
+
+// Aliased tables have direct column access too
+const _u1Direct: ASTColumn = u1.name
+const _u1DirectId: ASTColumn = u1.id
+
+// Aliased table columns use the alias name
+const _u1DirectExpr: ASTExpr = u1.name
+
+// Direct access on aliased tables returns ASTExpr
+const _u1ColLegacy: ASTExpr = u1.name
+
+// Direct access on aliased tables works in expressions
+const _u1Eq: ASTExpr = eq(u1.name, 'Alice')
+
+// Self-join with direct access
+const sjDirect = db
+  .select(u1)
+  .columns(u1.name, u2.name)
+  .innerJoin(u2, eq(u1.id, u2.id))
+
+// ══════════════════════════════════════════════════════════════════════
+// 23. EDGE CASE: TABLE WITH COLUMNS NAMED LIKE INTERNAL PROPERTIES
+// ══════════════════════════════════════════════════════════════════════
+
+// A table with columns that could collide with old string-keyed internals
+const edgeTable = table('edge', {
+  name: text('name').notNull(),
+  id: serial('id').primaryKey(),
+  table: text('table_name'),
+})
+
+// These are column accessors, not internal properties
+const _edgeName: ASTColumn = edgeTable.name
+const _edgeId: ASTColumn = edgeTable.id
+const _edgeTable: ASTColumn = edgeTable.table
+
+// Internal properties are accessed via Symbols
+type EdgeName = typeof edgeTable[typeof TableName]
+const _edgeTableName: EdgeName = 'edge'
+
+// InferSelect still works
+type EdgeSelect = InferSelect<typeof edgeTable>
+const _edgeRow: EdgeSelect = { name: 'x', id: 1, table: null }
+
+// tableAs works on edge-case tables
+const edgeAlias = tableAs(edgeTable, 'e')
+const _edgeAliasName: ASTColumn = edgeAlias.name
+const _edgeAliasTable: ASTColumn = edgeAlias.table
+
+// ══════════════════════════════════════════════════════════════════════
+// 24. SYMBOL-KEYED INTERNAL ACCESS
+// ══════════════════════════════════════════════════════════════════════
+
+// TableName returns the literal table name type
+type UsersTableName = typeof users[typeof TableName]
+const _usersName: UsersTableName = 'users'
+// @ts-expect-error — name is 'users', not 'posts'
+const _badUsersName: UsersTableName = 'posts' as 'posts'
+
+// Columns returns the columns config
+type UsersCols = typeof users[typeof Columns]
+type _CheckId = UsersCols['id'] extends ColumnDef<'id', number, true, true> ? true : never
+const _checkIdOk: _CheckId = true

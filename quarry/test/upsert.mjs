@@ -7,7 +7,6 @@ import {
   serial,
   text,
   integer,
-  col,
   eq,
   asc,
 } from '../dist/index.js'
@@ -55,14 +54,14 @@ describe('upsert', () => {
     it('silently skips duplicate on primary key', async () => {
       await db.insert(kv).values({ id: 1, v: 999 }).onConflictDoNothing().execute()
 
-      const rows = await db.select(kv).where(eq(col(kv, 'id'), 1)).execute()
+      const rows = await db.select(kv).where(eq(kv.id, 1)).execute()
       assert.equal(rows[0].v, 10) // original value unchanged
     })
 
     it('silently skips duplicate on unique column', async () => {
       await db.insert(products).values({ sku: 'ABC', name: 'New Widget', price: 500 }).onConflictDoNothing().execute()
 
-      const rows = await db.select(products).where(eq(col(products, 'sku'), 'ABC')).execute()
+      const rows = await db.select(products).where(eq(products.sku, 'ABC')).execute()
       assert.equal(rows[0].name, 'Widget') // unchanged
       assert.equal(rows[0].price, 100)
     })
@@ -70,7 +69,7 @@ describe('upsert', () => {
     it('inserts non-conflicting row normally', async () => {
       await db.insert(kv).values({ id: 99, v: 77 }).onConflictDoNothing().execute()
 
-      const rows = await db.select(kv).where(eq(col(kv, 'id'), 99)).execute()
+      const rows = await db.select(kv).where(eq(kv.id, 99)).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].v, 77)
     })
@@ -93,7 +92,7 @@ describe('upsert', () => {
         .onConflictDoUpdate(['id'], { v: 99 })
         .execute()
 
-      const rows = await db.select(kv).where(eq(col(kv, 'id'), 2)).execute()
+      const rows = await db.select(kv).where(eq(kv.id, 2)).execute()
       assert.equal(rows[0].v, 99)
     })
 
@@ -104,7 +103,7 @@ describe('upsert', () => {
         .onConflictDoUpdate(['sku'], { name: 'Super Gadget', price: 350 })
         .execute()
 
-      const rows = await db.select(products).where(eq(col(products, 'sku'), 'DEF')).execute()
+      const rows = await db.select(products).where(eq(products.sku, 'DEF')).execute()
       assert.equal(rows[0].name, 'Super Gadget')
       assert.equal(rows[0].price, 350)
     })
@@ -116,7 +115,7 @@ describe('upsert', () => {
         .onConflictDoUpdate(['sku'], { name: 'Doohickey', price: 50 })
         .execute()
 
-      const rows = await db.select(products).where(eq(col(products, 'sku'), 'GHI')).execute()
+      const rows = await db.select(products).where(eq(products.sku, 'GHI')).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Doohickey')
       assert.equal(rows[0].price, 50)
@@ -130,7 +129,7 @@ describe('upsert', () => {
         .onConflictDoUpdate(['sku'], { price: 150 })
         .execute()
 
-      const rows = await db.select(products).where(eq(col(products, 'sku'), 'ABC')).execute()
+      const rows = await db.select(products).where(eq(products.sku, 'ABC')).execute()
       assert.equal(rows[0].name, 'Widget') // name unchanged
       assert.equal(rows[0].price, 150) // price updated
     })
