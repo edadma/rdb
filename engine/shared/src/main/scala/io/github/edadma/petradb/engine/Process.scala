@@ -792,6 +792,39 @@ case class RightIndexNestedLoopJoinProcess(
       else matches
     }
 
+case class CsvFileProcess(filePath: String, header: Boolean, delimiter: Char) extends Process:
+  import io.github.edadma.cross_platform.readFile
+  import io.github.edadma.csv.CSVRead
+
+  private val content = readFile(filePath)
+  private val columnNames: Vector[String] = {
+    val rows = mutable.ArrayBuffer[Seq[String]]()
+    CSVRead.fromStringStreamed(content, { row => rows += row }, delimiter)
+    if rows.isEmpty then Vector.empty
+    else if header then
+      rows.head.zipWithIndex.map { case (name, i) =>
+        val trimmed = name.trim
+        if trimmed.nonEmpty then trimmed else s"column${i + 1}"
+      }.toVector
+    else
+      (1 to rows.head.length).map(i => s"column$i").toVector
+  }
+
+  val meta: Metadata = Metadata(columnNames.map(n => ColumnMetadata(None, n, TextType)).toIndexedSeq)
+
+  def iterator(ctx: Seq[Row]): RowIterator =
+    val rows = mutable.ArrayBuffer[Seq[String]]()
+    CSVRead.fromStringStreamed(content, { row => rows += row }, delimiter)
+    rows.iterator.drop(if header then 1 else 0).map { row =>
+      val values = columnNames.indices.map { i =>
+        if i < row.length then
+          val s = row(i)
+          if s.isEmpty then NullValue() else TextValue(s)
+        else NullValue()
+      }.toIndexedSeq
+      Row(values, meta, None, None)
+    }
+
 case class GenerateSeriesProcess(startExpr: Expr, stopExpr: Expr, stepExpr: Option[Expr]) extends Process:
   val meta: Metadata = Metadata(Vector(ColumnMetadata(None, "generate_series", NumberType)))
 

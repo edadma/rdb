@@ -265,6 +265,13 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on generate_series")
           val rwArgs = args map rewrite
           ProcessOperator(GenerateSeriesProcess(rwArgs(0), rwArgs(1), rwArgs.lift(2)))
+        case "csv_file" =>
+          if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on csv_file")
+          if args.isEmpty || args.length > 3 then throw ParseException(id.pos, "csv_file requires 1 to 3 arguments: (path [, header [, delimiter]])")
+          val filePath = eval(args.head, Nil).string
+          val hasHeader = if args.length >= 2 then eval(args(1), Nil).asInstanceOf[BooleanValue].b else true
+          val delimiter = if args.length >= 3 then eval(args(2), Nil).string.head else ','
+          ProcessOperator(CsvFileProcess(filePath, hasHeader, delimiter))
         case "nextval" =>
           if filter.isDefined then throw ParseException(id.pos, "FILTER is not allowed on scalar functions")
           ScalarFunctionExpr(
