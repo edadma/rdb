@@ -31,7 +31,7 @@ case class InsertSelectCommand(table: Ident, columns: Option[Seq[Ident]], query:
 case class CreateTableCommand(table: Ident, columns: Seq[ColumnDesc], constraints: Seq[TableConstraint], ifNotExists: Boolean = false, temporary: Boolean = false) extends Command
 case class CreateEnumCommand(name: Ident, labels: Seq[String])                                           extends Command
 case class UpdateCommand(table: Ident, sets: Seq[UpdateSet], from: Option[Seq[Expr]], cond: Option[Expr], returning: Option[Seq[Expr]] = None) extends Command
-case class DeleteCommand(table: Ident, cond: Option[Expr], returning: Option[Seq[Expr]] = None) extends Command
+case class DeleteCommand(table: Ident, using: Option[Seq[Expr]], cond: Option[Expr], returning: Option[Seq[Expr]] = None) extends Command
 case class ExplainCommand(command: Command) extends Command
 case class TruncateCommand(table: Ident)                                                                 extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration)                                       extends Command

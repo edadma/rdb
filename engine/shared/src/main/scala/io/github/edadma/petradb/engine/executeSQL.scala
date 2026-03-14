@@ -744,32 +744,51 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             QueryResult(TableValue(fixedRows, retMeta))
           case None =>
             UpdateResult(count)
-      case DeleteCommand(id @ Ident(table), cond, returning) =>
+      case DeleteCommand(id @ Ident(table), using, cond, returning) =>
 
         val t    = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
-        val rows =
-          cond match
-            case Some(value) => SeqScanProcess(t, rewrite(value))
-            case None        => t
         var count = 0
         val returnedRows = mutable.ArrayBuffer[Row]()
         val rwReturning = returning.map(_.map(rewrite))
 
-        for (r <- rows.iterator(Nil))
-          db.enforceChildConstraints(table, r, "delete")
-          // Evaluate RETURNING before deleting
+        def applyDelete(targetRow: Row, evalRow: Row): Unit =
+          db.enforceChildConstraints(table, targetRow, "delete")
           rwReturning.foreach { retExprs =>
             val projected = retExprs.map {
-              case StarExpr() => r.data
-              case e          => IndexedSeq(eval(e, Seq(r)))
+              case StarExpr() => targetRow.data
+              case e          => IndexedSeq(eval(e, Seq(evalRow)))
             }.flatten.toIndexedSeq
             returnedRows += Row(projected, Metadata(Vector.empty), None, None)
           }
-          r.deleter match
+          targetRow.deleter match
             case Some(d) => d()
             case None    => throw ExecutionException(id.pos, "not updatable")
-
           count += 1
+
+        using match
+          case None =>
+            val rows =
+              cond match
+                case Some(value) => SeqScanProcess(t, rewrite(value))
+                case None        => t
+            for (r <- rows.iterator(Nil)) applyDelete(r, r)
+
+          case Some(usingSources) =>
+            val usingProcesses = usingSources.map(s => procRewrite(rewrite(s)))
+            val usingProc = usingProcesses.reduceLeft((l, r) => CrossProcess(l, r))
+            val mergedMeta = Metadata(t.meta.columns ++ usingProc.meta.columns)
+            val rwCond = cond.map(rewrite(_))
+            val deleted = mutable.Set[Any]()
+
+            for (targetRow <- t.iterator(Nil))
+              for (usingRow <- usingProc.iterator(Nil))
+                val merged = Row(targetRow.data ++ usingRow.data, mergedMeta, targetRow.updater, targetRow.deleter)
+                val matches = rwCond match
+                  case Some(c) => beval(c, Seq(merged))
+                  case None    => true
+                if matches && !deleted.contains(targetRow.deleter) then
+                  deleted += targetRow.deleter
+                  applyDelete(targetRow, merged)
 
         returning match
           case Some(retExprs) =>
@@ -1064,8 +1083,8 @@ private[engine] def deepCopyCommand(cmd: Command, params: IndexedSeq[Value] = In
       UpdateCommand(table, sets.map(s => UpdateSet(s.col, deepCopyExpr(s.value, params))),
         from.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)),
         returning.map(_.map(deepCopyExpr(_, params))))
-    case DeleteCommand(table, cond, returning) =>
-      DeleteCommand(table, cond.map(deepCopyExpr(_, params)), returning.map(_.map(deepCopyExpr(_, params))))
+    case DeleteCommand(table, using, cond, returning) =>
+      DeleteCommand(table, using.map(_.map(deepCopyExpr(_, params))), cond.map(deepCopyExpr(_, params)), returning.map(_.map(deepCopyExpr(_, params))))
     case ExplainCommand(inner) =>
       ExplainCommand(deepCopyCommand(inner, params))
     case PrepareCommand(name, cmds) =>

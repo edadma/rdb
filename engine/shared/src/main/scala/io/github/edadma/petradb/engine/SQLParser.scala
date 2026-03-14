@@ -990,8 +990,10 @@ object SQLParser:
   // ── DML: DELETE ────────────────────────────────────────────────────
 
   private def delete[p: P]: P[Command] =
-    P(kw("delete") ~ kw("from") ~ tableIdent ~ (kw("where") ~ expression).? ~ returningClause.?).map {
-      case (t, c, ret) => DeleteCommand(t, c, ret)
+    P(kw("delete") ~ kw("from") ~ tableIdent ~
+      (kw("using") ~ sources.rep(1, sep = ",")).? ~
+      (kw("where") ~ expression).? ~ returningClause.?).map {
+      case (t, u, c, ret) => DeleteCommand(t, u, c, ret)
     }
 
   // ── DML: TRUNCATE ──────────────────────────────────────────────────
