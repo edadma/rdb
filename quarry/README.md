@@ -51,8 +51,9 @@ await db.delete(users).where(eq(col(users, 'id'), 1)).execute()
 - Inner, left, right, full, and cross joins with correct nullability inference
 - Upsert with `onConflictDoNothing` / `onConflictDoUpdate`
 - Subqueries (IN, NOT IN, EXISTS, scalar)
-- CASE, CAST, aggregate FILTER, NULLS FIRST/LAST
+- CASE, CAST, aggregate FILTER, NULLS FIRST/LAST, DISTINCT ON
 - Statistical aggregates (variance, stddev), bitwise aggregates, EVERY
+- INSERT...SELECT, UPDATE...FROM, DELETE...USING
 - Table aliases for self-joins
 - Transactions with automatic commit/rollback
 - AST inspection via `.toAST()` for debugging

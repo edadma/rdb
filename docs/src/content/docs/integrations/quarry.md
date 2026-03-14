@@ -171,6 +171,31 @@ await db
 
 The first argument to `onConflictDoUpdate` specifies the conflict columns, the second specifies which columns to update. Both are type-safe — TypeScript enforces that only valid column keys are used.
 
+### INSERT...SELECT
+
+Insert rows from a query instead of literal values:
+
+```typescript
+// Archive all active users
+const query = db
+  .select(users)
+  .columns(col(users, "name"), col(users, "email"))
+  .where(eq(col(users, "active"), true))
+  .toExpr();
+
+await db.insertFrom(archive, query, ["name", "email"]).execute();
+```
+
+The second argument is the select query (use `.toExpr()`). The optional third argument specifies which target columns to populate — if omitted, the engine expects the query to produce values for all columns.
+
+```typescript
+// Without column list (query must match all target columns)
+await db.insertFrom(archive, query).execute();
+
+// With onConflictDoNothing
+await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().execute();
+```
+
 ## Select
 
 ```typescript
@@ -205,6 +230,14 @@ const statuses = await db
   .columns(col(users, "active"))
   .distinct()
   .execute();
+
+// Distinct on — one row per distinct value of the given columns
+const perCategory = await db
+  .select(products)
+  .distinctOn(col(products, "category"))
+  .orderBy(asc(col(products, "category")), asc(col(products, "price")))
+  .execute();
+// Returns the cheapest product in each category
 ```
 
 ### Column references
@@ -288,6 +321,7 @@ notInList(col(users, "id"), [1, 2, 3])                   // id NOT IN (...)
 between(col(users, "age"), 18, 65)                       // age BETWEEN 18 AND 65
 notBetween(col(users, "age"), 18, 65)                    // age NOT BETWEEN 18 AND 65
 betweenSymmetric(col(users, "age"), 65, 18)              // age BETWEEN SYMMETRIC 65 AND 18
+notBetweenSymmetric(col(users, "age"), 65, 18)           // age NOT BETWEEN SYMMETRIC 65 AND 18
 ```
 
 ### Arithmetic
@@ -340,6 +374,14 @@ jsonContainedBy(col(t, "data"), other) // data <@ other
 jsonHasKey(col(t, "data"), "key")     // data ? 'key'
 jsonHasAnyKey(col(t, "data"), keys)   // data ?| keys
 jsonHasAllKeys(col(t, "data"), keys)  // data ?& keys
+```
+
+### Array operators
+
+```typescript
+import { arrayOverlap } from "@petradb/quarry";
+
+arrayOverlap(col(t, "tags"), col(t, "otherTags"))  // tags && otherTags (arrays overlap)
 ```
 
 ### Generic operators
@@ -776,6 +818,31 @@ await db
 
 The `.set()` method accepts `Partial<InferSelect<T>>` — TypeScript enforces valid column names and types.
 
+### UPDATE...FROM
+
+Join another table to drive updates:
+
+```typescript
+const priceUpdates = table("price_updates", {
+  id: serial("id").primaryKey(),
+  productName: text("product_name").notNull(),
+  newPrice: integer("new_price").notNull(),
+});
+
+await db
+  .update(products)
+  .set({ price: 0 }) // set value; use col references in WHERE for conditional logic
+  .from(priceUpdates)
+  .where(eq(col(products, "name"), col(priceUpdates, "productName")))
+  .execute();
+```
+
+`.from()` accepts multiple tables:
+
+```typescript
+db.update(t1).set({ ... }).from(t2, t3).where(and(...))
+```
+
 ### RETURNING
 
 Update and delete support `.returning()` to get back the affected rows:
@@ -798,6 +865,29 @@ const result = await db
   .where(eq(col(users, "name"), "Alice"))
   .execute();
 // result.rowCount → 1
+```
+
+### DELETE...USING
+
+Join another table to determine which rows to delete:
+
+```typescript
+const deleteList = table("delete_list", {
+  id: serial("id").primaryKey(),
+  userName: text("user_name").notNull(),
+});
+
+await db
+  .delete(users)
+  .using(deleteList)
+  .where(eq(col(users, "name"), col(deleteList, "userName")))
+  .execute();
+```
+
+`.using()` accepts multiple tables:
+
+```typescript
+db.delete(t1).using(t2, t3).where(and(...))
 ```
 
 ## Transactions
