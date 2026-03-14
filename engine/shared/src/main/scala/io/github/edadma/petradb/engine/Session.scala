@@ -76,3 +76,35 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
     val ps = PreparedStatement(name, cmds)
     preparedStatements(name) = ps
     ps
+
+  /** Open a cursor for row-by-row access to query results.
+    * The query is compiled and the iterator is created but no rows are fetched
+    * until step() is called.
+    */
+  def openCursor(sql: String): Cursor =
+    given Session = this
+    val query = SQLParser.parseQuery(sql.stripSuffix(";").trim)
+    val rewritten = rewrite(query)
+    val process = rewritten match
+      case ProcessOperator(proc) => proc
+      case other =>
+        // Wrap in a process that evaluates the expression to a TableValue
+        import scala.collection.immutable.ArraySeq
+        val tv = eval(other, Nil).asInstanceOf[TableValue]
+        StaticProcess(tv.data.to(ArraySeq), tv.meta)
+    new Cursor(process)
+
+  /** Open a cursor with parameter binding. Use $1, $2, etc. in the SQL. */
+  def openCursor(sql: String, params: IndexedSeq[Any]): Cursor =
+    given Session = this
+    val query = SQLParser.parseQuery(sql.stripSuffix(";").trim)
+    val paramValues = params.map(anyToValue)
+    val bound = deepCopyExpr(query, paramValues)
+    val rewritten = rewrite(bound)
+    val process = rewritten match
+      case ProcessOperator(proc) => proc
+      case other =>
+        import scala.collection.immutable.ArraySeq
+        val tv = eval(other, Nil).asInstanceOf[TableValue]
+        StaticProcess(tv.data.to(ArraySeq), tv.meta)
+    new Cursor(process)
