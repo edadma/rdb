@@ -129,14 +129,17 @@ object ASTConverter:
       if js.isUndefined(obj.distinct) || obj.distinct == null then false
       else obj.distinct.asInstanceOf[Boolean]
 
-    SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct)
+    val distinctOn =
+      if js.isUndefined(obj.distinctOn) || obj.distinctOn == null then None
+      else Some(obj.distinctOn.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
 
-  private def toInsertCommand(obj: js.Dynamic): InsertCommand =
+    SQLSelectExpr(exprs, from, where, groupBy, having, orderBy, offset, limit, distinct, distinctOn)
+
+  private def toInsertCommand(obj: js.Dynamic): Command =
     val table = ident(obj.table.asInstanceOf[String])
-    val columns = Some(obj.columns.asInstanceOf[js.Array[String]].map(c => ident(c)).toSeq)
-    val rows = obj.rows.asInstanceOf[js.Array[js.Array[js.Dynamic]]].map { row =>
-      row.map(toExpr).toSeq
-    }.toSeq
+    val columns =
+      if js.isUndefined(obj.columns) || obj.columns == null then None
+      else Some(obj.columns.asInstanceOf[js.Array[String]].map(c => ident(c)).toSeq)
     val returning =
       if js.isUndefined(obj.returning) || obj.returning == null then None
       else Some(obj.returning.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
@@ -153,7 +156,13 @@ object ASTConverter:
             }.toSeq
             Some(OnConflictDoUpdate(conflictCols, updates))
           case k => throw js.JavaScriptException(js.Error(s"Unknown onConflict kind: $k"))
-    InsertCommand(table, columns, rows, returning, onConflict)
+    if !js.isUndefined(obj.query) && obj.query != null then
+      InsertSelectCommand(table, columns, toExpr(obj.query), returning, onConflict)
+    else
+      val rows = obj.rows.asInstanceOf[js.Array[js.Array[js.Dynamic]]].map { row =>
+        row.map(toExpr).toSeq
+      }.toSeq
+      InsertCommand(table, columns, rows, returning, onConflict)
 
   private def toUpdateCommand(obj: js.Dynamic): UpdateCommand =
     val table = ident(obj.table.asInstanceOf[String])
@@ -166,17 +175,23 @@ object ASTConverter:
     val returning =
       if js.isUndefined(obj.returning) || obj.returning == null then None
       else Some(obj.returning.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
-    UpdateCommand(table, sets, None, where, returning)
+    val from =
+      if js.isUndefined(obj.from) || obj.from == null then None
+      else Some(obj.from.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
+    UpdateCommand(table, sets, from, where, returning)
 
   private def toDeleteCommand(obj: js.Dynamic): DeleteCommand =
     val table = ident(obj.table.asInstanceOf[String])
+    val using =
+      if js.isUndefined(obj.using) || obj.using == null then None
+      else Some(obj.using.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
     val where =
       if js.isUndefined(obj.where) || obj.where == null then None
       else Some(toExpr(obj.where))
     val returning =
       if js.isUndefined(obj.returning) || obj.returning == null then None
       else Some(obj.returning.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq)
-    DeleteCommand(table, where, returning)
+    DeleteCommand(table, using, where, returning)
 
   private def toCreateTableCommand(obj: js.Dynamic): CreateTableCommand =
     val table = ident(obj.table.asInstanceOf[String])

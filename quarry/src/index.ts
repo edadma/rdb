@@ -1,4 +1,4 @@
-export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
+export type { ASTExpr, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTInsertCommand, ASTUpdateCommand, ASTDeleteCommand, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
 export {
   serial,
   bigserial,
@@ -133,5 +133,5 @@ export {
   alias,
   literal,
 } from './expressions.js'
-export { quarry, asc, desc, QuarryDB, SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
+export { quarry, asc, desc, QuarryDB, SelectBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
 export type { QuarrySession } from './builder.js'

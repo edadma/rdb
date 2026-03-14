@@ -310,29 +310,33 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                 for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
               }
 
-            def buildInsertResult(lastResult: Map[String, Value]): InsertResult =
-              val (row, metadata) =
-                returning match
-                  case None =>
-                    val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                    val metadata    = Metadata(cols.toIndexedSeq)
-                    (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-                  case Some(retExprs) =>
-                    // Determine which columns to include in response
-                    val retNames =
-                      if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
-                      else retExprs.map {
-                        case ColumnExpr(_, Ident(name)) => name
-                        case Ident(name) => name
-                        case e => sys.error(s"unsupported RETURNING expression: $e")
-                      }
-                    val filtered = retNames.flatMap { name =>
-                      lastResult.get(name).map(v => (ColumnMetadata(Some(table), name, v.vtyp), v))
+            def buildInsertResult(allResults: Seq[Map[String, Value]]): InsertResult =
+              val lastResult = if allResults.nonEmpty then allResults.last else Map.empty[String, Value]
+              returning match
+                case None =>
+                  val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+                  val metadata = Metadata(cols.toIndexedSeq)
+                  val row = Row(seq.toIndexedSeq, metadata, None, None)
+                  InsertResult(lastResult, TableValue(Vector(row), metadata))
+                case Some(retExprs) =>
+                  val retNames =
+                    if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
+                    else retExprs.map {
+                      case ColumnExpr(_, Ident(name)) => name
+                      case Ident(name) => name
+                      case e => sys.error(s"unsupported RETURNING expression: $e")
                     }
-                    val (cols, seq) = filtered.unzip
-                    val metadata = Metadata(cols.toIndexedSeq)
-                    (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              InsertResult(lastResult, TableValue(Vector(row), metadata))
+                  // Build metadata from the first non-empty result (or lastResult)
+                  val sampleResult = allResults.find(_.nonEmpty).getOrElse(lastResult)
+                  val sampleFiltered = retNames.flatMap { name =>
+                    sampleResult.get(name).map(v => ColumnMetadata(Some(table), name, v.vtyp))
+                  }
+                  val metadata = Metadata(sampleFiltered.toIndexedSeq)
+                  val rows = allResults.map { rowResult =>
+                    val seq = retNames.flatMap(name => rowResult.get(name))
+                    Row(seq.toIndexedSeq, metadata, None, None)
+                  }.toVector
+                  InsertResult(lastResult, TableValue(rows, metadata))
 
             onConflict match
               case None =>
@@ -340,13 +344,13 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                 buildInsertResult(result)
 
               case Some(OnConflictDoNothing) =>
-                var lastResult: Map[String, Value] = Map.empty
+                val allResults = scala.collection.mutable.ArrayBuffer[Map[String, Value]]()
                 for d <- data do
                   try
-                    lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
+                    allResults ++= t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
                   catch
                     case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
-                buildInsertResult(lastResult)
+                buildInsertResult(allResults.toSeq)
 
               case Some(OnConflictDoUpdate(conflictCols, updates)) =>
                 val conflictColNames = conflictCols.map(_.name)
@@ -355,10 +359,10 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                   col -> rewrite(value)
                 }
                 val excludedMeta = Metadata(t.columns.map(spec => ColumnMetadata(Some("excluded"), spec.name, spec.typ)).toIndexedSeq)
-                var lastResult: Map[String, Value] = Map.empty
+                val allResults = scala.collection.mutable.ArrayBuffer[Map[String, Value]]()
                 for d <- data do
                   try
-                    lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
+                    allResults ++= t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
                   catch
                     case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
                       val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
@@ -379,13 +383,13 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                           val updatedData = existing.data.toArray
                           for (col, value) <- evalUpdates do
                             updatedData(t.columnMap(col)) = value
-                          lastResult = t.columns.map(_.name).zip(updatedData).toMap
-                          // Add RETURNING columns to result for upsert
+                          var rowResult = t.columns.map(_.name).zip(updatedData).toMap
                           for retNames <- retColNames do
                             val names = if retNames.isEmpty then t.columns.map(_.name).toSeq else retNames
                             for col <- names do
-                              t.columnMap.get(col).foreach(idx => lastResult += (col -> updatedData(idx)))
-                buildInsertResult(lastResult)
+                              t.columnMap.get(col).foreach(idx => rowResult += (col -> updatedData(idx)))
+                          allResults += rowResult
+                buildInsertResult(allResults.toSeq)
       case InsertSelectCommand(id @ Ident(table), columns, selectQuery, returning, onConflict) =>
 
         val t = session.getTable(table).getOrElse(throw UndefinedReferenceException(id.pos, s"unknown table: $table"))
@@ -424,28 +428,32 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
           }
 
-        def buildSelectInsertResult(lastResult: Map[String, Value]): InsertResult =
-          val (row, metadata) =
-            returning match
-              case None =>
-                val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
-                val metadata = Metadata(cols.toIndexedSeq)
-                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-              case Some(retExprs) =>
-                val retNames =
-                  if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
-                  else retExprs.map {
-                    case ColumnExpr(_, Ident(name)) => name
-                    case Ident(name) => name
-                    case e => sys.error(s"unsupported RETURNING expression: $e")
-                  }
-                val filtered = retNames.flatMap { name =>
-                  lastResult.get(name).map(v => (ColumnMetadata(Some(table), name, v.vtyp), v))
+        def buildSelectInsertResult(allResults: Seq[Map[String, Value]]): InsertResult =
+          val lastResult = if allResults.nonEmpty then allResults.last else Map.empty[String, Value]
+          returning match
+            case None =>
+              val (cols, seq) = lastResult map { case (k, v) => (ColumnMetadata(Some(table), k, v.vtyp), v) } unzip
+              val metadata = Metadata(cols.toIndexedSeq)
+              val row = Row(seq.toIndexedSeq, metadata, None, None)
+              InsertResult(lastResult, TableValue(Vector(row), metadata))
+            case Some(retExprs) =>
+              val retNames =
+                if retExprs.exists(_.isInstanceOf[StarExpr]) then t.columns.map(_.name).toSeq
+                else retExprs.map {
+                  case ColumnExpr(_, Ident(name)) => name
+                  case Ident(name) => name
+                  case e => sys.error(s"unsupported RETURNING expression: $e")
                 }
-                val (cols, seq) = filtered.unzip
-                val metadata = Metadata(cols.toIndexedSeq)
-                (Row(seq.toIndexedSeq, metadata, None, None), metadata)
-          InsertResult(lastResult, TableValue(Vector(row), metadata))
+              val sampleResult = allResults.find(_.nonEmpty).getOrElse(lastResult)
+              val sampleFiltered = retNames.flatMap { name =>
+                sampleResult.get(name).map(v => ColumnMetadata(Some(table), name, v.vtyp))
+              }
+              val metadata = Metadata(sampleFiltered.toIndexedSeq)
+              val rows = allResults.map { rowResult =>
+                val seq = retNames.flatMap(name => rowResult.get(name))
+                Row(seq.toIndexedSeq, metadata, None, None)
+              }.toVector
+              InsertResult(lastResult, TableValue(rows, metadata))
 
         onConflict match
           case None =>
@@ -453,13 +461,13 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
             buildSelectInsertResult(result)
 
           case Some(OnConflictDoNothing) =>
-            var lastResult: Map[String, Value] = Map.empty
+            val allResults = scala.collection.mutable.ArrayBuffer[Map[String, Value]]()
             for d <- data do
               try
-                lastResult = t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
+                allResults ++= t.bulkInsert(resolvedColumns map (_.name), Seq(d), retColNames, fkCheck)
               catch
                 case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") => ()
-            buildSelectInsertResult(lastResult)
+            buildSelectInsertResult(allResults.toSeq)
 
           case Some(OnConflictDoUpdate(conflictCols, updates)) =>
             val conflictColNames = conflictCols.map(_.name)
@@ -468,10 +476,10 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               col -> rewrite(value)
             }
             val excludedMeta = Metadata(t.columns.map(spec => ColumnMetadata(Some("excluded"), spec.name, spec.typ)).toIndexedSeq)
-            var lastResult: Map[String, Value] = Map.empty
+            val allResults = scala.collection.mutable.ArrayBuffer[Map[String, Value]]()
             for d <- data do
               try
-                lastResult = t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
+                allResults ++= t.bulkInsert(resolvedColumns.map(_.name), Seq(d), retColNames, fkCheck)
               catch
                 case e: Exception if e.getMessage != null && e.getMessage.contains("duplicate key value violates unique constraint") =>
                   val insertedColMap = resolvedColumns.map(_.name).zip(d).toMap
@@ -492,12 +500,13 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
                       val updatedData = existing.data.toArray
                       for (col, value) <- evalUpdates do
                         updatedData(t.columnMap(col)) = value
-                      lastResult = t.columns.map(_.name).zip(updatedData).toMap
+                      var rowResult = t.columns.map(_.name).zip(updatedData).toMap
                       for retNames <- retColNames do
                         val names = if retNames.isEmpty then t.columns.map(_.name).toSeq else retNames
                         for col <- names do
-                          t.columnMap.get(col).foreach(idx => lastResult += (col -> updatedData(idx)))
-            buildSelectInsertResult(lastResult)
+                          t.columnMap.get(col).foreach(idx => rowResult += (col -> updatedData(idx)))
+                      allResults += rowResult
+            buildSelectInsertResult(allResults.toSeq)
       case QueryCommand(query)                                         => executeSelect(query)
       case CreateTableCommand(id @ Ident(table), columns, constraints, ifNotExists, temporary) =>
         val alreadyExists = if temporary then session.hasTempTable(table) else session.hasTable(table)

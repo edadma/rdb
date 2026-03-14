@@ -162,6 +162,7 @@ export interface ASTSelect {
   offset?: number
   limit?: number
   distinct?: boolean
+  distinctOn?: ASTExpr[]
 }
 
 export interface ASTTable {
@@ -243,8 +244,9 @@ export type ASTOnConflict = ASTOnConflictDoNothing | ASTOnConflictDoUpdate
 export interface ASTInsertCommand {
   kind: 'insert'
   table: string
-  columns: string[]
-  rows: ASTExpr[][]
+  columns?: string[]
+  rows?: ASTExpr[][]
+  query?: ASTExpr
   returning?: ASTExpr[]
   onConflict?: ASTOnConflict
 }
@@ -253,6 +255,7 @@ export interface ASTUpdateCommand {
   kind: 'update'
   table: string
   sets: ASTUpdateSet[]
+  from?: ASTExpr[]
   where?: ASTExpr
   returning?: ASTExpr[]
 }
@@ -260,6 +263,7 @@ export interface ASTUpdateCommand {
 export interface ASTDeleteCommand {
   kind: 'delete'
   table: string
+  using?: ASTExpr[]
   where?: ASTExpr
   returning?: ASTExpr[]
 }

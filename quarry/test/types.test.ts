@@ -111,6 +111,7 @@ import {
   asc,
   desc,
   quarry,
+  InsertSelectBuilder,
 } from '@petradb/quarry'
 import type {
   ASTExpr,
@@ -966,3 +967,97 @@ const _filteredExpr: ASTExpr = filter(sum(col(users, 'age')), eq(col(users, 'act
 const _filteredFunc: string = _filtered.func
 const _filteredArgs: ASTExpr[] = _filtered.args
 const _filteredFilter: ASTExpr | undefined = _filtered.filter
+
+// ══════════════════════════════════════════════════════════════════════
+// 17. DISTINCT ON
+// ══════════════════════════════════════════════════════════════════════
+
+// distinctOn returns SelectBuilder with same result type
+const distinctOnQuery = db.select(users).distinctOn(col(users, 'name'))
+type DistinctOnResult = Awaited<ReturnType<typeof distinctOnQuery.execute>>[number]
+const _doName: string = undefined as unknown as DistinctOnResult['name']
+const _doAge: number | null = undefined as unknown as DistinctOnResult['age']
+
+// distinctOn accepts multiple expressions
+const _doMulti = db.select(users).distinctOn(col(users, 'name'), col(users, 'active'))
+
+// distinctOn is chainable with other clauses
+const _doChained = db
+  .select(users)
+  .distinctOn(col(users, 'name'))
+  .orderBy(asc(col(users, 'name')))
+  .limit(10)
+
+// ══════════════════════════════════════════════════════════════════════
+// 18. INSERT...SELECT
+// ══════════════════════════════════════════════════════════════════════
+
+// insertFrom returns InsertSelectBuilder with correct table type
+const insertFromBuilder = db.insertFrom(
+  users,
+  db.select(users).columns(col(users, 'name'), col(users, 'email')).toExpr(),
+  ['name', 'email'],
+)
+const _isb: InsertSelectBuilder<typeof users> = insertFromBuilder
+
+// insertFrom execute returns InferSelect<T>[]
+const insertFromResult = insertFromBuilder.execute()
+type InsertFromReturn = Awaited<typeof insertFromResult>
+const _ifrCheck: InsertFromReturn = undefined as unknown as InferSelect<typeof users>[]
+
+// insertFrom columns are type-safe
+// @ts-expect-error — 'nonexistent' is not a column key
+db.insertFrom(users, db.select(users).toExpr(), ['nonexistent'])
+
+// insertFrom without columns is valid
+const _isfNoCol = db.insertFrom(users, db.select(users).toExpr())
+
+// insertFrom supports chaining
+const _isfChain = db
+  .insertFrom(users, db.select(users).toExpr(), ['name', 'email'])
+  .onConflictDoNothing()
+  .returning(col(users, 'id'))
+
+// ══════════════════════════════════════════════════════════════════════
+// 19. UPDATE...FROM
+// ══════════════════════════════════════════════════════════════════════
+
+import type { ASTUpdateCommand, ASTDeleteCommand } from '@petradb/quarry'
+
+// from() is chainable on UpdateBuilder
+const _ufChain = db
+  .update(users)
+  .set({ age: 30 })
+  .from(posts)
+  .where(eq(col(users, 'id'), col(posts, 'userId')))
+
+// from() accepts multiple tables
+const _ufMulti = db
+  .update(users)
+  .set({ age: 30 })
+  .from(posts, comments)
+  .where(eq(col(users, 'id'), col(posts, 'userId')))
+
+// AST has from field
+const ufAST = db.update(users).set({ age: 30 }).from(posts).where(eq(col(users, 'id'), 1)).toAST()
+const _ufFrom: ASTExpr[] | undefined = ufAST.from
+
+// ══════════════════════════════════════════════════════════════════════
+// 20. DELETE...USING
+// ══════════════════════════════════════════════════════════════════════
+
+// using() is chainable on DeleteBuilder
+const _duChain = db
+  .delete(users)
+  .using(posts)
+  .where(eq(col(users, 'id'), col(posts, 'userId')))
+
+// using() accepts multiple tables
+const _duMulti = db
+  .delete(users)
+  .using(posts, comments)
+  .where(eq(col(users, 'id'), col(posts, 'userId')))
+
+// AST has using field
+const duAST = db.delete(users).using(posts).where(eq(col(users, 'id'), 1)).toAST()
+const _duUsing: ASTExpr[] | undefined = duAST.using

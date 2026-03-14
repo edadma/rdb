@@ -39,6 +39,7 @@ interface SelectState {
   groupBy?: ASTExpr[]
   having?: ASTExpr
   distinct: boolean
+  distinctOn?: ASTExpr[]
   joins: { kind: 'joinInner' | 'joinLeft' | 'joinRight' | 'joinFull' | 'joinCross'; right: ASTExpr; on?: ASTExpr }[]
 }
 
@@ -82,6 +83,10 @@ export class SelectBuilder<TResult> {
 
   distinct(): SelectBuilder<TResult> {
     return new SelectBuilder(this._session, { ...this._state, distinct: true })
+  }
+
+  distinctOn(...exprs: ASTExpr[]): SelectBuilder<TResult> {
+    return new SelectBuilder(this._session, { ...this._state, distinct: false, distinctOn: exprs })
   }
 
   innerJoin<U extends TableDef<any, any>>(
@@ -170,6 +175,7 @@ export class SelectBuilder<TResult> {
       groupBy: this._state.groupBy,
       having: this._state.having,
       distinct: this._state.distinct || undefined,
+      distinctOn: this._state.distinctOn,
     }
   }
 
@@ -289,18 +295,70 @@ export class InsertBuilder<T extends TableDef<any, any>> {
   }
 }
 
+// ── Insert-select builder ──
+
+export class InsertSelectBuilder<T extends TableDef<any, any>> {
+  private _table: T
+  private _session: QuarrySession
+  private _query: ASTExpr
+  private _columns?: string[]
+  private _returning?: ASTExpr[]
+  private _onConflict?: ASTOnConflict
+
+  constructor(session: QuarrySession, table: T, query: ASTExpr, columns?: string[]) {
+    this._session = session
+    this._table = table
+    this._query = query
+    this._columns = columns
+  }
+
+  returning(...exprs: ASTExpr[]): this {
+    this._returning = exprs
+    return this
+  }
+
+  onConflictDoNothing(): this {
+    this._onConflict = { kind: 'doNothing' }
+    return this
+  }
+
+  toAST(): ASTInsertCommand {
+    return {
+      kind: 'insert',
+      table: this._table._name,
+      columns: this._columns,
+      query: this._query,
+      returning: this._returning ?? [{ kind: 'star' }],
+      onConflict: this._onConflict,
+    }
+  }
+
+  async execute(): Promise<InferSelect<T>[]> {
+    const ast = this.toAST()
+    const results = await this._session.executeAST(ast)
+    const result = results[0] as any
+    return result.rows as InferSelect<T>[]
+  }
+}
+
 // ── Update builder ──
 
 export class UpdateBuilder<T extends TableDef<any, any>> {
   private _table: T
   private _session: QuarrySession
   private _sets: ASTUpdateSet[] = []
+  private _from?: ASTExpr[]
   private _where?: ASTExpr
   private _returning?: ASTExpr[]
 
   constructor(session: QuarrySession, table: T) {
     this._session = session
     this._table = table
+  }
+
+  from(...tables: TableDef<any, any>[]): this {
+    this._from = tables.map(tableToExpr)
+    return this
   }
 
   set(values: Partial<InferSelect<T>>): this {
@@ -335,6 +393,7 @@ export class UpdateBuilder<T extends TableDef<any, any>> {
       kind: 'update',
       table: this._table._name,
       sets: this._sets,
+      from: this._from,
       where: this._where,
       returning: this._returning,
     }
@@ -357,12 +416,18 @@ export class UpdateBuilder<T extends TableDef<any, any>> {
 export class DeleteBuilder<T extends TableDef<any, any>> {
   private _table: T
   private _session: QuarrySession
+  private _using?: ASTExpr[]
   private _where?: ASTExpr
   private _returning?: ASTExpr[]
 
   constructor(session: QuarrySession, table: T) {
     this._session = session
     this._table = table
+  }
+
+  using(...tables: TableDef<any, any>[]): this {
+    this._using = tables.map(tableToExpr)
+    return this
   }
 
   where(condition: ASTExpr): this {
@@ -379,6 +444,7 @@ export class DeleteBuilder<T extends TableDef<any, any>> {
     return {
       kind: 'delete',
       table: this._table._name,
+      using: this._using,
       where: this._where,
       returning: this._returning,
     }
@@ -416,6 +482,21 @@ export class QuarryDB {
 
   insert<T extends TableDef<any, any>>(table: T): InsertBuilder<T> {
     return new InsertBuilder(this._session, table)
+  }
+
+  insertFrom<T extends TableDef<any, any>>(
+    table: T,
+    query: ASTExpr,
+    columns?: (keyof T['_columns'] & string)[],
+  ): InsertSelectBuilder<T> {
+    const cols = columns
+      ? columns.map((key) => {
+          const colDef = (table._columns as ColumnsConfig)[key]
+          if (!colDef) throw new Error(`Unknown column '${key}' in table '${table._name}'`)
+          return colDef._columnName
+        })
+      : undefined
+    return new InsertSelectBuilder(this._session, table, query, cols)
   }
 
   update<T extends TableDef<any, any>>(table: T): UpdateBuilder<T> {

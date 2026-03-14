@@ -406,9 +406,9 @@ class PersistentTable(
             db.writeCatalogInBatch(batch)
         }
 
-  override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
+  override def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Seq[Map[String, Value]] =
     if rows.size <= 1 then return super.bulkInsert(header, rows, returning, fkCheck)
-    var result: Map[String, Value] = Map.empty
+    var result: Seq[Map[String, Value]] = Seq.empty
     db.withBatch { batch =>
       val oldFirstDataPage = firstDataPage
       val trees = openIndexTrees(batch)
