@@ -180,6 +180,53 @@ export class SelectBuilder<TResult> {
     }
   }
 
+  union<U>(other: SelectBuilder<U>): SetOperationBuilder<TResult | U> {
+    return new SetOperationBuilder(this._session, 'UNION', this.toExpr(), other.toExpr())
+  }
+
+  unionAll<U>(other: SelectBuilder<U>): SetOperationBuilder<TResult | U> {
+    return new SetOperationBuilder(this._session, 'UNION ALL', this.toExpr(), other.toExpr())
+  }
+
+  intersect(other: SelectBuilder<TResult>): SetOperationBuilder<TResult> {
+    return new SetOperationBuilder(this._session, 'INTERSECT', this.toExpr(), other.toExpr())
+  }
+
+  except(other: SelectBuilder<TResult>): SetOperationBuilder<TResult> {
+    return new SetOperationBuilder(this._session, 'EXCEPT', this.toExpr(), other.toExpr())
+  }
+
+  toAST(): ASTQueryCommand {
+    return { kind: 'query', query: this.toExpr() }
+  }
+
+  async execute(): Promise<TResult[]> {
+    const ast = this.toAST()
+    const results = await this._session.executeAST(ast)
+    const result = results[0] as any
+    return result.rows as TResult[]
+  }
+}
+
+// ── Set operation builder ──
+
+export class SetOperationBuilder<TResult> {
+  private _session: QuarrySession
+  private _op: 'UNION' | 'UNION ALL' | 'INTERSECT' | 'EXCEPT'
+  private _left: ASTExpr
+  private _right: ASTExpr
+
+  constructor(session: QuarrySession, op: 'UNION' | 'UNION ALL' | 'INTERSECT' | 'EXCEPT', left: ASTExpr, right: ASTExpr) {
+    this._session = session
+    this._op = op
+    this._left = left
+    this._right = right
+  }
+
+  toExpr(): ASTExpr {
+    return { kind: 'setOperation', op: this._op, left: this._left, right: this._right }
+  }
+
   toAST(): ASTQueryCommand {
     return { kind: 'query', query: this.toExpr() }
   }
@@ -510,6 +557,12 @@ export class QuarryDB {
 
   async createTable<T extends TableDef<any, any>>(table: T): Promise<void> {
     await this._session.executeAST(table[ToCreateAST]())
+  }
+
+  async executeQuery<T = Record<string, unknown>>(queryExpr: ASTExpr): Promise<T[]> {
+    const results = await this._session.executeAST({ kind: 'query', query: queryExpr })
+    const result = results[0] as any
+    return result.rows as T[]
   }
 
   async transaction<R>(fn: (tx: QuarryDB) => Promise<R>): Promise<R> {

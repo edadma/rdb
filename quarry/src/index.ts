@@ -1,4 +1,4 @@
-export type { ASTExpr, ASTColumn, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTInsertCommand, ASTUpdateCommand, ASTDeleteCommand, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate } from './ast.js'
+export type { ASTExpr, ASTColumn, ASTCommand, ASTOrderBy, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTInQuery, ASTSelect, ASTApply, ASTInsertCommand, ASTUpdateCommand, ASTDeleteCommand, ASTOnConflict, ASTOnConflictDoNothing, ASTOnConflictDoUpdate, ASTSetOperation, ASTWindow, ASTFrameSpec, ASTFrameBound, ASTWith, ASTCTEDef } from './ast.js'
 export {
   serial,
   bigserial,
@@ -134,9 +134,66 @@ export {
   filter,
   // Scalar functions
   fn,
+  // Named scalar functions — String
+  lower,
+  upper,
+  length,
+  trim,
+  ltrim,
+  rtrim,
+  substring,
+  replace,
+  concatWs,
+  reverse,
+  repeat,
+  lpad,
+  rpad,
+  // Named scalar functions — Math
+  abs,
+  ceil,
+  floor,
+  round,
+  trunc,
+  sqrt,
+  sign,
+  random,
+  greatest,
+  least,
+  // Named scalar functions — Null handling
+  coalesce,
+  nullif,
+  // Named scalar functions — Date/time
+  now,
+  currentDate,
+  currentTime,
+  datePart,
+  dateTrunc,
+  toChar,
+  // Named scalar functions — UUID
+  genRandomUuid,
+  // Window functions
+  over,
+  rowNumber,
+  rank,
+  denseRank,
+  ntile,
+  lag,
+  lead,
+  firstValue,
+  lastValue,
+  nthValue,
+  // Frame bounds
+  unboundedPreceding,
+  unboundedFollowing,
+  currentRow,
+  preceding,
+  following,
+  // CTE
+  withCTE,
   // Alias / Literal
   alias,
   literal,
 } from './expressions.js'
-export { quarry, asc, desc, QuarryDB, SelectBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
+export type { OverOptions } from './expressions.js'
+export { quarry, asc, desc, QuarryDB, SelectBuilder, SetOperationBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
 export type { QuarrySession } from './builder.js'

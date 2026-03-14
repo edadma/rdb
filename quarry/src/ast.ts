@@ -30,6 +30,9 @@ export type ASTExpr =
   | ASTJoinRight
   | ASTJoinFull
   | ASTJoinCross
+  | ASTSetOperation
+  | ASTWindow
+  | ASTWith
 
 export interface ASTColumn {
   kind: 'column'
@@ -208,6 +211,46 @@ export interface ASTJoinCross {
   kind: 'joinCross'
   left: ASTExpr
   right: ASTExpr
+}
+
+export interface ASTSetOperation {
+  kind: 'setOperation'
+  op: 'UNION' | 'UNION ALL' | 'INTERSECT' | 'EXCEPT'
+  left: ASTExpr
+  right: ASTExpr
+}
+
+export interface ASTWindow {
+  kind: 'window'
+  func: ASTExpr
+  partitionBy?: ASTExpr[]
+  orderBy?: ASTOrderBy[]
+  frame?: ASTFrameSpec
+}
+
+export interface ASTFrameSpec {
+  start: ASTFrameBound
+  end: ASTFrameBound
+}
+
+export type ASTFrameBound =
+  | { kind: 'unboundedPreceding' }
+  | { kind: 'unboundedFollowing' }
+  | { kind: 'currentRow' }
+  | { kind: 'preceding'; n: number }
+  | { kind: 'following'; n: number }
+
+export interface ASTWith {
+  kind: 'with'
+  ctes: ASTCTEDef[]
+  query: ASTExpr
+  recursive?: boolean
+}
+
+export interface ASTCTEDef {
+  name: string
+  columns?: string[]
+  query: ASTExpr
 }
 
 // ── Commands ──

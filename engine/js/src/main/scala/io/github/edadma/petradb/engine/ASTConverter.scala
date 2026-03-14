@@ -82,6 +82,27 @@ object ASTConverter:
         FullJoinOperator(toExpr(obj.left), toExpr(obj.right), toExpr(obj.on))
       case "joinCross" =>
         CrossOperator(toExpr(obj.left), toExpr(obj.right))
+      case "setOperation" =>
+        val op = obj.op.asInstanceOf[String]
+        op match
+          case "UNION"     => UnionOperator(toExpr(obj.left), toExpr(obj.right), all = false)
+          case "UNION ALL" => UnionOperator(toExpr(obj.left), toExpr(obj.right), all = true)
+          case "INTERSECT" => IntersectOperator(toExpr(obj.left), toExpr(obj.right))
+          case "EXCEPT"    => ExceptOperator(toExpr(obj.left), toExpr(obj.right))
+          case k           => throw js.JavaScriptException(js.Error(s"Unknown set operation: $k"))
+      case "window" =>
+        toWindowExpr(obj)
+      case "with" =>
+        val recursive =
+          if js.isUndefined(obj.recursive) || obj.recursive == null then false
+          else obj.recursive.asInstanceOf[Boolean]
+        val ctes = obj.ctes.asInstanceOf[js.Array[js.Dynamic]].map { c =>
+          val columns =
+            if js.isUndefined(c.columns) || c.columns == null then None
+            else Some(c.columns.asInstanceOf[js.Array[String]].map(ident).toSeq)
+          CTEDef(ident(c.name.asInstanceOf[String]), columns, toExpr(c.query))
+        }.toSeq
+        WithExpr(ctes, toExpr(obj.query), recursive)
       case k => throw js.JavaScriptException(js.Error(s"Unknown expression kind: $k"))
 
     e.pos = NoPosition
@@ -222,6 +243,36 @@ object ASTConverter:
       else obj.ifNotExists.asInstanceOf[Boolean]
 
     CreateTableCommand(table, columns, Seq.empty, ifNotExists)
+
+  private def toWindowExpr(obj: js.Dynamic): WindowExpr =
+    val func = toExpr(obj.func)
+    val partitionBy =
+      if js.isUndefined(obj.partitionBy) || obj.partitionBy == null then Seq.empty
+      else obj.partitionBy.asInstanceOf[js.Array[js.Dynamic]].map(toExpr).toSeq
+    val orderBy =
+      if js.isUndefined(obj.orderBy) || obj.orderBy == null then Seq.empty
+      else obj.orderBy.asInstanceOf[js.Array[js.Dynamic]].map { o =>
+        val dir = o.direction.asInstanceOf[String]
+        val nf =
+          if js.isUndefined(o.nullsFirst) || o.nullsFirst == null then dir == "asc"
+          else o.nullsFirst.asInstanceOf[Boolean]
+        OrderBy(toExpr(o.expr), dir == "asc", nf)
+      }.toSeq
+    val frame =
+      if js.isUndefined(obj.frame) || obj.frame == null then None
+      else
+        val f = obj.frame.asInstanceOf[js.Dynamic]
+        Some(FrameSpec(toFrameBound(f.start), toFrameBound(f.end)))
+    WindowExpr(func, partitionBy, orderBy, frame)
+
+  private def toFrameBound(obj: js.Dynamic): FrameBound =
+    obj.kind.asInstanceOf[String] match
+      case "unboundedPreceding" => UnboundedPreceding
+      case "unboundedFollowing" => UnboundedFollowing
+      case "currentRow"         => CurrentRow
+      case "preceding"          => Preceding(obj.n.asInstanceOf[Int])
+      case "following"          => Following(obj.n.asInstanceOf[Int])
+      case k => throw js.JavaScriptException(js.Error(s"Unknown frame bound kind: $k"))
 
   private def ident(name: String): Ident =
     val id = Ident(name)

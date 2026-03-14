@@ -1,4 +1,4 @@
-import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTInQuery, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery } from './ast.js'
+import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTInQuery, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTWindow, ASTOrderBy, ASTFrameSpec, ASTWith, ASTCTEDef } from './ast.js'
 import type { ColumnDef, TableDef, ColumnsConfig } from './schema.js'
 
 // ── Generic operator helpers ──
@@ -417,6 +417,171 @@ export function alias(expr: ASTExpr, name: string): ASTExpr {
 export function literal(value: string | number | boolean | null): ASTExpr {
   return toExpr(value)
 }
+
+// ── Window functions ──
+
+export interface OverOptions {
+  partitionBy?: ASTExpr[]
+  orderBy?: ASTOrderBy[]
+  frame?: ASTFrameSpec
+}
+
+export function over(func: ASTExpr, opts: OverOptions = {}): ASTWindow {
+  return {
+    kind: 'window',
+    func,
+    partitionBy: opts.partitionBy,
+    orderBy: opts.orderBy,
+    frame: opts.frame,
+  }
+}
+
+export function rowNumber(opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'row_number', args: [] }, opts)
+}
+
+export function rank(opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'rank', args: [] }, opts)
+}
+
+export function denseRank(opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'dense_rank', args: [] }, opts)
+}
+
+export function ntile(buckets: number, opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'ntile', args: [{ kind: 'number', value: buckets }] }, opts)
+}
+
+export function lag(expr: ASTExpr, offset: number = 1, defaultVal?: ASTExpr | string | number | boolean | null, opts: OverOptions = {}): ASTWindow {
+  const args: ASTExpr[] = [expr, { kind: 'number', value: offset }]
+  if (defaultVal !== undefined) args.push(toExpr(defaultVal))
+  return over({ kind: 'apply', func: 'lag', args }, opts)
+}
+
+export function lead(expr: ASTExpr, offset: number = 1, defaultVal?: ASTExpr | string | number | boolean | null, opts: OverOptions = {}): ASTWindow {
+  const args: ASTExpr[] = [expr, { kind: 'number', value: offset }]
+  if (defaultVal !== undefined) args.push(toExpr(defaultVal))
+  return over({ kind: 'apply', func: 'lead', args }, opts)
+}
+
+export function firstValue(expr: ASTExpr, opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'first_value', args: [expr] }, opts)
+}
+
+export function lastValue(expr: ASTExpr, opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'last_value', args: [expr] }, opts)
+}
+
+export function nthValue(expr: ASTExpr, n: number, opts: OverOptions = {}): ASTWindow {
+  return over({ kind: 'apply', func: 'nth_value', args: [expr, { kind: 'number', value: n }] }, opts)
+}
+
+// ── Frame bound helpers ──
+
+export const unboundedPreceding = { kind: 'unboundedPreceding' as const }
+export const unboundedFollowing = { kind: 'unboundedFollowing' as const }
+export const currentRow = { kind: 'currentRow' as const }
+export function preceding(n: number) { return { kind: 'preceding' as const, n } }
+export function following(n: number) { return { kind: 'following' as const, n } }
+
+// ── CTE helpers ──
+
+export function withCTE(
+  ctes: { name: string; columns?: string[]; query: ASTExpr }[],
+  query: ASTExpr,
+  opts?: { recursive?: boolean },
+): ASTExpr {
+  return {
+    kind: 'with',
+    ctes: ctes.map((c) => ({ name: c.name, columns: c.columns, query: c.query })),
+    query,
+    recursive: opts?.recursive,
+  }
+}
+
+// ── Named scalar function helpers ──
+
+// String functions
+export function lower(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'lower', args: [expr] } }
+export function upper(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'upper', args: [expr] } }
+export function length(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'length', args: [expr] } }
+export function trim(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'trim', args: [expr] } }
+export function ltrim(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'ltrim', args: [expr] } }
+export function rtrim(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'rtrim', args: [expr] } }
+export function substring(expr: ASTExpr, from: number, len?: number): ASTApply {
+  const args: ASTExpr[] = [expr, { kind: 'number', value: from }]
+  if (len !== undefined) args.push({ kind: 'number', value: len })
+  return { kind: 'apply', func: 'substring', args }
+}
+export function replace(expr: ASTExpr, from: ASTExpr | string, to: ASTExpr | string): ASTApply {
+  return { kind: 'apply', func: 'replace', args: [expr, toExpr(from), toExpr(to)] }
+}
+export function concatWs(separator: string, ...exprs: ASTExpr[]): ASTApply {
+  return { kind: 'apply', func: 'concat_ws', args: [{ kind: 'string', value: separator }, ...exprs] }
+}
+export function reverse(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'reverse', args: [expr] } }
+export function repeat(expr: ASTExpr, n: number): ASTApply {
+  return { kind: 'apply', func: 'repeat', args: [expr, { kind: 'number', value: n }] }
+}
+export function lpad(expr: ASTExpr, len: number, fill?: string): ASTApply {
+  const args: ASTExpr[] = [expr, { kind: 'number', value: len }]
+  if (fill !== undefined) args.push({ kind: 'string', value: fill })
+  return { kind: 'apply', func: 'lpad', args }
+}
+export function rpad(expr: ASTExpr, len: number, fill?: string): ASTApply {
+  const args: ASTExpr[] = [expr, { kind: 'number', value: len }]
+  if (fill !== undefined) args.push({ kind: 'string', value: fill })
+  return { kind: 'apply', func: 'rpad', args }
+}
+
+// Math functions
+export function abs(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'abs', args: [expr] } }
+export function ceil(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'ceil', args: [expr] } }
+export function floor(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'floor', args: [expr] } }
+export function round(expr: ASTExpr, scale?: number): ASTApply {
+  const args: ASTExpr[] = [expr]
+  if (scale !== undefined) args.push({ kind: 'number', value: scale })
+  return { kind: 'apply', func: 'round', args }
+}
+export function trunc(expr: ASTExpr, scale?: number): ASTApply {
+  const args: ASTExpr[] = [expr]
+  if (scale !== undefined) args.push({ kind: 'number', value: scale })
+  return { kind: 'apply', func: 'trunc', args }
+}
+export function sqrt(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'sqrt', args: [expr] } }
+export function sign(expr: ASTExpr): ASTApply { return { kind: 'apply', func: 'sign', args: [expr] } }
+export function random(): ASTApply { return { kind: 'apply', func: 'random', args: [] } }
+export function greatest(...exprs: (ASTExpr | string | number)[]): ASTApply {
+  return { kind: 'apply', func: 'greatest', args: exprs.map(toExpr) }
+}
+export function least(...exprs: (ASTExpr | string | number)[]): ASTApply {
+  return { kind: 'apply', func: 'least', args: exprs.map(toExpr) }
+}
+
+// Null-handling
+export function coalesce(...exprs: (ASTExpr | string | number | boolean | null)[]): ASTApply {
+  return { kind: 'apply', func: 'coalesce', args: exprs.map(toExpr) }
+}
+export function nullif(expr1: ASTExpr, expr2: ASTExpr | string | number | boolean | null): ASTApply {
+  return { kind: 'apply', func: 'nullif', args: [expr1, toExpr(expr2)] }
+}
+
+// Date/time
+export function now(): ASTApply { return { kind: 'apply', func: 'now', args: [] } }
+export function currentDate(): ASTApply { return { kind: 'apply', func: 'current_date', args: [] } }
+export function currentTime(): ASTApply { return { kind: 'apply', func: 'current_time', args: [] } }
+export function datePart(part: string, expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'date_part', args: [{ kind: 'string', value: part }, expr] }
+}
+export function dateTrunc(part: string, expr: ASTExpr): ASTApply {
+  return { kind: 'apply', func: 'date_trunc', args: [{ kind: 'string', value: part }, expr] }
+}
+export function toChar(expr: ASTExpr, format: string): ASTApply {
+  return { kind: 'apply', func: 'to_char', args: [expr, { kind: 'string', value: format }] }
+}
+
+// UUID
+export function genRandomUuid(): ASTApply { return { kind: 'apply', func: 'gen_random_uuid', args: [] } }
 
 // ── Internal ──
 
