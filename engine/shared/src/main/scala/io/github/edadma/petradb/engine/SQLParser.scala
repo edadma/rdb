@@ -1158,15 +1158,18 @@ object SQLParser:
 
   // ── DDL: CREATE/DROP INDEX ─────────────────────────────────────────
 
-  // CREATE [UNIQUE] INDEX name ON table [USING method] (cols)
+  // CREATE [UNIQUE] INDEX name ON table [USING method] (cols/exprs) [WHERE cond]
+  private def indexElement[p: P]: P[Either[Ident, Expr]] =
+    P(("(" ~ expression ~ ")").map(e => Right(e)) | identifier.map(id => Left(id)))
+
   private def createIndex[p: P]: P[Command] =
-    P(kw("create") ~ kw("unique").!.? ~ kw("index") ~ identifier ~ kw("on") ~ tableIdent ~ (kw("using") ~ identifier).? ~ "(" ~ identifier.rep(1, sep = ",") ~ ")").map {
-      case (u, name, table, method, cols) =>
+    P(kw("create") ~ kw("unique").!.? ~ kw("index") ~ identifier ~ kw("on") ~ tableIdent ~ (kw("using") ~ identifier).? ~ "(" ~ indexElement.rep(1, sep = ",") ~ ")" ~ (kw("where") ~ expression).?).map {
+      case (u, name, table, method, cols, where) =>
         method.foreach { m =>
           if m.name.toLowerCase != "btree" then
             throw SchemaException(m.pos, s"index method '${m.name}' is not supported, only 'btree' is available")
         }
-        CreateIndexCommand(name, table, cols, u.isDefined)
+        CreateIndexCommand(name, table, cols, u.isDefined, where)
     }
 
   private def dropIndex[p: P]: P[Command] =

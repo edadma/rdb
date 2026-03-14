@@ -152,7 +152,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     super.dropType(name)
     persistCatalog()
 
-  override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
+  override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, whereExpr: Option[Expr] = None, exprKeys: Option[Seq[Expr]] = None): Unit =
     withBatch { batch =>
       createPersistentIndex(indexName, tableName, columnNames, unique, batch)
       writeCatalogInBatch(batch)

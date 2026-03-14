@@ -6,7 +6,16 @@ import io.github.edadma.bptree.MemoryBPlusTree
 import io.github.edadma.dllist.DLListNode
 import io.github.edadma.stow.PageId
 
-case class IndexMeta(name: String, tableName: String, columns: Seq[String], unique: Boolean, treeRecordPage: Int = 0, nextRowId: Long = 0)
+case class IndexMeta(
+    name: String,
+    tableName: String,
+    columns: Seq[String],
+    unique: Boolean,
+    treeRecordPage: Int = 0,
+    nextRowId: Long = 0,
+    whereExpr: Option[Expr] = None,
+    exprKeys: Option[Seq[Expr]] = None,
+)
 
 trait TableIndex:
   def meta: IndexMeta

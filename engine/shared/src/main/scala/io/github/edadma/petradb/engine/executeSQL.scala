@@ -816,14 +816,31 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
               sys.error(s"cannot truncate table '$table': rows in '${childTable.name}' reference it")
         t.truncate()
         TruncateResult(table)
-      case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique) =>
+      case CreateIndexCommand(id @ Ident(indexName), tid @ Ident(tableName), columns, unique, where) =>
 
         if !session.hasTable(tableName) then throw UndefinedReferenceException(tid.pos, s"unknown table: $tableName")
         if db.hasIndex(indexName) then throw SchemaException(id.pos, s"index '$indexName' already exists")
         val t = db.getTable(tableName).get
-        for col @ Ident(colName) <- columns do
-          if !t.hasColumn(colName) then throw UndefinedReferenceException(col.pos, s"column '$colName' not found in table '$tableName'")
-        db.createIndex(indexName, tableName, columns.map(_.name), unique)
+
+        // Resolve column names (for plain columns) and validate
+        val colNames = columns.map {
+          case Left(col @ Ident(colName)) =>
+            if !t.hasColumn(colName) then throw UndefinedReferenceException(col.pos, s"column '$colName' not found in table '$tableName'")
+            colName
+          case Right(_) => null // expression indexes don't map to a single column name
+        }
+
+        val exprKeys: Option[Seq[Expr]] =
+          if columns.exists(_.isRight) then
+            Some(columns.map {
+              case Left(Ident(colName)) => ColumnExpr(None, Ident(colName))
+              case Right(expr) => rewrite(expr)
+            })
+          else None
+
+        val resolvedWhere = where.map(rewrite)
+
+        db.createIndex(indexName, tableName, colNames, unique, resolvedWhere, exprKeys)
         CreateIndexResult(indexName)
       case DropIndexCommand(id @ Ident(name), ifExists) =>
 

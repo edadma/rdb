@@ -36,7 +36,7 @@ case class ExplainCommand(command: Command) extends Command
 case class TruncateCommand(table: Ident)                                                                 extends Command
 case class AlterTableCommand(table: Ident, alter: TableAlteration)                                       extends Command
 case class DropTableCommand(table: Ident, ifExists: Boolean = false, cascade: Boolean = false)         extends Command
-case class CreateIndexCommand(name: Ident, table: Ident, columns: Seq[Ident], unique: Boolean)         extends Command
+case class CreateIndexCommand(name: Ident, table: Ident, columns: Seq[Either[Ident, Expr]], unique: Boolean, where: Option[Expr] = None) extends Command
 case class DropIndexCommand(name: Ident, ifExists: Boolean = false)                                    extends Command
 case class DropTypeCommand(name: Ident, ifExists: Boolean = false, cascade: Boolean = false)          extends Command
 case class PrepareCommand(name: Ident, commands: Seq[Command])    extends Command

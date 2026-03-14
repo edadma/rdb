@@ -127,25 +127,38 @@ class MemoryDB extends DB:
         case _ =>
     table
 
-  override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit =
+  override def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, whereExpr: Option[Expr] = None, exprKeys: Option[Seq[Expr]] = None): Unit =
     val table = tables(resolveKey(tableName)).asInstanceOf[MemoryTable]
-    val colIndices = columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
+    val colIndices = exprKeys match
+      case Some(_) => IndexedSeq.empty // expression indexes don't map to column indices directly
+      case None => columnNames.map(c => table.meta.columnMap(c)._1).toIndexedSeq
 
     given Ordering[IndexedSeq[Value]] = ValueSeqOrdering
     val tree = new MemoryBPlusTree[IndexedSeq[Value], DLListNode[Array[Value]]](50)
 
     var rowId = 0L
     for node <- table.data.nodeIterator do
-      val baseKey = colIndices.map(i => node.element(i): Value)
-      val key = if unique then baseKey else baseKey :+ NumberValue(rowId.toInt)
-      if unique then
-        if tree.insertIfNotFound(key, node) then
-          sys.error(s"could not create unique index '$indexName': duplicate key found")
-      else
-        tree.insert(key, node)
+      val rowData = node.element.toIndexedSeq.map(v => v: Value)
+      val row = Row(rowData, table.meta, None, None)
+
+      // For partial indexes, skip rows that don't match the WHERE condition
+      val include = whereExpr match
+        case Some(cond) => beval(cond, Seq(row))
+        case None => true
+
+      if include then
+        val baseKey = exprKeys match
+          case Some(exprs) => exprs.map(e => eval(e, Seq(row))).toIndexedSeq
+          case None => colIndices.map(i => node.element(i): Value)
+        val key = if unique then baseKey else baseKey :+ NumberValue(rowId.toInt)
+        if unique then
+          if tree.insertIfNotFound(key, node) then
+            sys.error(s"could not create unique index '$indexName': duplicate key found")
+        else
+          tree.insert(key, node)
       rowId += 1
 
-    val meta = IndexMeta(indexName, resolveKey(tableName), columnNames, unique, nextRowId = rowId)
+    val meta = IndexMeta(indexName, resolveKey(tableName), columnNames, unique, nextRowId = rowId, whereExpr = whereExpr, exprKeys = exprKeys)
     val idx = MemoryTableIndex(meta, colIndices, tree, rowId)
     indexes(indexName) = meta
     table.tableIndexes(indexName) = idx
@@ -246,23 +259,34 @@ class MemoryTable(name: String, specs: Seq[Spec], private[engine] val db: Memory
     try
       for (idxName, idx) <- tableIndexes do
         val midx = idx.asInstanceOf[MemoryTableIndex]
-        val baseKey = midx.columnIndices.map(i => arr(i): Value)
-        if midx.meta.unique then
-          if baseKey.exists(_.isNull) then
-            // NULLs are always distinct for UNIQUE constraint purposes
+        val rowData = arr.toIndexedSeq.map(v => v: Value)
+        val rowObj = Row(rowData, meta, None, None)
+
+        // For partial indexes, skip rows that don't match the WHERE condition
+        val include = midx.meta.whereExpr match
+          case Some(cond) => beval(cond, Seq(rowObj))
+          case None => true
+
+        if include then
+          val baseKey = midx.meta.exprKeys match
+            case Some(exprs) => exprs.map(e => eval(e, Seq(rowObj))).toIndexedSeq
+            case None => midx.columnIndices.map(i => arr(i): Value)
+          if midx.meta.unique then
+            if baseKey.exists(_.isNull) then
+              // NULLs are always distinct for UNIQUE constraint purposes
+              val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
+              midx.nextRowId += 1
+              midx.tree.insert(key, node)
+              inserted += ((midx, key))
+            else if midx.tree.insertIfNotFound(baseKey, node) then
+              sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
+            else
+              inserted += ((midx, baseKey))
+          else
             val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
             midx.nextRowId += 1
             midx.tree.insert(key, node)
             inserted += ((midx, key))
-          else if midx.tree.insertIfNotFound(baseKey, node) then
-            sys.error(s"duplicate key value violates unique constraint \"${midx.meta.name}\"")
-          else
-            inserted += ((midx, baseKey))
-        else
-          val key = baseKey :+ NumberValue(midx.nextRowId.toInt)
-          midx.nextRowId += 1
-          midx.tree.insert(key, node)
-          inserted += ((midx, key))
     catch
       case e: Exception =>
         // Roll back: remove entries from indexes we already inserted into, then unlink the row

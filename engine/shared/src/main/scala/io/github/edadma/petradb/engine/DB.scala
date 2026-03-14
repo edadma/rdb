@@ -226,7 +226,7 @@ abstract class DB:
 
   def getSequence(name: String): Option[Sequence] = sequences.get(name)
 
-  def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean): Unit
+  def createIndex(indexName: String, tableName: String, columnNames: Seq[String], unique: Boolean, whereExpr: Option[Expr] = None, exprKeys: Option[Seq[Expr]] = None): Unit
 
   def alterTable(name: String, alteration: TableAlteration)(using Session): Unit =
     val t = tables(resolveKey(name))
