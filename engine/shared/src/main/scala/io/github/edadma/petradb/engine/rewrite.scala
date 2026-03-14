@@ -69,7 +69,7 @@ def window(expr: Expr): Boolean =
         els.exists(window)
     case _                           => false
 
-private val windowOnlyFunctions = Set("row_number", "rank", "dense_rank", "lag", "lead", "ntile")
+private val windowOnlyFunctions = Set("row_number", "rank", "dense_rank", "lag", "lead", "ntile", "first_value", "last_value", "nth_value")
 
 class WindowCollector:
   private val specs = mutable.ArrayBuffer[WindowSpec]()
@@ -99,6 +99,13 @@ class WindowCollector:
               case "ntile" =>
                 val buckets = eval(args.head, Nil).intValue
                 NtileKind(buckets)
+              case "first_value" =>
+                FirstValueKind(args.head)
+              case "last_value" =>
+                LastValueKind(args.head)
+              case "nth_value" =>
+                val n = eval(args(1), Nil).intValue
+                NthValueKind(args.head, n)
               case _ => sys.error(s"unresolved window function: $name")
           case AggregateFunctionExpr(f, args, filter) =>
             AggregateWindowKind(aggregateFunction(f.name), args, filter)
@@ -229,6 +236,18 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           if args.length != 1 then throw ParseException(id.pos, "NTILE requires exactly 1 argument")
           val rwArgs = args.map(rewrite)
           WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType NumberType
+        case "first_value" =>
+          if args.length != 1 then throw ParseException(id.pos, "FIRST_VALUE requires exactly 1 argument")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
+        case "last_value" =>
+          if args.length != 1 then throw ParseException(id.pos, "LAST_VALUE requires exactly 1 argument")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
+        case "nth_value" =>
+          if args.length != 2 then throw ParseException(id.pos, "NTH_VALUE requires exactly 2 arguments")
+          val rwArgs = args.map(rewrite)
+          WindowExpr(ApplyExpr(id, rwArgs, None), rwPartBy, rwOrdBy, frame) setType rwArgs.head.typ
         case _ =>
           aggregateFunction get func.toLowerCase match
             case Some(f) =>

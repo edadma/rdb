@@ -732,7 +732,7 @@ case class PreparedStatement(name: String, commands: Seq[Command]):
         case InsertCommand(_, _, rows, _, _)       => rows.flatMap(_.flatMap(countInExpr))
         case InsertSelectCommand(_, _, q, _, _)    => countInExpr(q)
         case UpdateCommand(_, sets, from, cond, _)  => sets.flatMap(s => countInExpr(s.value)) ++ from.toSeq.flatMap(_.flatMap(countInExpr)) ++ cond.toSeq.flatMap(countInExpr)
-        case DeleteCommand(_, cond, _)             => cond.toSeq.flatMap(countInExpr)
+        case DeleteCommand(_, using, cond, _)       => using.toSeq.flatMap(_.flatMap(countInExpr)) ++ cond.toSeq.flatMap(countInExpr)
         case _                                  => Nil
     commands.flatMap(countInCommand).maxOption.getOrElse(0)
 

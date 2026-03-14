@@ -1,6 +1,6 @@
 {
   "name": "@petradb/knex",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Knex.js dialect for PetraDB",
   "type": "module",
   "exports": {
@@ -20,7 +20,7 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "@petradb/engine": ">=1.4.0",
+    "@petradb/engine": ">=1.4.3",
     "knex": ">=2.0.0"
   },
   "devDependencies": {
