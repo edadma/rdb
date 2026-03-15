@@ -2,6 +2,131 @@
 title: Changelog
 ---
 
+## v1.5-20260315
+
+### PL/pgSQL — Stored Procedures, Functions, and Triggers
+
+Full procedural language support in DO blocks, stored functions, and stored procedures:
+
+- **DO blocks** — anonymous PL/pgSQL blocks with DECLARE, BEGIN...END
+- **Stored functions** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, callable in any SQL expression
+- **Stored procedures** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invoked with `CALL`
+- **Triggers** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
+  - BEFORE triggers can cancel operations by returning NULL
+  - AFTER triggers fire after the operation
+  - Triggers fire for INSERT, UPDATE, DELETE, and COPY FROM
+  - TG_OP, TG_TABLE_NAME, OLD, NEW variables available
+- **Control flow** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
+- **Persistence** — functions, procedures, and triggers survive close/reopen on PersistentDB and TextDB
+- **OR REPLACE** — overwrite existing functions and procedures
+
+### User-Defined Native Functions
+
+Register host-language callbacks as SQL functions, callable from queries, triggers, and procedures:
+
+- **Scala** — `db.registerScalarFunction("name", { args => result })`
+- **JavaScript** — `session.registerFunction("name", (args) => result)`
+- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` with SQLite-style typed value/context API
+
+### C Library and Cursor API
+
+- **Native shared library** — `libpetradb-engine.so` via Scala Native with `@exported` C-callable functions
+- **SQLite-style C API** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, typed column accessors
+- **User-defined functions** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
+- **Cursor API** — `session.openCursor(sql)` for lazy row-by-row iteration with `step()`, typed column accessors, `fetch(n)`, `move(n)`, parameterized queries
+- **C header** — `petradb.h` with full API documentation
+- **C test suite** — 67 tests
+- **Rust FFI test** — 38 tests proving cross-language interop
+
+### Virtual Tables
+
+- **Extensible framework** — `CREATE VIRTUAL TABLE name USING module(args)`, read-only, appears in SHOW TABLES
+- **Built-in CSV module** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` with header/delimiter options
+- **Custom modules** — `db.registerVirtualTableModule("name", module)` in Scala API
+
+### csv_file() Table Function
+
+Query CSV files directly without importing:
+
+```sql
+SELECT * FROM csv_file('data.csv');
+SELECT e.name, d.dept FROM csv_file('employees.csv') e
+  JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
+```
+
+### Advanced Indexes
+
+- **Partial indexes** — `CREATE INDEX ... WHERE condition` — only index rows matching the predicate
+- **Expression indexes** — `CREATE INDEX ... ON table ((expr))` — index computed values like `lower(email)`
+- **Combined** — partial + expression indexes work together
+
+### Window Functions
+
+- **FIRST_VALUE(expr)** — value at the first row of the window frame
+- **LAST_VALUE(expr)** — value at the last row of the window frame
+- **NTH_VALUE(expr, n)** — value at the nth row of the frame
+
+### DELETE ... USING
+
+Multi-table deletes matching PostgreSQL syntax:
+
+```sql
+DELETE FROM orders USING customers
+WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
+```
+
+### Quarry — Type-Safe AST Query Builder
+
+New `@petradb/quarry` package: type-safe query builder that generates AST objects (not SQL strings):
+
+- Schema definition with 21 column types
+- Full CRUD: select, insert, update, delete with type-safe column references
+- Joins: inner, left, right, full outer, cross with typed results
+- Expressions: 50+ operators, aggregates, CASE/CAST/EXISTS, subqueries
+- Upsert: `onConflictDoNothing()`, `onConflictDoUpdate()`
+- Table aliases for self-joins
+- Transactions, RETURNING, DISTINCT ON
+- Compile-time type tests for all features
+- Set operations: UNION, INTERSECT, EXCEPT
+- Window functions, CTEs, named scalar helpers
+
+### Bug Fixes
+
+- **ByteaValue** — `ARRAY[...]` into BYTEA columns now correctly produces `ByteaValue` instead of `ArrayValue`
+- **JS/Client result types** — added missing PL/pgSQL result type handlers (DoBlockResult, CreateFunctionResult, etc.) to prevent non-exhaustive match crashes
+- **Codecs** — added serialization for all new result types for client/server communication
+- **llms.txt** — fixed `type` field to `command` field, updated all result types and features
+
+### Module Rename
+
+- **shared → common** — renamed the shared types module from `petradb-shared` to `petradb-common`
+
+### Documentation
+
+- New **PL/pgSQL** reference page (triggers, functions, procedures, control flow)
+- New **C API** reference page (full SQLite-style interface)
+- New **Getting Started** guides for Java (JDBC) and C
+- Updated DDL docs: partial/expression indexes, CHECK constraints, triggers, stored routines
+- Updated DML docs: DELETE...USING, csv_file(), virtual tables
+- Updated JS/Scala API docs: registerFunction, result types
+- Landing page: four getting-started buttons (JS, Java, Scala, C)
+- Rewritten llms.txt with all current features
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.0 | — |
+| engine | 1.5.0 | @petradb/engine 1.5.0 |
+| client | 1.5.0 | @petradb/client 1.5.0 |
+| server | 1.5.0 | @petradb/server 1.5.0 |
+| cli | 1.5.0 | @petradb/cli 1.5.0 |
+| jdbc | 1.5.0 | — |
+| drizzle | — | @petradb/drizzle 1.5.0 |
+| knex | — | @petradb/knex 1.5.0 |
+| lucid | — | @petradb/lucid 1.5.0 |
+| quarry | — | @petradb/quarry 1.5.0 |
+
 ## v1.4-20260314
 
 ### Bug fixes & improvements
