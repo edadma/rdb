@@ -125,6 +125,17 @@ Every result has a `command` field for discrimination:
 { command: 'drop view', view: string }
 { command: 'create sequence', sequence: string }
 { command: 'drop sequence', sequence: string }
+{ command: 'create schema', schema: string }
+{ command: 'create trigger', trigger: string }
+{ command: 'drop trigger', trigger: string }
+
+// PL/pgSQL
+{ command: 'do' }
+{ command: 'create function', function: string }
+{ command: 'drop function', function: string }
+{ command: 'create procedure', procedure: string }
+{ command: 'drop procedure', procedure: string }
+{ command: 'call' }
 
 // Query plan
 { command: 'explain', plan: string }
