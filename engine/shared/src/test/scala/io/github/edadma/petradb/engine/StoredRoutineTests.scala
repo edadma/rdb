@@ -347,6 +347,93 @@ class StoredRoutineTests extends AnyFreeSpec with Matchers with Testing {
   // NEGATIVE TESTS
   // ══════════════════════════════════════════════════════════════════
 
+  // ══════════════════════════════════════════════════════════════════
+  // SOURCE ROUNDTRIP
+  // ══════════════════════════════════════════════════════════════════
+
+  "source roundtrip" - {
+    "function source can be re-executed" in {
+      val session = setupSession(
+        """
+          |CREATE FUNCTION add_nums(a INT, b INT) RETURNS INT AS $$
+          |BEGIN
+          |  RETURN a + b;
+          |END $$ LANGUAGE plpgsql;
+          |""".stripMargin
+      )
+      given Session = session
+
+      // Get the stored source
+      val sf = session.db.storedFunctions("add_nums")
+      val source = sf.source
+
+      // Drop the function and re-create from source
+      executeSQL("DROP FUNCTION add_nums;")
+      executeSQL(source + ";")
+
+      // Verify it works
+      val table = executeSQL("SELECT add_nums(10, 20) AS val;").collect { case QueryResult(t) => t }.last
+      table.data(0).data(0) shouldBe NumberValue(30)
+    }
+
+    "procedure source can be re-executed" in {
+      val session = setupSession(
+        """
+          |CREATE TABLE t (val INT);
+          |CREATE PROCEDURE insert_doubled(x INT) AS $$
+          |BEGIN
+          |  INSERT INTO t VALUES (x * 2);
+          |END $$ LANGUAGE plpgsql;
+          |""".stripMargin
+      )
+      given Session = session
+
+      val sp = session.db.storedProcedures("insert_doubled")
+      val source = sp.source
+      executeSQL("DROP PROCEDURE insert_doubled;")
+      executeSQL(source + ";")
+
+      executeSQL("CALL insert_doubled(21);")
+      val table = executeSQL("SELECT val FROM t;").collect { case QueryResult(t) => t }.last
+      table.data(0).data(0) shouldBe NumberValue(42)
+    }
+
+    "complex function source roundtrips" in {
+      val session = setupSession(
+        """
+          |CREATE FUNCTION classify(n INT) RETURNS TEXT AS $$
+          |DECLARE
+          |  label TEXT;
+          |BEGIN
+          |  IF n > 100 THEN
+          |    label := 'big';
+          |  ELSIF n > 10 THEN
+          |    label := 'medium';
+          |  ELSE
+          |    label := 'small';
+          |  END IF;
+          |  RETURN label;
+          |END $$ LANGUAGE plpgsql;
+          |""".stripMargin
+      )
+      given Session = session
+
+      val source = session.db.storedFunctions("classify").source
+      executeSQL("DROP FUNCTION classify;")
+      executeSQL(source + ";")
+
+      val table = executeSQL("SELECT classify(5) AS c1, classify(50) AS c2, classify(500) AS c3;")
+        .collect { case QueryResult(t) => t }.last
+      table.data(0).data(0) shouldBe TextValue("small")
+      table.data(0).data(1) shouldBe TextValue("medium")
+      table.data(0).data(2) shouldBe TextValue("big")
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // NEGATIVE TESTS
+  // ══════════════════════════════════════════════════════════════════
+
   "errors" - {
     "duplicate function without OR REPLACE fails" in {
       an[Exception] should be thrownBy {

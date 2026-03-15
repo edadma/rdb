@@ -40,10 +40,12 @@ case class StoredFunction(
     params: Seq[(String, Type)],
     returnType: Type,
     block: Block,
+    source: String,
 )
 
 case class StoredProcedure(
     name: String,
     params: Seq[(String, Type)],
     block: Block,
+    source: String,
 )

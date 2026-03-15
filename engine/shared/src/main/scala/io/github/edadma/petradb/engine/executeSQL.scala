@@ -88,7 +88,8 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
       val resolvedReturn = retType match
         case Left(t) => t
         case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
-      db.storedFunctions(lname) = StoredFunction(lname, resolvedParams, resolvedReturn, block)
+      val source = functionToSQL(lname, resolvedParams, resolvedReturn, block)
+      db.storedFunctions(lname) = StoredFunction(lname, resolvedParams, resolvedReturn, block, source)
       CreateFunctionResult(name)
     case CreateProcedureCommand(Ident(name), params, block, orReplace) =>
       val lname = name.toLowerCase
@@ -100,7 +101,8 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
           case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
         (pname, typ)
       }
-      db.storedProcedures(lname) = StoredProcedure(lname, resolvedParams, block)
+      val source = procedureToSQL(lname, resolvedParams, block)
+      db.storedProcedures(lname) = StoredProcedure(lname, resolvedParams, block, source)
       CreateProcedureResult(name)
     case DropFunctionCommand(Ident(name), ifExists) =>
       val lname = name.toLowerCase

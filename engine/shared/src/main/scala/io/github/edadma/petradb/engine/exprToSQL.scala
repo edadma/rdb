@@ -232,3 +232,97 @@ private def opPrec(op: String): Int =
     case "@>" | "<@" | "&&" | "?" | "?|" | "?&"
        | "IS DISTINCT FROM" | "IS NOT DISTINCT FROM" => 4
     case _                                        => 4
+
+// ── PL/pgSQL block → SQL source ────────────────────────────────────
+
+def typeToSQL(t: Either[Type, Ident]): String = t match
+  case Left(typ)      => typ.name.toUpperCase
+  case Right(Ident(n)) => n
+
+def blockToSQL(block: Block): String =
+  val sb = new StringBuilder
+
+  if block.declarations.nonEmpty then
+    sb.append("DECLARE\n")
+    for VarDecl(Ident(name), typ, default) <- block.declarations do
+      sb.append(s"  $name ${typeToSQL(typ)}")
+      default.foreach(d => sb.append(s" := ${exprToSQL(d)}"))
+      sb.append(";\n")
+
+  sb.append("BEGIN\n")
+  for stmt <- block.body do
+    stmtToSQL(stmt, sb, "  ")
+  if block.exceptionHandlers.nonEmpty then
+    sb.append("EXCEPTION\n")
+    for ExceptionHandler(cond, body) <- block.exceptionHandlers do
+      sb.append(s"  WHEN $cond THEN\n")
+      for stmt <- body do stmtToSQL(stmt, sb, "    ")
+  sb.append("END")
+  sb.toString
+
+private def stmtToSQL(stmt: Statement, sb: StringBuilder, indent: String): Unit =
+  stmt match
+    case SqlStatement(cmd) =>
+      sb.append(s"$indent${commandToSQL(cmd)};\n")
+    case AssignStatement(Ident(name), expr) =>
+      sb.append(s"$indent$name := ${exprToSQL(expr)};\n")
+    case IfStatement(cond, thenBody, elsifs, elseBody) =>
+      sb.append(s"${indent}IF ${exprToSQL(cond)} THEN\n")
+      thenBody.foreach(stmtToSQL(_, sb, indent + "  "))
+      for (c, body) <- elsifs do
+        sb.append(s"${indent}ELSIF ${exprToSQL(c)} THEN\n")
+        body.foreach(stmtToSQL(_, sb, indent + "  "))
+      elseBody.foreach { body =>
+        sb.append(s"${indent}ELSE\n")
+        body.foreach(stmtToSQL(_, sb, indent + "  "))
+      }
+      sb.append(s"${indent}END IF;\n")
+    case WhileStatement(cond, body) =>
+      sb.append(s"${indent}WHILE ${exprToSQL(cond)} LOOP\n")
+      body.foreach(stmtToSQL(_, sb, indent + "  "))
+      sb.append(s"${indent}END LOOP;\n")
+    case ForRangeStatement(Ident(v), lower, upper, body) =>
+      sb.append(s"${indent}FOR $v IN ${exprToSQL(lower)}..${exprToSQL(upper)} LOOP\n")
+      body.foreach(stmtToSQL(_, sb, indent + "  "))
+      sb.append(s"${indent}END LOOP;\n")
+    case ForQueryStatement(Ident(v), query, body) =>
+      sb.append(s"${indent}FOR $v IN ${commandToSQL(query)} LOOP\n")
+      body.foreach(stmtToSQL(_, sb, indent + "  "))
+      sb.append(s"${indent}END LOOP;\n")
+    case ReturnStatement =>
+      sb.append(s"${indent}RETURN;\n")
+    case ReturnValueStatement(expr) =>
+      sb.append(s"${indent}RETURN ${exprToSQL(expr)};\n")
+    case RaiseStatement(level, fmt, args) =>
+      val argsStr = if args.isEmpty then "" else ", " + args.map(exprToSQL).mkString(", ")
+      sb.append(s"${indent}RAISE $level '$fmt'$argsStr;\n")
+    case PerformStatement(query) =>
+      sb.append(s"${indent}PERFORM ${exprToSQL(query)};\n")
+    case NullStatement =>
+      sb.append(s"${indent}NULL;\n")
+
+private def commandToSQL(cmd: Command): String =
+  cmd match
+    case QueryCommand(query) => exprToSQL(query)
+    case InsertCommand(Ident(table), columns, rows, _, _) =>
+      val cols = columns.map(_.map(_.name).mkString("(", ", ", ")")).getOrElse("")
+      val vals = rows.map(r => s"(${r.map(exprToSQL).mkString(", ")})").mkString(", ")
+      s"INSERT INTO $table $cols VALUES $vals"
+    case UpdateCommand(Ident(table), sets, _, cond, _) =>
+      val setStr = sets.map(s => s"${s.col.name} = ${exprToSQL(s.value)}").mkString(", ")
+      val whereStr = cond.map(c => s" WHERE ${exprToSQL(c)}").getOrElse("")
+      s"UPDATE $table SET $setStr$whereStr"
+    case DeleteCommand(Ident(table), _, cond, _) =>
+      val whereStr = cond.map(c => s" WHERE ${exprToSQL(c)}").getOrElse("")
+      s"DELETE FROM $table$whereStr"
+    case CreateTableCommand(Ident(table), _, _, _, _) =>
+      s"CREATE TABLE $table (...)"
+    case _ => cmd.toString
+
+def functionToSQL(name: String, params: Seq[(String, Type)], retType: Type, block: Block): String =
+  val paramStr = params.map((n, t) => s"$n ${t.name.toUpperCase}").mkString(", ")
+  s"CREATE OR REPLACE FUNCTION $name($paramStr) RETURNS ${retType.name.toUpperCase} AS $$$$\n${blockToSQL(block)}\n$$$$ LANGUAGE plpgsql"
+
+def procedureToSQL(name: String, params: Seq[(String, Type)], block: Block): String =
+  val paramStr = params.map((n, t) => s"$n ${t.name.toUpperCase}").mkString(", ")
+  s"CREATE OR REPLACE PROCEDURE $name($paramStr) AS $$$$\n${blockToSQL(block)}\n$$$$ LANGUAGE plpgsql"
