@@ -27,6 +27,15 @@ export default defineConfig({
 		}),
 		starlight({
 			title: 'PetraDB',
+			defaultLocale: 'root',
+			locales: {
+				root: { label: 'English', lang: 'en' },
+				zh: { label: '简体中文', lang: 'zh-CN' },
+				ja: { label: '日本語', lang: 'ja' },
+				fr: { label: 'Français', lang: 'fr' },
+				es: { label: 'Español', lang: 'es' },
+				pt: { label: 'Português', lang: 'pt-BR' },
+			},
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/edadma/petradb' },
 				{ icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/@petradb/engine' },
