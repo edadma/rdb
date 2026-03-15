@@ -20,4 +20,4 @@ from petradb._binding import _lib, _ensure_loaded
 from petradb._database import Database, Cursor, Row
 
 __all__ = ['Database', 'Cursor', 'Row']
-__version__ = '1.5.0'
+__version__ = '1.5.1'
