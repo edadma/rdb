@@ -1531,13 +1531,32 @@ object SQLParser:
       case (ie, name) => DropProcedureCommand(name, ie.isDefined)
     }
 
+  private def triggerTiming[p: P]: P[String] =
+    P(kw("before").!.map(_ => "before") | kw("after").!.map(_ => "after"))
+
+  private def triggerEvent[p: P]: P[String] =
+    P(kw("insert").!.map(_ => "insert") | kw("update").!.map(_ => "update") | kw("delete").!.map(_ => "delete"))
+
+  private def createTrigger[p: P]: P[Command] =
+    P(kw("create") ~ kw("trigger") ~ identifier ~ triggerTiming ~ triggerEvent ~
+      kw("on") ~ tableIdent ~ kw("for") ~ kw("each") ~ kw("row") ~
+      kw("execute") ~ kw("function") ~ identifier ~ "(" ~ ")").map {
+      case (name, timing, event, table, funcName) =>
+        CreateTriggerCommand(name, timing, event, table, funcName)
+    }
+
+  private def dropTrigger[p: P]: P[Command] =
+    P(kw("drop") ~ kw("trigger") ~ (kw("if") ~ kw("exists")).!.? ~ identifier ~ kw("on") ~ tableIdent).map {
+      case (ie, name, table) => DropTriggerCommand(name, table, ie.isDefined)
+    }
+
   private def callProcedure[p: P]: P[Command] =
     P(kw("call") ~ identifier ~ "(" ~ expression.rep(sep = ",") ~ ")").map {
       case (name, args) => CallCommand(name, args)
     }
 
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createSequence | createView | createVirtualTable | createFunction | createProcedure | createTable | createIndex | createType | dropFunction | dropProcedure | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
+    P(createSchema | createSequence | createView | createVirtualTable | createFunction | createProcedure | createTrigger | createTable | createIndex | createType | dropTrigger | dropFunction | dropProcedure | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
     P(callProcedure | copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))

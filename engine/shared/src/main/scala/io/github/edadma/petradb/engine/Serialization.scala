@@ -563,6 +563,7 @@ def serializeCatalog(
     sequenceEntries: Iterable[CatalogSequenceEntry] = Nil,
     storedFunctions: Iterable[(String, String)] = Nil,
     storedProcedures: Iterable[(String, String)] = Nil,
+    triggerDefs: Iterable[(String, String)] = Nil,
 ): Array[Byte] =
   val baos = new ByteArrayOutputStream()
   val out  = new DataOutputStream(baos)
@@ -703,6 +704,12 @@ def serializeCatalog(
     writeString(out, name)
     writeString(out, source)
 
+  val trigSeq = triggerDefs.toSeq
+  out.writeShort(trigSeq.size)
+  for (name, source) <- trigSeq do
+    writeString(out, name)
+    writeString(out, source)
+
   out.flush()
   baos.toByteArray
 
@@ -726,7 +733,7 @@ case class CatalogIndexEntry(
 def deserializeCatalog(
     data: Array[Byte],
     store: PageStore,
-): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)], Seq[CatalogSequenceEntry], Seq[(String, String)], Seq[(String, String)]) =
+): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)], Seq[CatalogSequenceEntry], Seq[(String, String)], Seq[(String, String)], Seq[(String, String)]) =
   val in = new DataInputStream(new ByteArrayInputStream(data))
 
   // Enum types
@@ -895,7 +902,15 @@ def deserializeCatalog(
       val pSource = readString(in)
       procEntries += ((pName, pSource))
 
-  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq, seqEntries.toSeq, funcEntries.toSeq, procEntries.toSeq)
+  val trigEntries = new ArrayBuffer[(String, String)]
+  if in.available() > 0 then
+    val trigCount = in.readUnsignedShort()
+    for _ <- 0 until trigCount do
+      val tName = readString(in)
+      val tSource = readString(in)
+      trigEntries += ((tName, tSource))
+
+  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq, seqEntries.toSeq, funcEntries.toSeq, procEntries.toSeq, trigEntries.toSeq)
 
 private def writeString(out: DataOutputStream, s: String): Unit =
   val bytes = s.getBytes("UTF-8")

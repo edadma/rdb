@@ -124,6 +124,26 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
         db.storedProcedures.remove(lname)
         db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
         DropProcedureResult(name)
+    case CreateTriggerCommand(Ident(trigName), timing, event, Ident(tableName), Ident(funcName)) =>
+      if !session.hasTable(tableName) then throw SchemaException(null, s"table '$tableName' does not exist")
+      val lFuncName = funcName.toLowerCase
+      if !db.storedFunctions.contains(lFuncName) then throw SchemaException(null, s"function '$funcName' does not exist")
+      if db.triggers.exists(t => t.name == trigName.toLowerCase && t.tableName == db.resolveKey(tableName)) then
+        throw SchemaException(null, s"trigger '$trigName' already exists on table '$tableName'")
+      val source = s"CREATE TRIGGER $trigName ${timing.toUpperCase} ${event.toUpperCase} ON $tableName FOR EACH ROW EXECUTE FUNCTION $funcName()"
+      db.triggers += TriggerDef(trigName.toLowerCase, timing.toLowerCase, event.toLowerCase, db.resolveKey(tableName), lFuncName, source)
+      db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
+      CreateTriggerResult(trigName)
+    case DropTriggerCommand(Ident(trigName), Ident(tableName), ifExists) =>
+      val qualTable = db.resolveKey(tableName)
+      val idx = db.triggers.indexWhere(t => t.name == trigName.toLowerCase && t.tableName == qualTable)
+      if idx < 0 then
+        if ifExists then DropTriggerResult(trigName)
+        else throw SchemaException(null, s"trigger '$trigName' does not exist on table '$tableName'")
+      else
+        db.triggers.remove(idx)
+        db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
+        DropTriggerResult(trigName)
     case CallCommand(id @ Ident(name), args) =>
       val lname = name.toLowerCase
       val proc = db.storedProcedures.getOrElse(lname, throw UndefinedReferenceException(id.pos, s"procedure '$name' not found"))
@@ -390,9 +410,30 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
                     (Row(seq.toIndexedSeq, metadata, None, None), metadata)
               InsertResult(lastResult, TableValue(Vector(row), metadata))
 
+            val qualTable = db.resolveKey(table)
+            val beforeInsertTriggers = db.getTriggersFor(qualTable, "before", "insert")
+            val afterInsertTriggers = db.getTriggersFor(qualTable, "after", "insert")
+
             onConflict match
               case None =>
-                val result = t.bulkInsert(resolvedColumns map (_.name), data, retColNames, fkCheck)
+                // Apply BEFORE INSERT triggers — each trigger can modify or cancel the row
+                val filteredData = if beforeInsertTriggers.isEmpty then data else
+                  data.flatMap { row =>
+                    val colNames = resolvedColumns.map(_.name)
+                    val rowMap = colNames.zip(row).toMap
+                    var currentRow: Option[Map[String, Value]] = Some(rowMap)
+                    for trig <- beforeInsertTriggers if currentRow.isDefined do
+                      val sf = db.storedFunctions(trig.functionName)
+                      currentRow = fireTrigger(sf, table, "INSERT", None, currentRow, t.meta)
+                    currentRow.map(m => colNames.map(c => m.getOrElse(c, NullValue())))
+                  }
+                val result = t.bulkInsert(resolvedColumns map (_.name), filteredData, retColNames, fkCheck)
+
+                // Fire AFTER INSERT triggers
+                for trig <- afterInsertTriggers do
+                  val sf = db.storedFunctions(trig.functionName)
+                  fireTrigger(sf, table, "INSERT", None, Some(result), t.meta)
+
                 buildInsertResult(result)
 
               case Some(OnConflictDoNothing) =>
@@ -818,19 +859,39 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
         val returnedRows = mutable.ArrayBuffer[Row]()
         val rwReturning = returning.map(_.map(rewrite))
 
+        val qualTableDel = db.resolveKey(table)
+        val beforeDeleteTriggers = db.getTriggersFor(qualTableDel, "before", "delete")
+        val afterDeleteTriggers = db.getTriggersFor(qualTableDel, "after", "delete")
+
         def applyDelete(targetRow: Row, evalRow: Row): Unit =
-          db.enforceChildConstraints(table, targetRow, "delete")
-          rwReturning.foreach { retExprs =>
-            val projected = retExprs.map {
-              case StarExpr() => targetRow.data
-              case e          => IndexedSeq(eval(e, Seq(evalRow)))
-            }.flatten.toIndexedSeq
-            returnedRows += Row(projected, Metadata(Vector.empty), None, None)
-          }
-          targetRow.deleter match
-            case Some(d) => d()
-            case None    => throw ExecutionException(id.pos, "not updatable")
-          count += 1
+          val oldRowMap = t.columns.zip(targetRow.data).map((c, v) => (c.name, v)).toMap
+
+          // Fire BEFORE DELETE triggers
+          var proceed = true
+          for trig <- beforeDeleteTriggers if proceed do
+            val sf = db.storedFunctions(trig.functionName)
+            fireTrigger(sf, table, "DELETE", Some(oldRowMap), None, t.meta) match
+              case None => proceed = false
+              case _    => ()
+
+          if proceed then
+            db.enforceChildConstraints(table, targetRow, "delete")
+            rwReturning.foreach { retExprs =>
+              val projected = retExprs.map {
+                case StarExpr() => targetRow.data
+                case e          => IndexedSeq(eval(e, Seq(evalRow)))
+              }.flatten.toIndexedSeq
+              returnedRows += Row(projected, Metadata(Vector.empty), None, None)
+            }
+            targetRow.deleter match
+              case Some(d) => d()
+              case None    => throw ExecutionException(id.pos, "not updatable")
+            count += 1
+
+            // Fire AFTER DELETE triggers
+            for trig <- afterDeleteTriggers do
+              val sf = db.storedFunctions(trig.functionName)
+              fireTrigger(sf, table, "DELETE", Some(oldRowMap), None, t.meta)
 
         using match
           case None =>

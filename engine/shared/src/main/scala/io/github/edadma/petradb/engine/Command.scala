@@ -67,6 +67,8 @@ case class CreateProcedureCommand(name: Ident, params: Seq[(Ident, Either[Type, 
 case class DropFunctionCommand(name: Ident, ifExists: Boolean = false) extends Command
 case class DropProcedureCommand(name: Ident, ifExists: Boolean = false) extends Command
 case class CallCommand(name: Ident, args: Seq[Expr]) extends Command
+case class CreateTriggerCommand(name: Ident, timing: String, event: String, table: Ident, functionName: Ident) extends Command
+case class DropTriggerCommand(name: Ident, table: Ident, ifExists: Boolean = false) extends Command
 case object ShowTablesCommand                    extends Command
 case object ShowViewsCommand                     extends Command
 case class ShowColumnsCommand(table: Ident)      extends Command

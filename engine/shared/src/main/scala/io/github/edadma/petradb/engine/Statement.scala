@@ -49,3 +49,12 @@ case class StoredProcedure(
     block: Block,
     source: String,
 )
+
+case class TriggerDef(
+    name: String,
+    timing: String,     // "before" or "after"
+    event: String,      // "insert", "update", or "delete"
+    tableName: String,
+    functionName: String,
+    source: String,
+)

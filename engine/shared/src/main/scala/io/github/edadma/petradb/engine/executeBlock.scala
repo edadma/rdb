@@ -120,6 +120,46 @@ private def executeStatement(stmt: Statement, env: BlockEnv)(using session: Sess
 
     case NullStatement => ()
 
+/** Execute a trigger function with OLD/NEW row bindings.
+  * Returns the NEW row (possibly modified by BEFORE triggers), or None to cancel the operation.
+  */
+private[engine] def fireTrigger(
+    sf: StoredFunction,
+    tableName: String,
+    tgOp: String,
+    oldRow: Option[Map[String, Value]],
+    newRow: Option[Map[String, Value]],
+    meta: Metadata,
+)(using session: Session): Option[Map[String, Value]] =
+  val env = new BlockEnv()
+
+  // Bind OLD as an ObjectValue
+  oldRow match
+    case Some(row) =>
+      env.declare("old", ObjectType, ObjectValue(row.toSeq))
+    case None =>
+      env.declare("old", ObjectType, NullValue())
+
+  // Bind NEW as an ObjectValue
+  newRow match
+    case Some(row) =>
+      env.declare("new", ObjectType, ObjectValue(row.toSeq))
+    case None =>
+      env.declare("new", ObjectType, NullValue())
+
+  env.declare("tg_op", TextType, TextValue(tgOp.toUpperCase))
+  env.declare("tg_table_name", TextType, TextValue(tableName))
+
+  try
+    executeBlockForValue(sf.block, Some(env)) match
+      case NullValue() => None // BEFORE trigger returning NULL cancels the operation
+      case _ => newRow // proceed with (possibly modified) NEW
+  catch
+    case e: BlockReturnException =>
+      e.value match
+        case Some(NullValue()) => None
+        case _ => newRow
+
 private[engine] def rewriteWithEnv(expr: Expr, env: BlockEnv)(using Session): Expr =
   val substituted = substituteBlockVars(expr, env)
   rewrite(substituted)

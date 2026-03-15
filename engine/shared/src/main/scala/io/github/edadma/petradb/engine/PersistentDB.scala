@@ -263,7 +263,8 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       CatalogSequenceEntry(s.name, s.currentValue, s.increment, s.minValue, s.maxValue, s.startValue, s.cycle, s.called, s.ownedByTable, s.ownedByColumn)
     }
     val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq, seqEntries,
-      storedFunctions.map((n, f) => (n, f.source)).toSeq, storedProcedures.map((n, p) => (n, p.source)).toSeq)
+      storedFunctions.map((n, f) => (n, f.source)).toSeq, storedProcedures.map((n, p) => (n, p.source)).toSeq,
+      triggers.map(t => (t.name, t.source)).toSeq)
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
@@ -277,7 +278,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     // Read catalog chain — we need to figure out the total length
     // Read the catalog data using a page-walking approach
     val catalogBytes = readCatalogChain(metaRoot)
-    val (enums, tableEntries, indexEntries, viewEntries, seqEntries, funcEntries, procEntries) = deserializeCatalog(catalogBytes, store)
+    val (enums, tableEntries, indexEntries, viewEntries, seqEntries, funcEntries, procEntries, trigEntries) = deserializeCatalog(catalogBytes, store)
 
     // Restore enum types
     for (eName, eType) <- enums do types(eName) = eType
@@ -318,6 +319,9 @@ class PersistentDB private (val store: FilePageStore) extends DB:
       try executeSQL(source + ";")(using session)
       catch case _: Exception => ()
     for (_, source) <- procEntries do
+      try executeSQL(source + ";")(using session)
+      catch case _: Exception => ()
+    for (_, source) <- trigEntries do
       try executeSQL(source + ";")(using session)
       catch case _: Exception => ()
 

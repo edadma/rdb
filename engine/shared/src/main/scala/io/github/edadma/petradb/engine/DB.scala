@@ -72,6 +72,10 @@ abstract class DB:
 
   protected[petradb] val storedFunctions = new mutable.HashMap[String, StoredFunction]
   protected[petradb] val storedProcedures = new mutable.HashMap[String, StoredProcedure]
+  protected[petradb] val triggers = new mutable.ArrayBuffer[TriggerDef]
+
+  def getTriggersFor(tableName: String, timing: String, event: String): Seq[TriggerDef] =
+    triggers.filter(t => t.tableName == tableName && t.timing == timing && t.event == event).toSeq
 
   private val virtualTableModules = new mutable.HashMap[String, VirtualTableModule]
 
