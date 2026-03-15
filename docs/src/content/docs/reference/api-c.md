@@ -3,12 +3,9 @@ title: C API
 description: SQLite-style C API for embedding PetraDB in C, C++, Rust, Go, Python, and other languages.
 ---
 
-PetraDB compiles to a native shared library (`libpetradb-engine.so` / `.dylib`) via Scala Native, providing a C API modeled after SQLite.
+PetraDB provides a native shared library (`libpetradb-engine.so` / `.dylib`) with a C API modeled after SQLite. The library is self-contained — no JVM or runtime needed.
 
-Build with:
-```bash
-sbt engineNative/nativeLink
-```
+Download from [GitHub Releases](https://github.com/edadma/petradb/releases) or build from source with `sbt engineNative/nativeLink`. See [Getting Started with C](/getting-started/c/) for setup instructions.
 
 Include `petradb.h` and link with `-lpetradb-engine`.
 

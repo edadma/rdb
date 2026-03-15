@@ -1,11 +1,21 @@
 ---
 title: Getting Started with C
-description: Build the PetraDB shared library and run your first SQL queries from C.
+description: Use PetraDB from C, C++, Rust, Go, Python, or any language with C FFI support.
 ---
 
-## Build the Library
+PetraDB provides a native shared library (`libpetradb-engine.so` on Linux, `.dylib` on macOS) with a SQLite-style C API. The library is self-contained — no JVM, Scala, or other runtime needed.
 
-PetraDB compiles to a native shared library via Scala Native. You need [sbt](https://www.scala-sbt.org/) installed.
+## Get the Library
+
+You need two files: the shared library and the header.
+
+### Option 1: Download from GitHub Releases
+
+Download `libpetradb-engine.so` and `petradb.h` from the [latest release](https://github.com/edadma/petradb/releases). Place them in a directory of your choice (e.g. `/usr/local/lib` and `/usr/local/include`, or a project-local directory).
+
+### Option 2: Build from Source
+
+Requires [sbt](https://www.scala-sbt.org/) and a C toolchain (gcc/clang).
 
 ```bash
 git clone https://github.com/edadma/petradb.git
@@ -13,11 +23,13 @@ cd petradb
 sbt engineNative/nativeLink
 ```
 
-This produces `engine/native/target/scala-3.8.2/libpetradb-engine.so` (Linux) or `.dylib` (macOS).
-
-The C header is at `engine/native/petradb.h`.
+This produces:
+- **Library**: `engine/native/target/scala-3.8.2/libpetradb-engine.so`
+- **Header**: `engine/native/petradb.h`
 
 ## Your First Program
+
+Create `myapp.c`:
 
 ```c
 #include <stdio.h>
@@ -46,15 +58,30 @@ int main(void) {
 
 ## Compile and Run
 
+Assuming the library and header are in `/usr/local/lib` and `/usr/local/include`:
+
+```bash
+gcc -o myapp myapp.c -lpetradb-engine
+./myapp
+```
+
+If the files are in a project-local directory (e.g. `./lib` and `./include`):
+
 ```bash
 gcc -o myapp myapp.c \
-    -I/path/to/petradb/engine/native \
-    -L/path/to/petradb/engine/native/target/scala-3.8.2 \
+    -I./include \
+    -L./lib \
     -lpetradb-engine \
-    -Wl,-rpath,/path/to/petradb/engine/native/target/scala-3.8.2
+    -Wl,-rpath,./lib
 
 ./myapp
 ```
+
+The flags:
+- `-I` tells the compiler where to find `petradb.h`
+- `-L` tells the linker where to find `libpetradb-engine.so`
+- `-l` specifies the library name (the linker adds the `lib` prefix and `.so` suffix)
+- `-Wl,-rpath` embeds the library path in the executable so it can find the `.so` at runtime
 
 Output:
 ```
@@ -74,26 +101,29 @@ The database file is created on first use and reopened on subsequent runs. All t
 
 ## User-Defined Functions
 
-Register native C functions callable from SQL:
+Register native C functions callable from SQL, triggers, and stored procedures:
 
 ```c
-void my_upper(int ctx, int argc, const int* argv) {
-    const char *s = petradb_value_text(argv[0]);
-    if (s == NULL) { petradb_result_null(ctx); return; }
-    // (uppercase logic here)
-    petradb_result_text(ctx, result);
+void my_double(int ctx, int argc, const int* argv) {
+    if (petradb_value_is_null(argv[0])) {
+        petradb_result_null(ctx);
+        return;
+    }
+    petradb_result_int(ctx, petradb_value_int(argv[0]) * 2);
 }
 
-petradb_create_function(db, "my_upper", 1, NULL, my_upper);
+petradb_create_function(db, "my_double", 1, NULL, my_double);
+// Now usable: SELECT my_double(age) FROM users;
 ```
 
 ## Other Languages
 
 The same shared library works with any language that supports C FFI:
 
-- **Rust**: `unsafe extern "C"` declarations
-- **Python**: `ctypes.cdll.LoadLibrary()`
+- **Rust**: `unsafe extern "C"` declarations + link with `-lpetradb-engine`
+- **Python**: `ctypes.cdll.LoadLibrary("libpetradb-engine.so")`
 - **Go**: `cgo` with `// #cgo LDFLAGS: -lpetradb-engine`
+- **Ruby**: `FFI::Library` from the `ffi` gem
 
 ## Next Steps
 
