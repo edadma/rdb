@@ -22,3 +22,10 @@ classifiers = [
 [project.urls]
 Homepage = "https://petradb.dev"
 Repository = "https://github.com/edadma/petradb"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["petradb*"]
+
+[tool.setuptools.package-data]
+petradb = ["*.so", "*.dylib"]

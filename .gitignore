@@ -44,3 +44,8 @@ engine/native/test-rust/target/
 Cargo.lock
 __pycache__/
 *.pyc
+python/petradb/*.so
+python/petradb/*.dylib
+python/dist/
+python/build/
+python/*.egg-info
