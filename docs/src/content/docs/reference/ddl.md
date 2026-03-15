@@ -248,12 +248,55 @@ Dropping the table cascades to drop its owned sequences. `TRUNCATE` resets backi
 | `setval('seq_name', value, false)` | Set current value; next nextval returns value |
 | `lastval()` | Return last value from any sequence in this session |
 
+## Stored Functions and Procedures
+
+See [PL/pgSQL](/reference/plpgsql/) for full documentation.
+
+```sql
+CREATE FUNCTION double(x INT) RETURNS INT AS $$
+BEGIN RETURN x * 2; END $$ LANGUAGE plpgsql;
+
+CREATE PROCEDURE reset_counts() AS $$
+BEGIN UPDATE counters SET val = 0; END $$ LANGUAGE plpgsql;
+
+DROP FUNCTION double;
+DROP PROCEDURE IF EXISTS reset_counts;
+```
+
 ## Indexes
 
 ```sql
 CREATE INDEX idx_orders_status ON orders (status);
 CREATE UNIQUE INDEX idx_orders_email ON orders (email);
 DROP INDEX idx_orders_status;
+```
+
+### Partial Indexes
+
+Index only rows matching a condition, making the index smaller and faster:
+
+```sql
+CREATE INDEX idx_active_orders ON orders (customer_id) WHERE status = 'active';
+CREATE UNIQUE INDEX idx_unique_active_email ON users (email) WHERE active = true;
+```
+
+The query planner uses a partial index only when the query's `WHERE` clause includes the index condition.
+
+### Expression Indexes
+
+Index on computed values instead of raw columns:
+
+```sql
+CREATE INDEX idx_lower_email ON users ((lower(email)));
+CREATE UNIQUE INDEX idx_lower_name ON users ((lower(name)));
+```
+
+The expression must be enclosed in parentheses. The planner matches `WHERE lower(email) = 'alice@test.com'` to the index automatically.
+
+Partial and expression indexes can be combined:
+
+```sql
+CREATE INDEX idx_active_lower ON users ((lower(name))) WHERE status = 'active';
 ```
 
 ## SHOW Commands

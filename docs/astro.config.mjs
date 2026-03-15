@@ -78,6 +78,7 @@ export default defineConfig({
 						{ label: 'Functions', slug: 'reference/functions' },
 						{ label: 'JSON', slug: 'reference/json' },
 						{ label: 'Transactions', slug: 'reference/transactions' },
+						{ label: 'PL/pgSQL', slug: 'reference/plpgsql' },
 					],
 				},
 				{

@@ -149,3 +149,50 @@ COPY (SELECT * FROM orders WHERE status = 'pending') TO 'export/pending.csv' WIT
 |--------|-------------|
 | `HEADER` | First row is a header (skipped on import, written on export) |
 | `DELIMITER 'c'` | Field separator character (default: `,`) |
+
+## csv_file() — Query CSV Files Directly
+
+Query a CSV file as a virtual table without importing:
+
+```sql
+SELECT * FROM csv_file('data/sales.csv');
+SELECT name, age::int FROM csv_file('data/people.csv') WHERE age::int > 25;
+```
+
+All values are returned as `TEXT` — use `::type` to cast. Supports `WHERE`, `ORDER BY`, `LIMIT`, `JOIN`, and aggregates.
+
+Options:
+
+```sql
+csv_file('path')                        -- with header (default)
+csv_file('path', false)                 -- no header (columns named column1, column2, ...)
+csv_file('path', true, '|')            -- custom delimiter
+```
+
+Join CSV files with each other or with database tables:
+
+```sql
+SELECT e.name, d.department
+FROM csv_file('employees.csv') e
+JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
+```
+
+## Virtual Tables
+
+Register external data sources as queryable tables using `CREATE VIRTUAL TABLE`:
+
+```sql
+CREATE VIRTUAL TABLE sales USING csv('data/sales.csv');
+CREATE VIRTUAL TABLE sales USING csv('data/sales.csv', 'no_header', '|');
+
+SELECT * FROM sales WHERE amount::int > 100;
+DROP TABLE sales;
+```
+
+Virtual tables appear in `SHOW TABLES` and support `SELECT`, `WHERE`, `JOIN`, `ORDER BY`, and aggregates. They are read-only — `INSERT`, `UPDATE`, and `DELETE` are not supported.
+
+The built-in `csv` module is registered by default. Custom modules can be registered via the Scala API:
+
+```scala
+db.registerVirtualTableModule("mymodule", new VirtualTableModule { ... })
+```
