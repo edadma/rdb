@@ -80,6 +80,7 @@ info "npm engine  : @petradb/engine@${ENGINE_NPM_VERSION}"
 info "npm client  : @petradb/client@${CLIENT_NPM_VERSION}"
 info "npm server  : @petradb/server@${SERVER_NPM_VERSION}"
 info "npm cli     : @petradb/cli@${CLI_NPM_VERSION}"
+info "npm quarry  : @petradb/quarry@$(node -p "require('./quarry/package.json').version")"
 info "scala engine: io.github.edadma:petradb-engine:${ENGINE_SCALA_VERSION}"
 info "scala client: io.github.edadma:petradb-client:${CLIENT_SCALA_VERSION}"
 info "scala jdbc  : io.github.edadma:petradb-jdbc:${JDBC_SCALA_VERSION}"
@@ -300,7 +301,84 @@ else
 fi
 
 
-# ── 5. Scala: Embedded engine ───────────────────────────────────────────────────
+# ── 5. npm: Quarry ────────────────────────────────────────────────────────────
+
+QUARRY_NPM_VERSION=$(node -p "require('./quarry/package.json').version")
+
+header "JS/TS: Quarry (@petradb/quarry@${QUARRY_NPM_VERSION})"
+
+QUARRY_DIR="$WORK/js-quarry"
+mkdir -p "$QUARRY_DIR"
+
+cat > "$QUARRY_DIR/package.json" <<JSON
+{
+  "name": "petra-smoke-quarry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@petradb/quarry": "${QUARRY_NPM_VERSION}"
+  }
+}
+JSON
+
+info "Installing @petradb/quarry@${QUARRY_NPM_VERSION} from npm..."
+(cd "$QUARRY_DIR" && npm install --prefer-online --no-audit --quiet) || { fail "npm install @petradb/quarry"; }
+
+cat > "$QUARRY_DIR/smoke.mjs" <<'JS'
+import { Session } from '@petradb/engine';
+import { quarry, table, serial, text, integer, boolean, eq, gt, asc, count, alias } from '@petradb/quarry';
+
+const users = table('users', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  age: integer('age'),
+  active: boolean('active').notNull().default(true),
+});
+
+const session = new Session();
+const db = quarry(session);
+
+await db.createTable(users);
+
+// Insert
+const [alice] = await db.insert(users).values({ name: 'Alice', email: 'alice@test.com', age: 30 }).execute();
+if (alice.name !== 'Alice') throw new Error(`Expected Alice, got ${alice.name}`);
+
+await db.insert(users).values({ name: 'Bob', email: 'bob@test.com', age: 25, active: false }).execute();
+await db.insert(users).values({ name: 'Carol', email: 'carol@test.com', age: 35 }).execute();
+
+// Select with WHERE
+const active = await db.select(users).where(eq(users.active, true)).orderBy(asc(users.name)).execute();
+if (active.length !== 2) throw new Error(`Expected 2 active users, got ${active.length}`);
+if (active[0].name !== 'Alice') throw new Error(`Expected Alice first, got ${active[0].name}`);
+
+// Select with aggregate
+const rows = await db.select(users).columns(alias(count(), 'total')).execute();
+if (rows[0].total !== 3) throw new Error(`Expected count 3, got ${rows[0].total}`);
+
+// Update
+const updated = await db.update(users).set({ age: 31 }).where(eq(users.name, 'Alice')).execute();
+if (updated.rowCount !== 1) throw new Error(`Expected 1 updated, got ${updated.rowCount}`);
+
+// Delete
+const deleted = await db.delete(users).where(eq(users.name, 'Bob')).execute();
+if (deleted.rowCount !== 1) throw new Error(`Expected 1 deleted, got ${deleted.rowCount}`);
+
+// Verify final state
+const remaining = await db.select(users).orderBy(asc(users.name)).execute();
+if (remaining.length !== 2) throw new Error(`Expected 2 remaining, got ${remaining.length}`);
+if (remaining[0].age !== 31) throw new Error(`Expected Alice age 31, got ${remaining[0].age}`);
+
+console.log('OK');
+JS
+
+OUT=$(cd "$QUARRY_DIR" && run_node smoke.mjs)
+check_output "Schema, insert, select, where, aggregate, update, delete" "OK" "$OUT"
+
+
+# ── 6. Scala: Embedded engine (renumbered from 5) ───────────────────────────────────────────────────
 
 header "Scala: Embedded engine (petradb-engine:${ENGINE_SCALA_VERSION})"
 
