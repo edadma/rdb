@@ -436,7 +436,8 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
                 // Fire AFTER INSERT triggers
                 for trig <- afterInsertTriggers do
                   val sf = db.storedFunctions(trig.functionName)
-                  fireTrigger(sf, table, "INSERT", None, Some(result), t.meta)
+                  for rowResult <- result do
+                    fireTrigger(sf, table, "INSERT", None, Some(rowResult), t.meta)
 
                 buildInsertResult(result)
 
