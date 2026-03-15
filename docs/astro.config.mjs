@@ -86,6 +86,7 @@ export default defineConfig({
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'reference/api-javascript' },
 						{ label: 'Scala', slug: 'reference/api-scala' },
+						{ label: 'C', slug: 'reference/api-c' },
 					],
 				},
 			],

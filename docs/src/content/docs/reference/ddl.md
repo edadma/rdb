@@ -143,6 +143,18 @@ CREATE TABLE products (
 
 CHECK constraints are enforced on INSERT and UPDATE.
 
+## Triggers
+
+See [PL/pgSQL — Triggers](/reference/plpgsql/#triggers) for full documentation.
+
+```sql
+CREATE TRIGGER trg_audit AFTER INSERT ON orders
+  FOR EACH ROW EXECUTE FUNCTION audit_log();
+
+DROP TRIGGER trg_audit ON orders;
+DROP TRIGGER IF EXISTS trg_audit ON orders;
+```
+
 ### TRUNCATE TABLE
 
 Removes all rows and resets serial sequences:

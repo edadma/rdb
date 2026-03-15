@@ -121,6 +121,21 @@ for (row <- table.data) {
 }
 ```
 
+## User-Defined Functions
+
+Register native Scala functions callable from SQL, triggers, and stored procedures:
+
+```scala
+db.registerScalarFunction("my_double", {
+  case Seq(v) => NumberValue(v.intValue * 2)
+}, NumberType)
+
+// Now usable in SQL:
+// SELECT my_double(age) FROM users;
+```
+
+Functions registered this way work everywhere: `SELECT`, `WHERE`, `DO` blocks, stored functions, and triggers.
+
 ## Value Extraction
 
 ```scala

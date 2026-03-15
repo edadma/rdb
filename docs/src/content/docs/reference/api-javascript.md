@@ -67,6 +67,20 @@ const [{ rows }] = await stmt.execute([42]);
 const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
+### `db.registerFunction(name, callback)`
+
+Register a native JavaScript function callable from SQL, triggers, and stored procedures:
+
+```javascript
+db.registerFunction('my_double', (args) => args[0] * 2);
+
+// Now usable in SQL:
+const [{ rows }] = await db.execute('SELECT my_double(21) AS val');
+// rows[0].val === 42
+```
+
+The callback receives an array of JavaScript values (numbers, strings, booleans, or `null`) and should return a JavaScript value.
+
 ## TypeScript Interfaces
 
 ```typescript

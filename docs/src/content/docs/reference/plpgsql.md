@@ -225,9 +225,91 @@ EXCEPTION
   WHEN others THEN NULL;
 ```
 
+## Triggers
+
+Triggers execute a function automatically when rows are inserted, updated, or deleted:
+
+```sql
+CREATE FUNCTION audit_changes() RETURNS INT AS $$
+BEGIN
+  INSERT INTO audit_log VALUES (tg_op || ' on ' || tg_table_name);
+  RETURN 0;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_audit AFTER INSERT ON orders
+  FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+CREATE TRIGGER trg_audit_del AFTER DELETE ON orders
+  FOR EACH ROW EXECUTE FUNCTION audit_changes();
+```
+
+### Syntax
+
+```sql
+CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE
+  ON table FOR EACH ROW EXECUTE FUNCTION function_name();
+
+DROP TRIGGER name ON table;
+DROP TRIGGER IF EXISTS name ON table;
+```
+
+### Timing
+
+- **BEFORE** triggers run before the operation. Return `NULL` to cancel the row operation. Return any non-NULL value to proceed.
+- **AFTER** triggers run after the operation. Return value is ignored.
+
+### Special Variables
+
+Trigger functions have access to:
+
+| Variable | Description |
+|----------|-------------|
+| `tg_op` | Operation name: `'INSERT'`, `'UPDATE'`, or `'DELETE'` |
+| `tg_table_name` | Name of the table that fired the trigger |
+| `OLD` | Row before the operation (UPDATE, DELETE) |
+| `NEW` | Row after the operation (INSERT, UPDATE) |
+
+### Events
+
+Triggers fire for:
+- `INSERT` — including rows inserted via `COPY FROM`
+- `UPDATE` — fires per updated row
+- `DELETE` — fires per deleted row
+
+### Guard Trigger Example
+
+```sql
+CREATE FUNCTION prevent_delete() RETURNS INT AS $$
+BEGIN
+  RETURN NULL;  -- cancel the DELETE
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_protect BEFORE DELETE ON important_data
+  FOR EACH ROW EXECUTE FUNCTION prevent_delete();
+```
+
+### Native Function Callbacks
+
+Registered native functions (Scala, JavaScript, or C) are callable from trigger functions, enabling integration with external systems:
+
+```sql
+-- Assuming notify_webhook() is registered as a native function
+CREATE FUNCTION on_order() RETURNS INT AS $$
+DECLARE dummy INT;
+BEGIN
+  dummy := notify_webhook(tg_op);
+  RETURN 0;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg AFTER INSERT ON orders
+  FOR EACH ROW EXECUTE FUNCTION on_order();
+```
+
+See [Scala API](/reference/api-scala/), [JavaScript API](/reference/api-javascript/), and [C API](/reference/api-c/) for registering native functions.
+
 ## Persistence
 
-Stored functions and procedures persist across database restarts for both in-memory (session lifetime) and persistent storage (survives close/reopen). The source SQL is stored and re-executed on database open.
+Stored functions, procedures, and triggers persist across database restarts for both in-memory (session lifetime) and persistent storage (survives close/reopen). The source SQL is stored and re-executed on database open.
 
 ## Composition
 
