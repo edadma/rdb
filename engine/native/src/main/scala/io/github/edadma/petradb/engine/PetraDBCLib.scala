@@ -62,42 +62,122 @@ def petradb_open_persistent(path: CString): Int = withError(0) {
   h
 }
 
-/** Register a native function callable from SQL.
-  * The callback receives (argc, argv_texts, result_buf, result_buf_size).
-  * argv_texts is an array of null-terminated strings (NULL values are null pointers).
-  * Write the result as a null-terminated string into result_buf.
-  * Return 0 for success, -1 for error.
-  */
+// ── Function context and value handles ──────────────────────────────
+
+private class FuncContext:
+  var result: Value = NullValue()
+  var error: Option[String] = None
+  var userData: Ptr[Byte] = null
+
+private val _values = mutable.HashMap[Int, Value]()
+private val _contexts = mutable.HashMap[Int, FuncContext]()
+
+// ── Value accessors (for function arguments) ───────────────────────
+
+@exported("petradb_value_int")
+def petradb_value_int(valueHandle: Int): Int =
+  _values.get(valueHandle).map(v => if v.isNull then 0 else v.intValue).getOrElse(0)
+
+@exported("petradb_value_int64")
+def petradb_value_int64(valueHandle: Int): Long =
+  _values.get(valueHandle).map(v => if v.isNull then 0L else v.longValue).getOrElse(0L)
+
+@exported("petradb_value_double")
+def petradb_value_double(valueHandle: Int): Double =
+  _values.get(valueHandle).map(v => if v.isNull then 0.0 else v.doubleValue).getOrElse(0.0)
+
+@exported("petradb_value_text")
+def petradb_value_text(valueHandle: Int): CString =
+  _values.get(valueHandle) match
+    case Some(v) if !v.isNull => returnString(v.string)
+    case _                    => null
+
+@exported("petradb_value_type")
+def petradb_value_type(valueHandle: Int): Int =
+  _values.get(valueHandle) match
+    case Some(v) if v.isNull  => 5 // NULL
+    case Some(_: NumberValue) => 1 // INTEGER
+    case Some(_: TextValue)   => 3 // TEXT
+    case Some(_: BooleanValue) => 1 // INTEGER
+    case Some(_: ByteaValue)  => 4 // BLOB
+    case Some(_)              => 3 // TEXT fallback
+    case None                 => 5
+
+@exported("petradb_value_is_null")
+def petradb_value_is_null(valueHandle: Int): Int =
+  _values.get(valueHandle).map(v => if v.isNull then 1 else 0).getOrElse(1)
+
+// ── Result setters (for function return value) ─────────────────────
+
+@exported("petradb_result_int")
+def petradb_result_int(ctxHandle: Int, value: Int): Unit =
+  _contexts.get(ctxHandle).foreach(_.result = NumberValue(value))
+
+@exported("petradb_result_int64")
+def petradb_result_int64(ctxHandle: Int, value: Long): Unit =
+  _contexts.get(ctxHandle).foreach(_.result = NumberValue(value.toInt))
+
+@exported("petradb_result_double")
+def petradb_result_double(ctxHandle: Int, value: Double): Unit =
+  _contexts.get(ctxHandle).foreach(_.result = NumberValue(value))
+
+@exported("petradb_result_text")
+def petradb_result_text(ctxHandle: Int, value: CString): Unit =
+  _contexts.get(ctxHandle).foreach { ctx =>
+    if value == null then ctx.result = NullValue()
+    else ctx.result = TextValue(fromCString(value))
+  }
+
+@exported("petradb_result_null")
+def petradb_result_null(ctxHandle: Int): Unit =
+  _contexts.get(ctxHandle).foreach(_.result = NullValue())
+
+@exported("petradb_result_error")
+def petradb_result_error(ctxHandle: Int, msg: CString): Unit =
+  _contexts.get(ctxHandle).foreach(_.error = Some(fromCString(msg)))
+
+@exported("petradb_user_data")
+def petradb_user_data(ctxHandle: Int): Ptr[Byte] =
+  _contexts.get(ctxHandle).map(_.userData).getOrElse(null)
+
+// ── Register function ──────────────────────────────────────────────
+
 @exported("petradb_create_function")
-def petradb_create_function(dbHandle: Int, name: CString, callback: CFuncPtr4[Int, Ptr[CString], Ptr[Byte], Int, Int]): Int = withError(-1) {
+def petradb_create_function(dbHandle: Int, name: CString, nArgs: Int, userData: Ptr[Byte],
+    callback: CFuncPtr3[Int, Int, Ptr[Int], Unit]): Int = withError(-1) {
   _dbs.get(dbHandle) match
     case Some(db) =>
       val funcName = fromCString(name)
+      val pinnedUserData = userData
       db.registerScalarFunction(funcName, { args =>
-        val argc = args.length
-        val argPtrs = stackalloc[CString](argc)
-        val argStrings = args.map { v =>
-          if v.isNull then null
-          else
-            val s = v.string
-            val bytes = (s + "\u0000").getBytes("UTF-8")
-            _lastReturnedString = bytes // pin
-            bytes.at(0).asInstanceOf[CString]
-        }
-        for i <- 0 until argc do
-          argPtrs(i) = argStrings(i)
-        val resultBuf = stackalloc[Byte](4096)
-        val rc = callback(argc, argPtrs, resultBuf, 4096)
-        if rc != 0 then NullValue()
-        else
-          val resultStr = fromCString(resultBuf)
-          if resultStr.isEmpty then NullValue()
-          else
-            try NumberValue(resultStr.toInt)
-            catch case _: NumberFormatException =>
-              try NumberValue(resultStr.toDouble)
-              catch case _: NumberFormatException =>
-                TextValue(resultStr)
+        // Create context
+        val ctxHandle = newHandle()
+        val ctx = new FuncContext()
+        ctx.userData = pinnedUserData
+        _contexts(ctxHandle) = ctx
+
+        // Create value handles for arguments
+        val argHandles = stackalloc[Int](args.length)
+        for i <- args.indices do
+          val vh = newHandle()
+          _values(vh) = args(i)
+          argHandles(i) = vh
+
+        // Call the native function
+        callback(ctxHandle, args.length, argHandles)
+
+        // Clean up value handles
+        for i <- args.indices do
+          _values.remove(argHandles(i))
+
+        // Get result and clean up context
+        val result = ctx.result
+        val err = ctx.error
+        _contexts.remove(ctxHandle)
+
+        err match
+          case Some(msg) => sys.error(msg)
+          case None      => result
       })
       0
     case None =>

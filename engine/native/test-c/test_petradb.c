@@ -263,18 +263,42 @@ void test_update_delete(void) {
     petradb_close(db);
 }
 
-int my_double_func(int argc, const char** argv, char* result, int result_size) {
-    if (argc != 1 || argv[0] == NULL) return -1;
-    int val = atoi(argv[0]);
-    snprintf(result, result_size, "%d", val * 2);
-    return 0;
+void my_double_func(int ctx, int argc, const int* argv) {
+    if (argc != 1 || petradb_value_is_null(argv[0])) {
+        petradb_result_null(ctx);
+        return;
+    }
+    int val = petradb_value_int(argv[0]);
+    petradb_result_int(ctx, val * 2);
+}
+
+void my_concat_func(int ctx, int argc, const int* argv) {
+    if (argc != 2) {
+        petradb_result_error(ctx, "concat requires 2 args");
+        return;
+    }
+    const char *a = petradb_value_text(argv[0]);
+    const char *b = petradb_value_text(argv[1]);
+    if (a == NULL || b == NULL) { petradb_result_null(ctx); return; }
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%s%s", a, b);
+    petradb_result_text(ctx, buf);
+}
+
+static int counter = 0;
+
+void my_counter_func(int ctx, int argc, const int* argv) {
+    int *p = (int*)petradb_user_data(ctx);
+    (*p)++;
+    petradb_result_int(ctx, *p);
 }
 
 void test_create_function(void) {
     printf("test_create_function\n");
     int db = petradb_open();
 
-    int rc = petradb_create_function(db, "my_double", my_double_func);
+    /* Basic integer function */
+    int rc = petradb_create_function(db, "my_double", 1, NULL, my_double_func);
     ASSERT_EQ_INT(rc, 0, "create_function returns 0");
 
     int conn = petradb_connect(db);
@@ -290,6 +314,34 @@ void test_create_function(void) {
     ASSERT_EQ_INT(petradb_column_int(cur, 0), 10, "native func on col val=5");
     petradb_step(cur);
     ASSERT_EQ_INT(petradb_column_int(cur, 0), 20, "native func on col val=10");
+    petradb_finalize(cur);
+
+    /* NULL handling */
+    cur = petradb_prepare(conn, "SELECT my_double(NULL) AS val");
+    petradb_step(cur);
+    ASSERT_EQ_INT(petradb_column_is_null(cur, 0), 1, "native func NULL returns NULL");
+    petradb_finalize(cur);
+
+    /* Text function */
+    petradb_create_function(db, "my_concat", 2, NULL, my_concat_func);
+    cur = petradb_prepare(conn, "SELECT my_concat('Hello, ', 'World!') AS val");
+    petradb_step(cur);
+    ASSERT_EQ_STR(petradb_column_text(cur, 0), "Hello, World!", "text function result");
+    petradb_finalize(cur);
+
+    /* User data */
+    counter = 0;
+    petradb_create_function(db, "my_counter", 0, &counter, my_counter_func);
+    cur = petradb_prepare(conn, "SELECT my_counter() AS c1, my_counter() AS c2, my_counter() AS c3");
+    petradb_step(cur);
+    ASSERT(counter >= 1, "user_data counter incremented");
+    petradb_finalize(cur);
+
+    /* Value type checking */
+    petradb_exec(conn, "CREATE TABLE t2 (i INT, s TEXT); INSERT INTO t2 VALUES (42, 'hello');");
+    cur = petradb_prepare(conn, "SELECT my_double(i) AS di FROM t2");
+    petradb_step(cur);
+    ASSERT_EQ_INT(petradb_column_int(cur, 0), 84, "func on int column");
     petradb_finalize(cur);
 
     petradb_close(db);

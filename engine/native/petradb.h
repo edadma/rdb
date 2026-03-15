@@ -51,17 +51,61 @@ int petradb_close(int db);
 
 /* ── User-defined functions ──────────────────────────────────────── */
 
-/** Callback type for user-defined SQL functions.
+/** Callback for user-defined SQL functions.
+  * ctx: context handle — use petradb_result_* to set return value
   * argc: number of arguments
-  * argv: array of null-terminated strings (NULL values are null pointers)
-  * result: buffer to write the result string into (null-terminated)
-  * result_size: size of result buffer
-  * Return 0 for success, -1 for error.
+  * argv: array of value handles — use petradb_value_* to read
   */
-typedef int (*petradb_func_callback)(int argc, const char** argv, char* result, int result_size);
+typedef void (*petradb_func_callback)(int ctx, int argc, const int* argv);
 
-/** Register a native function callable from SQL, triggers, and procedures. */
-int petradb_create_function(int db, const char* name, petradb_func_callback fn);
+/** Register a native function callable from SQL, triggers, and procedures.
+  * nargs: expected number of arguments (-1 for variadic)
+  * user_data: opaque pointer retrievable via petradb_user_data(ctx)
+  */
+int petradb_create_function(int db, const char* name, int nargs, void* user_data, petradb_func_callback fn);
+
+/* ── Function argument accessors ────────────────────────────────── */
+
+/** Read argument value as int. Returns 0 for NULL. */
+int petradb_value_int(int value);
+
+/** Read argument value as int64. Returns 0 for NULL. */
+long long petradb_value_int64(int value);
+
+/** Read argument value as double. Returns 0.0 for NULL. */
+double petradb_value_double(int value);
+
+/** Read argument value as text. Do NOT free. Returns NULL for SQL NULL. */
+const char *petradb_value_text(int value);
+
+/** Argument value type: PETRADB_INTEGER/FLOAT/TEXT/BLOB/NULL. */
+int petradb_value_type(int value);
+
+/** Returns 1 if argument is NULL, 0 otherwise. */
+int petradb_value_is_null(int value);
+
+/* ── Function result setters ────────────────────────────────────── */
+
+/** Set function result to an integer. */
+void petradb_result_int(int ctx, int value);
+
+/** Set function result to a 64-bit integer. */
+void petradb_result_int64(int ctx, long long value);
+
+/** Set function result to a double. */
+void petradb_result_double(int ctx, double value);
+
+/** Set function result to text. PetraDB copies the string. */
+void petradb_result_text(int ctx, const char* value);
+
+/** Set function result to NULL. */
+void petradb_result_null(int ctx);
+
+/** Set function result to an error. Aborts the SQL statement. */
+void petradb_result_error(int ctx, const char* msg);
+
+/** Retrieve the user_data pointer passed to petradb_create_function. */
+void *petradb_user_data(int ctx);
 
 /* ── Connection ─────────────────────────────────────────────────── */
 
