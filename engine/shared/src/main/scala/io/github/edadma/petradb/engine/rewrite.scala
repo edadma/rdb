@@ -324,7 +324,22 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           scalarFunction get func.toLowerCase match
             case None =>
               aggregateFunction get func.toLowerCase match
-                case None    => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
+                case None =>
+                  session.db.storedFunctions.get(func.toLowerCase) match
+                    case Some(sf) =>
+                      val rwArgs = args map rewrite
+                      ScalarFunctionExpr(
+                        ScalarFunction(func.toLowerCase, { argValues =>
+                          if argValues.length != sf.params.length then
+                            sys.error(s"function '${sf.name}' expects ${sf.params.length} arguments, got ${argValues.length}")
+                          val fnEnv = new BlockEnv()
+                          for ((pname, ptyp), argVal) <- sf.params.zip(argValues) do
+                            fnEnv.declare(pname, ptyp, argVal)
+                          executeBlockForValue(sf.block, Some(fnEnv))(using session)
+                        }, sf.returnType),
+                        rwArgs,
+                      )
+                    case None => throw UndefinedReferenceException(id.pos, s"unknown function '$func'")
                 case Some(f) =>
                   val (instance, typ) = f.instantiate
                   AggregateFunctionExpr(instance, args map rewrite, filter map rewrite) setType typ

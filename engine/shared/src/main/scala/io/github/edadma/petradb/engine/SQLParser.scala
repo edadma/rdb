@@ -1497,11 +1497,50 @@ object SQLParser:
   private def doBlock[p: P]: P[Command] =
     P(kw("do") ~ dollarQuote ~ plBlock ~ dollarQuote).map(DoBlockCommand(_))
 
+  // ── Stored functions and procedures ────────────────────────────────
+
+  private def paramDef[p: P]: P[(Ident, Either[Type, Ident])] =
+    P(identifier ~ typ)
+
+  private def paramList[p: P]: P[Seq[(Ident, Either[Type, Ident])]] =
+    P("(" ~ paramDef.rep(sep = ",") ~ ")")
+
+  private def createFunction[p: P]: P[Command] =
+    P(kw("create") ~ (kw("or") ~ kw("replace")).!.? ~ kw("function") ~ identifier ~ paramList ~
+      kw("returns") ~ typ ~ kw("as") ~ dollarQuote ~ plBlock ~ dollarQuote ~
+      kw("language") ~ kw("plpgsql")).map {
+      case (orReplace, name, params, retType, block) =>
+        CreateFunctionCommand(name, params, retType, block, orReplace.isDefined)
+    }
+
+  private def createProcedure[p: P]: P[Command] =
+    P(kw("create") ~ (kw("or") ~ kw("replace")).!.? ~ kw("procedure") ~ identifier ~ paramList ~
+      kw("as") ~ dollarQuote ~ plBlock ~ dollarQuote ~
+      kw("language") ~ kw("plpgsql")).map {
+      case (orReplace, name, params, block) =>
+        CreateProcedureCommand(name, params, block, orReplace.isDefined)
+    }
+
+  private def dropFunction[p: P]: P[Command] =
+    P(kw("drop") ~ kw("function") ~ (kw("if") ~ kw("exists")).!.? ~ identifier).map {
+      case (ie, name) => DropFunctionCommand(name, ie.isDefined)
+    }
+
+  private def dropProcedure[p: P]: P[Command] =
+    P(kw("drop") ~ kw("procedure") ~ (kw("if") ~ kw("exists")).!.? ~ identifier).map {
+      case (ie, name) => DropProcedureCommand(name, ie.isDefined)
+    }
+
+  private def callProcedure[p: P]: P[Command] =
+    P(kw("call") ~ identifier ~ "(" ~ expression.rep(sep = ",") ~ ")").map {
+      case (name, args) => CallCommand(name, args)
+    }
+
   private def commandDDL[p: P]: P[Command] =
-    P(createSchema | createSequence | createView | createVirtualTable | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
+    P(createSchema | createSequence | createView | createVirtualTable | createFunction | createProcedure | createTable | createIndex | createType | dropFunction | dropProcedure | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)
 
   private def commandDML[p: P]: P[Command] =
-    P(copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))
+    P(callProcedure | copyCmd | insert | update | delete | truncate | query.map(QueryCommand(_)))
 
   private def command[p: P]: P[Command] = P(commandTxn | commandDML | commandDDL)
 

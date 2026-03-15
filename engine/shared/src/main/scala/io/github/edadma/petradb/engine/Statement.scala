@@ -32,3 +32,18 @@ case class ReturnValueStatement(value: Expr) extends Statement
 case class RaiseStatement(level: String, format: String, args: Seq[Expr]) extends Statement
 case class PerformStatement(query: Expr) extends Statement
 case object NullStatement extends Statement
+
+// ── Stored routines ────────────────────────────────────────────────
+
+case class StoredFunction(
+    name: String,
+    params: Seq[(String, Type)],
+    returnType: Type,
+    block: Block,
+)
+
+case class StoredProcedure(
+    name: String,
+    params: Seq[(String, Type)],
+    block: Block,
+)

@@ -70,6 +70,9 @@ abstract class DB:
   protected[petradb] val schemas = new mutable.LinkedHashSet[String]
   schemas += "public"
 
+  protected[petradb] val storedFunctions = new mutable.HashMap[String, StoredFunction]
+  protected[petradb] val storedProcedures = new mutable.HashMap[String, StoredProcedure]
+
   private val virtualTableModules = new mutable.HashMap[String, VirtualTableModule]
 
   // Register built-in virtual table modules

@@ -4,11 +4,29 @@ import io.github.edadma.petradb.{Session as _, *}
 
 import scala.collection.immutable.ArraySeq
 
-private class BlockReturnException(val value: Option[Value] = None) extends RuntimeException
+private[engine] class BlockReturnException(val value: Option[Value] = None) extends RuntimeException
 class RaiseException(message: String) extends RuntimeException(message)
 
-def executeBlock(block: Block)(using session: Session): Result =
-  val env = new BlockEnv()
+def executeBlockForValue(block: Block, parentEnv: Option[BlockEnv] = None)(using session: Session): Value =
+  val env = new BlockEnv(parentEnv)
+
+  for VarDecl(Ident(name), typRef, default) <- block.declarations do
+    val typ = typRef match
+      case Left(t)         => t
+      case Right(Ident(n)) => session.db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
+    val init = default match
+      case Some(expr) => eval(rewriteWithEnv(expr, env), Nil)
+      case None       => NullValue()
+    env.declare(name, typ, init)
+
+  try
+    executeStatements(block.body, env)
+    NullValue()
+  catch
+    case e: BlockReturnException => e.value.getOrElse(NullValue())
+
+def executeBlock(block: Block, parentEnv: Option[BlockEnv] = None)(using session: Session): Result =
+  val env = new BlockEnv(parentEnv)
 
   for VarDecl(Ident(name), typRef, default) <- block.declarations do
     val typ = typRef match

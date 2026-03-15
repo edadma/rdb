@@ -75,6 +75,60 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
     case RollbackCommand => session.rollbackTransaction(); RollbackResult
     case DoBlockCommand(block) =>
       executeBlock(block)
+    case CreateFunctionCommand(Ident(name), params, retType, block, orReplace) =>
+      val lname = name.toLowerCase
+      if !orReplace && db.storedFunctions.contains(lname) then
+        throw SchemaException(null, s"function '$name' already exists")
+      val resolvedParams = params.map { case (Ident(pname), t) =>
+        val typ = t match
+          case Left(tt) => tt
+          case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
+        (pname, typ)
+      }
+      val resolvedReturn = retType match
+        case Left(t) => t
+        case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
+      db.storedFunctions(lname) = StoredFunction(lname, resolvedParams, resolvedReturn, block)
+      CreateFunctionResult(name)
+    case CreateProcedureCommand(Ident(name), params, block, orReplace) =>
+      val lname = name.toLowerCase
+      if !orReplace && db.storedProcedures.contains(lname) then
+        throw SchemaException(null, s"procedure '$name' already exists")
+      val resolvedParams = params.map { case (Ident(pname), t) =>
+        val typ = t match
+          case Left(tt) => tt
+          case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
+        (pname, typ)
+      }
+      db.storedProcedures(lname) = StoredProcedure(lname, resolvedParams, block)
+      CreateProcedureResult(name)
+    case DropFunctionCommand(Ident(name), ifExists) =>
+      val lname = name.toLowerCase
+      if !db.storedFunctions.contains(lname) then
+        if ifExists then DropFunctionResult(name)
+        else throw SchemaException(null, s"function '$name' does not exist")
+      else
+        db.storedFunctions.remove(lname)
+        DropFunctionResult(name)
+    case DropProcedureCommand(Ident(name), ifExists) =>
+      val lname = name.toLowerCase
+      if !db.storedProcedures.contains(lname) then
+        if ifExists then DropProcedureResult(name)
+        else throw SchemaException(null, s"procedure '$name' does not exist")
+      else
+        db.storedProcedures.remove(lname)
+        DropProcedureResult(name)
+    case CallCommand(id @ Ident(name), args) =>
+      val lname = name.toLowerCase
+      val proc = db.storedProcedures.getOrElse(lname, throw UndefinedReferenceException(id.pos, s"procedure '$name' not found"))
+      if args.length != proc.params.length then
+        sys.error(s"procedure '$name' expects ${proc.params.length} arguments, got ${args.length}")
+      val env = new BlockEnv()
+      for ((pname, ptyp), argExpr) <- proc.params.zip(args) do
+        val value = eval(rewrite(argExpr), Nil)
+        env.declare(pname, ptyp, value)
+      executeBlock(proc.block, Some(env))
+      CallResult
     case CreateSchemaCommand(Ident(name), ifNotExists) =>
       if ifNotExists && db.hasSchema(name) then CreateSchemaResult(name)
       else

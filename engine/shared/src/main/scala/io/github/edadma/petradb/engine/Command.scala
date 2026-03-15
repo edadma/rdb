@@ -62,6 +62,11 @@ case object CommitCommand   extends Command
 case object RollbackCommand extends Command
 case class CreateSchemaCommand(name: Ident, ifNotExists: Boolean) extends Command
 case class DoBlockCommand(block: Block) extends Command
+case class CreateFunctionCommand(name: Ident, params: Seq[(Ident, Either[Type, Ident])], returnType: Either[Type, Ident], block: Block, orReplace: Boolean = false) extends Command
+case class CreateProcedureCommand(name: Ident, params: Seq[(Ident, Either[Type, Ident])], block: Block, orReplace: Boolean = false) extends Command
+case class DropFunctionCommand(name: Ident, ifExists: Boolean = false) extends Command
+case class DropProcedureCommand(name: Ident, ifExists: Boolean = false) extends Command
+case class CallCommand(name: Ident, args: Seq[Expr]) extends Command
 case object ShowTablesCommand                    extends Command
 case object ShowViewsCommand                     extends Command
 case class ShowColumnsCommand(table: Ident)      extends Command
