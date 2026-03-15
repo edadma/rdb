@@ -17,6 +17,7 @@ trait Expr extends Positional:
 case class AliasExpr(expr: Expr, alias: Ident)                            extends Expr
 case class ColumnExpr(table: Option[Ident], col: Ident)                   extends Expr
 case class VariableExpr(name: Ident)                                      extends Expr
+case class BlockVariableExpr(name: String, env: BlockEnv)                 extends Expr
 case class UnaryExpr(op: String, expr: Expr)                              extends Expr
 case class BinaryExpr(left: Expr, op: String, right: Expr)                extends Expr
 case class BooleanExpr(b: Boolean)                                        extends Expr { typ = BooleanType }

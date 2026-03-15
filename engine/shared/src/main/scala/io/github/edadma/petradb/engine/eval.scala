@@ -17,6 +17,7 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
     case CastExpr(expr, targetType)    => targetType.convert(eval(expr, ctx))
     case AliasExpr(expr, _)            => eval(expr, ctx)
     case VariableInstanceExpr(v)       => v.value
+    case BlockVariableExpr(name, env) => env.get(name).getOrElse(NullValue())
     case TableConstructorExpr(expr)    => aleval(expr, ctx)
     case AggregateFunctionExpr(_, _, _) => sys.error(s"aggregate function not resolved by rewriter: $expr")
     case WindowExpr(_, _, _, _)         => sys.error(s"window function not resolved by rewriter: $expr")

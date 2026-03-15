@@ -1412,9 +1412,90 @@ object SQLParser:
     P("$$")
   }
 
+  // ── PL/pgSQL block parser ──────────────────────────────────────────
+
+  private def plVarDecl[p: P]: P[VarDecl] =
+    P(identifier ~ typ ~ (":=" ~ expression).? ~ ";").map { case (name, t, default) =>
+      VarDecl(name, t, default)
+    }
+
+  private def plDeclareSection[p: P]: P[Seq[VarDecl]] =
+    P(kw("declare") ~ plVarDecl.rep)
+
+  private def plAssign[p: P]: P[AssignStatement] =
+    P(identifier ~ ":=" ~ expression ~ ";").map { case (name, expr) =>
+      AssignStatement(name, expr)
+    }
+
+  private def plIf[p: P]: P[IfStatement] =
+    P(kw("if") ~ expression ~ kw("then") ~ plStatements ~
+      (kw("elsif") ~ expression ~ kw("then") ~ plStatements).rep ~
+      (kw("else") ~ plStatements).? ~
+      kw("end") ~ kw("if") ~ ";").map { case (cond, thenBody, elsifs, elseBody) =>
+      IfStatement(cond, thenBody, elsifs, elseBody)
+    }
+
+  private def plWhile[p: P]: P[WhileStatement] =
+    P(kw("while") ~ expression ~ kw("loop") ~ plStatements ~ kw("end") ~ kw("loop") ~ ";").map {
+      case (cond, body) => WhileStatement(cond, body)
+    }
+
+  private def dotdot[p: P]: P[Unit] = {
+    import NoWhitespace._
+    P("..")
+  }
+
+  private def plForRange[p: P]: P[ForRangeStatement] =
+    P(kw("for") ~ identifier ~ kw("in") ~ expression ~ dotdot ~ expression ~ kw("loop") ~ plStatements ~ kw("end") ~ kw("loop") ~ ";").map {
+      case (variable, lower, upper, body) => ForRangeStatement(variable, lower, upper, body)
+    }
+
+  private def plForQuery[p: P]: P[ForQueryStatement] =
+    P(kw("for") ~ identifier ~ kw("in") ~ command ~ kw("loop") ~ plStatements ~ kw("end") ~ kw("loop") ~ ";").map {
+      case (variable, query, body) => ForQueryStatement(variable, query, body)
+    }
+
+  private def plReturn[p: P]: P[Statement] =
+    P(kw("return") ~ expression.? ~ ";").map {
+      case Some(expr) => ReturnValueStatement(expr)
+      case None       => ReturnStatement
+    }
+
+  private def plRaise[p: P]: P[RaiseStatement] =
+    P(kw("raise") ~ identifier ~ stringLit ~ ("," ~ expression).rep ~ ";").map {
+      case (Ident(level), fmt, args) => RaiseStatement(level, fmt, args)
+    }
+
+  private def plPerform[p: P]: P[PerformStatement] =
+    P(kw("perform") ~ query ~ ";").map(PerformStatement(_))
+
+  private def plSqlStatement[p: P]: P[SqlStatement] =
+    P(command ~ ";").map(SqlStatement(_))
+
+  private def plNull[p: P]: P[Statement] =
+    P(kw("null") ~ ";").map(_ => NullStatement)
+
+  private def plStatement[p: P]: P[Statement] =
+    P(plAssign | plIf | plWhile | plForRange | plForQuery | plReturn | plRaise | plPerform | plNull | plSqlStatement)
+
+  private def plStatements[p: P]: P[Seq[Statement]] =
+    P(plStatement.rep)
+
+  private def plExceptionHandler[p: P]: P[ExceptionHandler] =
+    P(kw("when") ~ identifier ~ kw("then") ~ plStatements).map { case (Ident(cond), body) =>
+      ExceptionHandler(cond.toLowerCase, body)
+    }
+
+  private def plExceptionSection[p: P]: P[Seq[ExceptionHandler]] =
+    P(kw("exception") ~ plExceptionHandler.rep(1))
+
+  private def plBlock[p: P]: P[Block] =
+    P(plDeclareSection.?.map(_.getOrElse(Nil)) ~ kw("begin") ~ plStatements ~ plExceptionSection.?.map(_.getOrElse(Nil)) ~ kw("end")).map {
+      case (decls, body, handlers) => Block(decls, body, handlers)
+    }
+
   private def doBlock[p: P]: P[Command] =
-    P(kw("do") ~ dollarQuote ~ kw("begin") ~ command ~ ";" ~ kw("exception") ~ kw("when") ~ ident ~ kw("then") ~ kw("null") ~ ";" ~ kw("end") ~ dollarQuote)
-      .map { case (cmd, _) => DoBlockCommand(cmd) }
+    P(kw("do") ~ dollarQuote ~ plBlock ~ dollarQuote).map(DoBlockCommand(_))
 
   private def commandDDL[p: P]: P[Command] =
     P(createSchema | createSequence | createView | createVirtualTable | createTable | createIndex | createType | dropSequence | dropView | dropTable | dropIndex | dropType | alterTable | doBlock)

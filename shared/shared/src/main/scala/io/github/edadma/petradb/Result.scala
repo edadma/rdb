@@ -26,3 +26,4 @@ case class DropSequenceResult(name: String)   extends Result
 case object BeginResult    extends Result
 case object CommitResult   extends Result
 case object RollbackResult extends Result
+case object DoBlockResult  extends Result

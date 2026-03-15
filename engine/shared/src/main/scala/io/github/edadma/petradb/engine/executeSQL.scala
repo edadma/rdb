@@ -52,7 +52,7 @@ private[engine] def anyToValue(a: Any): Value =
     case iter: Iterable[?] => ArrayValue(iter.map(anyToValue).toIndexedSeq)
     case other             => platformAnyToValue(other)
 
-private[engine] def executeCommands(cs: Seq[Command])(using session: Session): Seq[Result] =
+private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv] = None)(using session: Session): Seq[Result] =
 
   val db = session.db
 
@@ -73,12 +73,8 @@ private[engine] def executeCommands(cs: Seq[Command])(using session: Session): S
     case BeginCommand    => session.beginTransaction(); BeginResult
     case CommitCommand   => session.commitTransaction(); CommitResult
     case RollbackCommand => session.rollbackTransaction(); RollbackResult
-    case DoBlockCommand(body) =>
-      try executeCommands(Seq(body)).head
-      catch
-        case _: SchemaException         => AlterTableResult()
-        case _: ConstraintException     => AlterTableResult()
-        case e: IllegalArgumentException if e.getMessage != null && e.getMessage.contains("already exists") => AlterTableResult()
+    case DoBlockCommand(block) =>
+      executeBlock(block)
     case CreateSchemaCommand(Ident(name), ifNotExists) =>
       if ifNotExists && db.hasSchema(name) then CreateSchemaResult(name)
       else
