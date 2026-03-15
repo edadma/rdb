@@ -27,7 +27,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.4.9"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.0"
 ```
 
 ```scala
@@ -49,7 +49,7 @@ executeSQL("""
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.4.3</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 

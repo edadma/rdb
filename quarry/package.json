@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit -p test/tsconfig.json"
   },
   "peerDependencies": {
-    "@petradb/engine": ">=1.3.4"
+    "@petradb/engine": ">=1.5.0"
   },
   "devDependencies": {
     "@petradb/engine": "file:../engine/npm",

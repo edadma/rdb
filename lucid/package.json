@@ -1,6 +1,6 @@
 {
   "name": "@petradb/lucid",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "AdonisJS Lucid ORM driver for PetraDB",
   "type": "module",
   "exports": {
@@ -21,8 +21,8 @@
   },
   "peerDependencies": {
     "@adonisjs/lucid": ">=22.0.0",
-    "@petradb/engine": ">=1.4.3",
-    "@petradb/knex": ">=1.4.1"
+    "@petradb/engine": ">=1.5.0",
+    "@petradb/knex": ">=1.5.0"
   },
   "devDependencies": {
     "@adonisjs/lucid": "^22.0.0",
