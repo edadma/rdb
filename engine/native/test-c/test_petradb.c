@@ -263,6 +263,49 @@ void test_update_delete(void) {
     petradb_close(db);
 }
 
+void test_persistent(void) {
+    printf("test_persistent\n");
+    const char *path = "/tmp/petradb_c_test.db";
+
+    /* Create and populate */
+    int db = petradb_open_persistent(path);
+    ASSERT(db > 0, "persistent open returns valid handle");
+    if (db == 0) {
+        printf("  errmsg: %s\n", petradb_errmsg());
+        return;
+    }
+
+    int conn = petradb_connect(db);
+    ASSERT(conn > 0, "persistent connect");
+
+    petradb_exec(conn, "CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT NOT NULL)");
+    petradb_exec(conn, "INSERT INTO t (name) VALUES ('Alice')");
+    petradb_exec(conn, "INSERT INTO t (name) VALUES ('Bob')");
+
+    int cur = petradb_prepare(conn, "SELECT name FROM t ORDER BY name");
+    petradb_step(cur);
+    ASSERT_EQ_STR(petradb_column_text(cur, 0), "Alice", "persistent row 1");
+    petradb_step(cur);
+    ASSERT_EQ_STR(petradb_column_text(cur, 0), "Bob", "persistent row 2");
+    petradb_finalize(cur);
+    petradb_close(db);
+
+    /* Reopen and verify */
+    int db2 = petradb_open_persistent(path);
+    ASSERT(db2 > 0, "persistent reopen");
+    int conn2 = petradb_connect(db2);
+
+    cur = petradb_prepare(conn2, "SELECT name FROM t ORDER BY name");
+    petradb_step(cur);
+    ASSERT_EQ_STR(petradb_column_text(cur, 0), "Alice", "persistent survived reopen row 1");
+    petradb_step(cur);
+    ASSERT_EQ_STR(petradb_column_text(cur, 0), "Bob", "persistent survived reopen row 2");
+    petradb_finalize(cur);
+    petradb_close(db2);
+
+    remove(path);
+}
+
 void my_double_func(int ctx, int argc, const int* argv) {
     if (argc != 1 || petradb_value_is_null(argv[0])) {
         petradb_result_null(ctx);
@@ -397,6 +440,7 @@ int main(void) {
     test_update_delete();
     test_blob();
     test_create_function();
+    test_persistent();
 
     printf("\n====================\n");
     printf("%d/%d tests passed\n", tests_passed, tests_run);

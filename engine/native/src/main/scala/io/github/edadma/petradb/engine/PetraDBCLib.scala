@@ -27,8 +27,8 @@ private def withError[T](default: T)(f: => T): T =
     _lastError = ""
     f
   catch
-    case e: Exception =>
-      _lastError = Option(e.getMessage).getOrElse("unknown error")
+    case e: Throwable =>
+      _lastError = Option(e.getMessage).getOrElse(e.getClass.getName)
       default
 
 // Return a C string that stays valid until the next call.
@@ -56,7 +56,9 @@ def petradb_open(): Int = withError(0) {
 @exported("petradb_open_persistent")
 def petradb_open_persistent(path: CString): Int = withError(0) {
   val p = fromCString(path)
-  val db = PersistentDB.open(p)
+  val db =
+    if io.github.edadma.cross_platform.exists(p) then PersistentDB.open(p)
+    else PersistentDB.create(p, 4096)
   val h = newHandle()
   _dbs(h) = db
   h
