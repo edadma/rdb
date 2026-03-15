@@ -48,9 +48,14 @@ export default defineConfig({
 				},
 			],
 			sidebar: [
-				{ label: 'Changelog', slug: 'changelog' },
+				{
+					label: 'Changelog',
+					translations: { zh: '更新日志', ja: '変更履歴', fr: 'Journal des modifications', es: 'Registro de cambios', pt: 'Registro de alterações' },
+					slug: 'changelog',
+				},
 				{
 					label: 'Getting Started',
+					translations: { zh: '快速入门', ja: 'はじめに', fr: 'Démarrage rapide', es: 'Primeros pasos', pt: 'Primeiros passos' },
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'getting-started/javascript' },
 						{ label: 'Scala', slug: 'getting-started/scala' },
@@ -58,19 +63,33 @@ export default defineConfig({
 						{ label: 'C / Native', slug: 'getting-started/c' },
 					],
 				},
-				{ label: 'Playground', link: '/playground/' },
+				{
+					label: 'Playground',
+					translations: { zh: '在线体验', ja: 'プレイグラウンド', fr: 'Terrain de jeu', es: 'Zona de pruebas', pt: 'Playground' },
+					link: '/playground/',
+				},
 				{
 					label: 'Guides',
+					translations: { zh: '指南', ja: 'ガイド', fr: 'Guides', es: 'Guías', pt: 'Guias' },
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'guides/javascript' },
 						{ label: 'Scala', slug: 'guides/scala' },
 						{ label: 'CLI', slug: 'guides/cli' },
-						{ label: 'Server', slug: 'guides/server' },
-						{ label: 'Client', slug: 'guides/client' },
+						{
+							label: 'Server',
+							translations: { zh: '服务器', ja: 'サーバー', fr: 'Serveur', es: 'Servidor', pt: 'Servidor' },
+							slug: 'guides/server',
+						},
+						{
+							label: 'Client',
+							translations: { zh: '客户端', ja: 'クライアント', fr: 'Client', es: 'Cliente', pt: 'Cliente' },
+							slug: 'guides/client',
+						},
 					],
 				},
 				{
 					label: 'Integrations',
+					translations: { zh: '集成', ja: 'インテグレーション', fr: 'Intégrations', es: 'Integraciones', pt: 'Integrações' },
 					items: [
 						{ label: 'Drizzle ORM', slug: 'integrations/drizzle' },
 						{ label: 'GraphQL', slug: 'integrations/graphql' },
@@ -82,19 +101,37 @@ export default defineConfig({
 				},
 				{
 					label: 'SQL Reference',
+					translations: { zh: 'SQL 参考', ja: 'SQL リファレンス', fr: 'Référence SQL', es: 'Referencia SQL', pt: 'Referência SQL' },
 					items: [
-						{ label: 'Data Types', slug: 'reference/data-types' },
+						{
+							label: 'Data Types',
+							translations: { zh: '数据类型', ja: 'データ型', fr: 'Types de données', es: 'Tipos de datos', pt: 'Tipos de dados' },
+							slug: 'reference/data-types',
+						},
 						{ label: 'DDL', slug: 'reference/ddl' },
 						{ label: 'DML', slug: 'reference/dml' },
-						{ label: 'Queries', slug: 'reference/queries' },
-						{ label: 'Functions', slug: 'reference/functions' },
+						{
+							label: 'Queries',
+							translations: { zh: '查询', ja: 'クエリ', fr: 'Requêtes', es: 'Consultas', pt: 'Consultas' },
+							slug: 'reference/queries',
+						},
+						{
+							label: 'Functions',
+							translations: { zh: '函数', ja: '関数', fr: 'Fonctions', es: 'Funciones', pt: 'Funções' },
+							slug: 'reference/functions',
+						},
 						{ label: 'JSON', slug: 'reference/json' },
-						{ label: 'Transactions', slug: 'reference/transactions' },
+						{
+							label: 'Transactions',
+							translations: { zh: '事务', ja: 'トランザクション', fr: 'Transactions', es: 'Transacciones', pt: 'Transações' },
+							slug: 'reference/transactions',
+						},
 						{ label: 'PL/pgSQL', slug: 'reference/plpgsql' },
 					],
 				},
 				{
 					label: 'API Reference',
+					translations: { zh: 'API 参考', ja: 'API リファレンス', fr: 'Référence API', es: 'Referencia API', pt: 'Referência API' },
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'reference/api-javascript' },
 						{ label: 'Scala', slug: 'reference/api-scala' },
