@@ -42,8 +42,12 @@ case "$1" in
     PKG_DIR="drizzle"
     TS_ONLY=true
     ;;
+  quarry)
+    PKG_DIR="quarry"
+    TS_ONLY=true
+    ;;
   *)
-    echo "Usage: ./publish.sh <engine|client|cli|server|knex|lucid|drizzle> [--publish]"
+    echo "Usage: ./publish.sh <engine|client|cli|server|knex|lucid|drizzle|quarry> [--publish]"
     exit 1
     ;;
 esac
