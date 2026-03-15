@@ -90,6 +90,7 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
         case Right(Ident(n)) => db.getType(n).getOrElse(sys.error(s"type '$n' not found"))
       val source = functionToSQL(lname, resolvedParams, resolvedReturn, block)
       db.storedFunctions(lname) = StoredFunction(lname, resolvedParams, resolvedReturn, block, source)
+      db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
       CreateFunctionResult(name)
     case CreateProcedureCommand(Ident(name), params, block, orReplace) =>
       val lname = name.toLowerCase
@@ -103,6 +104,7 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
       }
       val source = procedureToSQL(lname, resolvedParams, block)
       db.storedProcedures(lname) = StoredProcedure(lname, resolvedParams, block, source)
+      db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
       CreateProcedureResult(name)
     case DropFunctionCommand(Ident(name), ifExists) =>
       val lname = name.toLowerCase
@@ -111,6 +113,7 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
         else throw SchemaException(null, s"function '$name' does not exist")
       else
         db.storedFunctions.remove(lname)
+        db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
         DropFunctionResult(name)
     case DropProcedureCommand(Ident(name), ifExists) =>
       val lname = name.toLowerCase
@@ -119,6 +122,7 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
         else throw SchemaException(null, s"procedure '$name' does not exist")
       else
         db.storedProcedures.remove(lname)
+        db match { case p: PersistentDB => p.persistCatalog(); case _ => () }
         DropProcedureResult(name)
     case CallCommand(id @ Ident(name), args) =>
       val lname = name.toLowerCase

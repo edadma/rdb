@@ -262,7 +262,8 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     val seqEntries = sequences.values.map { s =>
       CatalogSequenceEntry(s.name, s.currentValue, s.increment, s.minValue, s.maxValue, s.startValue, s.cycle, s.called, s.ownedByTable, s.ownedByColumn)
     }
-    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq, seqEntries)
+    val catalogBytes = serializeCatalog(types.toMap, entries, indexEntries, batch, store.pageSize, views.toSeq, seqEntries,
+      storedFunctions.map((n, f) => (n, f.source)).toSeq, storedProcedures.map((n, p) => (n, p.source)).toSeq)
     val newRoot      = writeChain(catalogBytes, batch, store.pageSize)
     batch.setMetaRoot(newRoot)
 
@@ -276,7 +277,7 @@ class PersistentDB private (val store: FilePageStore) extends DB:
     // Read catalog chain — we need to figure out the total length
     // Read the catalog data using a page-walking approach
     val catalogBytes = readCatalogChain(metaRoot)
-    val (enums, tableEntries, indexEntries, viewEntries, seqEntries) = deserializeCatalog(catalogBytes, store)
+    val (enums, tableEntries, indexEntries, viewEntries, seqEntries, funcEntries, procEntries) = deserializeCatalog(catalogBytes, store)
 
     // Restore enum types
     for (eName, eType) <- enums do types(eName) = eType
@@ -310,6 +311,15 @@ class PersistentDB private (val store: FilePageStore) extends DB:
         val colIndices = entry.columns.map(c => table.meta.columnMap(c)._1).toIndexedSeq
         table.tableIndexes(entry.name) = PersistentTableIndex(meta, colIndices, entry.nextRowId)
       }
+
+    // Restore stored routines by re-executing their source SQL
+    given session: Session = connect()
+    for (_, source) <- funcEntries do
+      try executeSQL(source + ";")(using session)
+      catch case _: Exception => ()
+    for (_, source) <- procEntries do
+      try executeSQL(source + ";")(using session)
+      catch case _: Exception => ()
 
   private def readCatalogChain(firstPage: PageId): Array[Byte] =
     // First pass: count total bytes

@@ -561,6 +561,8 @@ def serializeCatalog(
     pageSize: Int,
     viewEntries: Iterable[(String, String)] = Nil,
     sequenceEntries: Iterable[CatalogSequenceEntry] = Nil,
+    storedFunctions: Iterable[(String, String)] = Nil,
+    storedProcedures: Iterable[(String, String)] = Nil,
 ): Array[Byte] =
   val baos = new ByteArrayOutputStream()
   val out  = new DataOutputStream(baos)
@@ -688,6 +690,19 @@ def serializeCatalog(
       writeString(out, entry.ownedByTable.get)
       writeString(out, entry.ownedByColumn.get)
 
+  // Stored routines (functions + procedures as source SQL)
+  val funcSeq = storedFunctions.toSeq
+  out.writeShort(funcSeq.size)
+  for (name, source) <- funcSeq do
+    writeString(out, name)
+    writeString(out, source)
+
+  val procSeq = storedProcedures.toSeq
+  out.writeShort(procSeq.size)
+  for (name, source) <- procSeq do
+    writeString(out, name)
+    writeString(out, source)
+
   out.flush()
   baos.toByteArray
 
@@ -711,7 +726,7 @@ case class CatalogIndexEntry(
 def deserializeCatalog(
     data: Array[Byte],
     store: PageStore,
-): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)], Seq[CatalogSequenceEntry]) =
+): (Seq[(String, EnumType)], Seq[CatalogTableEntry], Seq[CatalogIndexEntry], Seq[(String, String)], Seq[CatalogSequenceEntry], Seq[(String, String)], Seq[(String, String)]) =
   val in = new DataInputStream(new ByteArrayInputStream(data))
 
   // Enum types
@@ -863,7 +878,24 @@ def deserializeCatalog(
         else (None, None)
       seqEntries += CatalogSequenceEntry(sName, currentValue, increment, minValue, maxValue, startValue, cycle, called, ownedByTable, ownedByColumn)
 
-  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq, seqEntries.toSeq)
+  // Stored routines (may not be present in older catalogs)
+  val funcEntries = new ArrayBuffer[(String, String)]
+  if in.available() > 0 then
+    val funcCount = in.readUnsignedShort()
+    for _ <- 0 until funcCount do
+      val fName = readString(in)
+      val fSource = readString(in)
+      funcEntries += ((fName, fSource))
+
+  val procEntries = new ArrayBuffer[(String, String)]
+  if in.available() > 0 then
+    val procCount = in.readUnsignedShort()
+    for _ <- 0 until procCount do
+      val pName = readString(in)
+      val pSource = readString(in)
+      procEntries += ((pName, pSource))
+
+  (enums.toSeq, tables.toSeq, indexEntries.toSeq, viewEntries.toSeq, seqEntries.toSeq, funcEntries.toSeq, procEntries.toSeq)
 
 private def writeString(out: DataOutputStream, s: String): Unit =
   val bytes = s.getBytes("UTF-8")

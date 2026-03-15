@@ -27,7 +27,7 @@ class TextDB(val path: String) extends MemoryDB:
       val labels = e.labels.map(l => s"'${l.replace("'", "''")}'").mkString(", ")
       executeSQL(s"CREATE TYPE ${e.name} AS ENUM ($labels)")
 
-    // Restore views from comment directives
+    // Restore views and routines from comment directives
     for line <- io.github.edadma.cross_platform.readFile(path).linesIterator do
       val trimmed = line.trim
       if trimmed.startsWith("-- VIEW ") then
@@ -37,6 +37,10 @@ class TextDB(val path: String) extends MemoryDB:
           val vName = rest.substring(0, asIdx)
           val vSql = rest.substring(asIdx + 4)
           views(vName) = vSql
+      else if trimmed.startsWith("-- ROUTINE: ") then
+        val source = trimmed.drop(12).replace("\\n", "\n")
+        try executeSQL(source + ";")
+        catch case _: Exception => ()
 
     for t <- imp.tables do
       val colDefs = t.header.map(col => s"${col.name} ${importerTypeToSQL(col.typ)}").mkString(", ")
@@ -122,6 +126,12 @@ class TextDB(val path: String) extends MemoryDB:
 
     for (vName, vSql) <- views.toSeq.sortBy(_._1) do
       sb.append(s"-- VIEW $vName AS $vSql\n")
+
+    for (_, sf) <- storedFunctions.toSeq.sortBy(_._1) do
+      sb.append(s"-- ROUTINE: ${sf.source.replace("\n", "\\n")}\n")
+
+    for (_, sp) <- storedProcedures.toSeq.sortBy(_._1) do
+      sb.append(s"-- ROUTINE: ${sp.source.replace("\n", "\\n")}\n")
 
     for (eName, typ) <- types.toSeq.sortBy(_._1) do
       typ match
