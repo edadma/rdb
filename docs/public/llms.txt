@@ -1,6 +1,6 @@
 # PetraDB
 
-> A lightweight, embeddable SQL database engine for JavaScript, TypeScript, and Scala. PostgreSQL-syntax-compatible. Runs in-memory, in the browser, or on disk. No Docker, no server — just import and query.
+> A lightweight, embeddable SQL database engine for JavaScript, TypeScript, Scala, Java (JDBC), and C. PostgreSQL-syntax-compatible. Runs in-memory, in the browser, or on disk. No Docker, no server — just import and query.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.2.8"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.4.9"
 ```
 
 ```scala
@@ -41,6 +41,41 @@ executeSQL("""
   INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
   SELECT * FROM users;
 """).foreach(println)
+```
+
+### Java (JDBC)
+
+```xml
+<dependency>
+    <groupId>io.github.edadma</groupId>
+    <artifactId>petradb-jdbc</artifactId>
+    <version>1.4.3</version>
+</dependency>
+```
+
+```java
+Connection conn = DriverManager.getConnection("jdbc:petradb:memory");
+Statement stmt = conn.createStatement();
+stmt.executeUpdate("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)");
+ResultSet rs = stmt.executeQuery("SELECT * FROM users");
+```
+
+### C
+
+Build shared library with `sbt engineNative/nativeLink`. Include `petradb.h` and link with `-lpetradb-engine`.
+
+```c
+#include "petradb.h"
+
+int db = petradb_open();
+int conn = petradb_connect(db);
+petradb_exec(conn, "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)");
+int cur = petradb_prepare(conn, "SELECT id, name FROM users");
+while (petradb_step(cur) == PETRADB_ROW) {
+    printf("%d: %s\n", petradb_column_int(cur, 0), petradb_column_text(cur, 1));
+}
+petradb_finalize(cur);
+petradb_close(db);
 ```
 
 ## Storage Modes
@@ -60,9 +95,9 @@ new Session({ storage: 'text', path: './my.ptxt' })         // text
 ### Scala Storage
 
 ```scala
-new MemoryDB().connect()                   // in-memory
-new PersistentDB("my.petra").connect()      // persistent
-new TextDB("my.ptxt").connect()            // text
+new MemoryDB().connect()                        // in-memory
+PersistentDB.open("my.petra").connect()          // persistent
+TextDB.open("my.ptxt").connect()                 // text
 ```
 
 ## JavaScript / TypeScript API
@@ -73,30 +108,40 @@ new TextDB("my.ptxt").connect()            // text
   - `options.rowMode`: `'object'` (default) or `'array'`
   - `options.storage`: `'memory'` (default), `'persistent'`, or `'text'`
   - `options.path`: file path for persistent/text storage
-  - `options.pageSize`: page size for persistent storage (default 4096)
-- `session.execute(sql, params?)` — execute SQL, returns `Promise<Result[]>`
-- `session.prepare(name, sql, params?)` — prepare a statement
+- `session.execute(sql, options?)` — execute SQL, returns `Promise<Result[]>`
+- `session.prepare(sql)` — prepare a statement
+- `session.registerFunction(name, callback)` — register a native JS function callable from SQL
 - `session.close()` — close the session
 
 ### Result Types
 
-Results are discriminated unions with a `type` field:
+Results are discriminated unions with a `command` field:
 
-- `{ type: 'query', columns, rows }` — SELECT results
-- `{ type: 'insert', count, returning? }` — INSERT results
-- `{ type: 'update', count, returning? }` — UPDATE results
-- `{ type: 'delete', count, returning? }` — DELETE results
-- `{ type: 'command' }` — DDL statements (CREATE, DROP, ALTER, etc.)
-- `{ type: 'begin' | 'commit' | 'rollback' }` — transaction control
-- `{ type: 'prepare' | 'execute' | 'deallocate' }` — prepared statements
-
-### Prepared Statements
-
-```javascript
-await db.execute("PREPARE get_user AS SELECT * FROM users WHERE id = $1");
-const [{ rows }] = await db.execute("EXECUTE get_user(1)");
-await db.execute("DEALLOCATE get_user");
-```
+- `{ command: 'select', rows, fields }` — SELECT results
+- `{ command: 'insert', result, rows, fields }` — INSERT results
+- `{ command: 'update', rowCount }` — UPDATE results
+- `{ command: 'delete', rowCount }` — DELETE results
+- `{ command: 'copy', rowCount }` — COPY results
+- `{ command: 'create table', table }` — CREATE TABLE
+- `{ command: 'drop table', table }` — DROP TABLE
+- `{ command: 'alter table' }` — ALTER TABLE
+- `{ command: 'create index', index }` — CREATE INDEX
+- `{ command: 'drop index', index }` — DROP INDEX
+- `{ command: 'create type', type }` — CREATE TYPE
+- `{ command: 'drop type', type }` — DROP TYPE
+- `{ command: 'create view', view }` — CREATE VIEW
+- `{ command: 'drop view', view }` — DROP VIEW
+- `{ command: 'create sequence', sequence }` / `{ command: 'drop sequence', sequence }`
+- `{ command: 'create schema', schema }`
+- `{ command: 'truncate table', table }`
+- `{ command: 'explain', plan }`
+- `{ command: 'begin' }` / `{ command: 'commit' }` / `{ command: 'rollback' }`
+- `{ command: 'prepare', name }` / `{ command: 'deallocate', name }`
+- `{ command: 'do' }` — DO block
+- `{ command: 'create function', function }` / `{ command: 'drop function', function }`
+- `{ command: 'create procedure', procedure }` / `{ command: 'drop procedure', procedure }`
+- `{ command: 'create trigger', trigger }` / `{ command: 'drop trigger', trigger }`
+- `{ command: 'call' }` — CALL procedure
 
 ## Scala API
 
@@ -105,68 +150,88 @@ await db.execute("DEALLOCATE get_user");
 - `io.github.edadma.petradb` — core types
 - `io.github.edadma.petradb.engine` — database engines and `executeSQL`
 
-### executeSQL
+### Key Functions
 
-```scala
-given Session = new MemoryDB().connect()
-val results: Seq[Result] = executeSQL("SELECT * FROM users")
-```
+- `executeSQL(sql)(using Session): Seq[Result]` — execute SQL statements
+- `db.registerScalarFunction(name, func, returnType)` — register native Scala function
+- `session.openCursor(sql): Cursor` — open a lazy row-by-row cursor
 
 ### Result Types (sealed trait)
 
-- `QueryResult(columns, data)` — SELECT results
-- `InsertResult(count, returning)` — INSERT
-- `UpdateResult(count, returning)` — UPDATE
-- `DeleteResult(count, returning)` — DELETE
-- `CommandResult(command)` — DDL
-- `BeginResult`, `CommitResult`, `RollbackResult` — transactions
-- `PrepareResult`, `ExecuteResult(results)`, `DeallocateResult` — prepared statements
+QueryResult, InsertResult, UpdateResult, DeleteResult, CreateTableResult, DropTableResult, CreateIndexResult, DropIndexResult, CreateTypeResult, DropTypeResult, CreateViewResult, DropViewResult, CreateSequenceResult, DropSequenceResult, CreateSchemaResult, TruncateResult, AlterTableResult, ExplainResult, CopyResult, PrepareResult, DeallocateResult, BeginResult, CommitResult, RollbackResult, DoBlockResult, CreateFunctionResult, DropFunctionResult, CreateProcedureResult, DropProcedureResult, CreateTriggerResult, DropTriggerResult, CallResult.
+
+## C API
+
+SQLite-style interface. Build with `sbt engineNative/nativeLink`.
+
+### Core Functions
+
+- `petradb_open()` / `petradb_open_persistent(path)` / `petradb_close(db)` — lifecycle
+- `petradb_connect(db)` — create session
+- `petradb_exec(conn, sql)` — execute non-query SQL
+- `petradb_prepare(conn, sql)` / `petradb_step(cursor)` / `petradb_finalize(cursor)` — cursors
+- `petradb_column_count/name/type/int/int64/double/text/blob/bytes/is_null` — column access
+- `petradb_create_function(db, name, nargs, user_data, callback)` — register native function
+- `petradb_value_int/int64/double/text/type/is_null` — function argument accessors
+- `petradb_result_int/int64/double/text/null/error` — function result setters
+- `petradb_user_data(ctx)` — retrieve user data pointer
+- `petradb_errmsg()` — last error message
 
 ## Supported SQL
 
 ### Data Types
 
-SMALLINT, INT/INTEGER, BIGINT, SERIAL/BIGSERIAL, DOUBLE PRECISION/REAL/FLOAT, NUMERIC/DECIMAL, TEXT, CHAR(n), VARCHAR(n), BOOLEAN, DATE, TIME, TIMESTAMP, INTERVAL, UUID, JSON/JSONB, BYTEA, ENUM types, arrays (e.g. `INT[]`, `TEXT[]`).
+SMALLINT, INT/INTEGER, BIGINT, SERIAL/BIGSERIAL, DOUBLE PRECISION/REAL/FLOAT, NUMERIC/DECIMAL, TEXT, CHAR(n), VARCHAR(n), BOOLEAN, DATE, TIME, TIMETZ, TIMESTAMP, TIMESTAMPTZ, INTERVAL, UUID, JSON/JSONB, BYTEA, ENUM types, arrays (e.g. `INT[]`, `TEXT[]`).
 
-Type casting: `CAST(x AS type)` or `x::type`.
+### DDL
 
-### DDL (Data Definition Language)
-
-- `CREATE TABLE` with columns, constraints (PRIMARY KEY, NOT NULL, UNIQUE, CHECK, DEFAULT, REFERENCES)
-- `ALTER TABLE` (ADD/DROP/RENAME COLUMN, ADD/DROP CONSTRAINT, RENAME TO)
-- `DROP TABLE`, `TRUNCATE`
+- `CREATE TABLE` with PRIMARY KEY, NOT NULL, UNIQUE, CHECK, DEFAULT, REFERENCES, GENERATED ALWAYS AS ... STORED
+- `ALTER TABLE` (ADD/DROP/RENAME COLUMN, ALTER COLUMN SET TYPE/NOT NULL/DEFAULT, ADD/DROP CONSTRAINT)
+- `DROP TABLE [IF EXISTS] [CASCADE]`, `TRUNCATE`
 - `CREATE VIEW`, `CREATE OR REPLACE VIEW`, `DROP VIEW`
 - `CREATE TYPE name AS ENUM (...)`, `DROP TYPE`
-- `CREATE INDEX`, `CREATE UNIQUE INDEX`, `DROP INDEX`
-- `SHOW TABLES`, `SHOW VIEWS`, `SHOW COLUMNS FROM`, `SHOW PRIMARY KEY FROM`, `SHOW FOREIGN KEYS FROM`, `SHOW INDEXES FROM`
+- `CREATE [UNIQUE] INDEX` with partial indexes (`WHERE`) and expression indexes (`(lower(col))`)
+- `CREATE SCHEMA`, `CREATE SEQUENCE`, `DROP SEQUENCE`
+- `CREATE VIRTUAL TABLE name USING csv('path')`
+- `SHOW TABLES/VIEWS/COLUMNS/INDEXES/PRIMARY KEY/FOREIGN KEYS/SEQUENCES`
 
-### DML (Data Manipulation Language)
+### DML
 
-- `INSERT INTO ... VALUES ...` with `RETURNING`
+- `INSERT INTO ... VALUES ...` with `RETURNING` and `ON CONFLICT DO NOTHING/DO UPDATE`
 - `INSERT INTO ... SELECT ...`
-- `UPDATE ... SET ... WHERE ...` with `RETURNING`
-- `DELETE FROM ... WHERE ...` with `RETURNING`
+- `UPDATE ... SET ... [FROM ...] WHERE ...` with `RETURNING`
+- `DELETE FROM ... [USING ...] WHERE ...` with `RETURNING`
 - `COPY table FROM/TO 'file.csv' WITH (HEADER, DELIMITER ',')`
+- `csv_file('path')` — query CSV files directly as virtual tables
 
 ### Queries
 
-- `SELECT` with `WHERE`, `ORDER BY`, `LIMIT`, `OFFSET`
+- `SELECT` with `WHERE`, `ORDER BY`, `LIMIT`, `OFFSET`, `DISTINCT`, `DISTINCT ON`
 - `GROUP BY` with `HAVING`
-- Joins: `INNER JOIN`, `LEFT JOIN`, `RIGHT JOIN`, `FULL JOIN`, `CROSS JOIN`, `LATERAL JOIN`
-- Subqueries with `EXISTS`, `IN`, `ANY`
-- Set operations: `UNION [ALL]`, `INTERSECT [ALL]`, `EXCEPT [ALL]`
-- `CASE WHEN ... THEN ... ELSE ... END`
-- `LIKE`, `ILIKE` pattern matching
-- `BETWEEN`, `DISTINCT`, `EXPLAIN`
-- `VALUES` as a standalone query source
-- `ARRAY[...]` constructor
+- Joins: `INNER`, `LEFT`, `RIGHT`, `FULL OUTER`, `CROSS`, `LATERAL`
+- Subqueries with `EXISTS`, `IN`, `ANY/SOME/ALL`
+- Set operations: `UNION [ALL]`, `INTERSECT`, `EXCEPT`
+- CTEs: `WITH`, `WITH RECURSIVE`
+- Window functions: `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `LAG`, `LEAD`, `NTILE`, `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`, aggregate windows with frame specs
+- `CASE WHEN`, `LIKE/ILIKE`, `BETWEEN`, `OVERLAPS`, `IS DISTINCT FROM`
+- `EXPLAIN`
+
+### PL/pgSQL
+
+- `DO $$ DECLARE ... BEGIN ... EXCEPTION ... END $$` — anonymous blocks
+- `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`
+- `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`
+- `CALL procedure(args)`
+- `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
+- Control flow: IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP
+- Variables: DECLARE, assignment (:=), RETURN, RAISE, PERFORM, NULL
+- Exception handling: EXCEPTION WHEN condition THEN
+- Special variables: OLD, NEW, TG_OP, TG_TABLE_NAME
 
 ### Transactions
 
 ```sql
-BEGIN;
--- statements
-COMMIT;   -- or ROLLBACK;
+BEGIN; COMMIT; ROLLBACK;
 ```
 
 ### Prepared Statements
@@ -180,114 +245,44 @@ DEALLOCATE name;
 ## Built-in Functions
 
 ### Text
-
-upper, lower, initcap, length, char_length, octet_length, trim, ltrim, rtrim, btrim, lpad, rpad, substring, left, right, position, strpos, replace, translate, repeat, reverse, concat, concat_ws, split_part, regexp_replace, regexp_match, regexp_matches, starts_with, encode, decode, md5, ascii, chr, format, overlay, string_to_array, array_to_string, quote_literal, quote_nullable, quote_ident
+upper, lower, initcap, length, char_length, trim, ltrim, rtrim, btrim, lpad, rpad, substring, left, right, position, replace, translate, repeat, reverse, concat, concat_ws, split_part, regexp_replace, regexp_match, regexp_split_to_array, starts_with, ends_with, format, overlay, ascii, chr, quote_literal, quote_ident, encode, decode
 
 ### Numeric
-
-abs, ceil, floor, round, trunc, sign, sqrt, cbrt, power, exp, ln, log, mod, pi, degrees, radians, sin, cos, tan, asin, acos, atan, atan2, random, div, gcd, lcm, factorial, greatest, least, width_bucket, scale
+abs, ceil, floor, round, trunc, sign, sqrt, cbrt, power, exp, ln, log, mod, pi, degrees, radians, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, asinh, acosh, atanh, random, setseed, div, gcd, lcm, factorial, greatest, least, width_bucket
 
 ### Date/Time
-
-now, current_timestamp, current_date, current_time, localtime, localtimestamp, date_part/extract, date_trunc, to_char, to_date, to_timestamp, to_number, age, make_date, make_time, make_timestamp, make_interval, justify_days, justify_hours, justify_interval, isfinite
+now, current_timestamp, current_date, current_time, clock_timestamp, date_part, extract, date_trunc, to_char, to_date, to_timestamp, to_number, age, make_date, make_time, make_timestamp, make_timestamptz, make_interval, isfinite
 
 ### Array
-
-array_length, array_upper, array_lower, array_ndims, array_position, array_positions, array_append, array_prepend, array_cat, array_remove, array_replace, array_to_string, string_to_array, unnest, cardinality, array_fill, array_dims
+array_length, array_upper, array_lower, array_ndims, array_position, array_append, array_prepend, array_cat, array_remove, array_replace, array_distinct, array_to_string, string_to_array, cardinality
 
 ### JSON/JSONB
-
-Operators: `->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`
-
-Functions: jsonb_typeof, jsonb_array_length, jsonb_keys, jsonb_each, jsonb_each_text, jsonb_extract_path, jsonb_extract_path_text, jsonb_set, jsonb_insert, jsonb_strip_nulls, jsonb_pretty, jsonb_build_object, jsonb_build_array, to_jsonb, row_to_json, json_agg, json_object_agg
+Operators: `->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `||`
+Functions: jsonb_typeof, jsonb_array_length, jsonb_keys, jsonb_object_keys, jsonb_extract_path, jsonb_extract_path_text, jsonb_set, jsonb_insert, jsonb_strip_nulls, jsonb_pretty, jsonb_build_object, jsonb_build_array, to_jsonb, to_json
 
 ### Aggregate
+count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, bit_and, bit_or, bit_xor, variance/var_samp, var_pop, stddev/stddev_samp, stddev_pop, json_agg, jsonb_agg, json_object_agg, jsonb_object_agg
 
-count, sum, avg, min, max, string_agg, array_agg, bool_and, bool_or, every, variance/var_samp, var_pop, stddev/stddev_samp, stddev_pop, covar_samp, covar_pop, corr, regr_slope, regr_intercept
-
-### Scalar
-
-coalesce, nullif, typeof, gen_random_uuid
+### Other
+coalesce, nullif, typeof, gen_random_uuid, nextval, currval, setval, lastval
 
 ## Integrations
 
-### JDBC
-
-Full JDBC 4 driver for JVM applications. Supports Statement, PreparedStatement (with `?` placeholders), batch operations, transactions, and DatabaseMetaData.
-
-Connection URLs:
-- `jdbc:petradb:memory:` — in-memory
-- `jdbc:petradb:file:/path/to/db.petra` — persistent file
-- `jdbc:petradb:server://host:port` — remote server
-
-### Knex.js
-
-Query builder dialect: `npm install @petradb/knex`
-
-```javascript
-import Knex from 'knex';
-import { PetraDialect } from '@petradb/knex';
-
-const knex = Knex({ client: PetraDialect });
-```
-
-### AdonisJS Lucid
-
-ORM driver: `npm install @petradb/lucid`
-
-Supports schema builder, query builder, raw queries, transactions, ORM models with BaseModel, and migrations with BaseSchema.
-
-### Drizzle ORM
-
-Type-safe ORM driver: `npm install @petradb/drizzle drizzle-orm`
-
-```javascript
-import { Session } from '@petradb/engine';
-import { drizzle } from '@petradb/drizzle';
-
-const session = new Session({ storage: 'memory' });
-const db = drizzle(session);
-```
-
-Custom PostgreSQL dialect driver with full feature parity with `drizzle-orm/node-postgres`. Supports `pgTable` schemas, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and relational queries.
-
-## CLI
-
-```bash
-npm install -g @petradb/engine
-```
-
-```bash
-petradb                    # interactive REPL (in-memory)
-petradb mydb.petra         # persistent storage
-petradb mydb.ptxt          # text storage
-petradb -e "SELECT 1 + 1"  # execute and exit
-petradb -f script.sql      # run SQL file
-```
-
-Meta-commands: `\dt` (tables), `\dv` (views), `\d table` (describe), `\i file` (include), `\dump` (export), `\copy` (CSV import/export), `\timing` (toggle), `\q` (quit).
-
-## Server
-
-```bash
-petradb-server                          # default: memory, port 5480
-petradb-server -m persistent -p 8080    # persistent storage on port 8080
-petradb-server -c config.toml           # use config file
-```
-
-HTTP API:
-- `POST /sql` — execute SQL (stateless)
-- `POST /session` — create a session (stateful)
-- `DELETE /session/<id>` — close a session
-- `GET /health` — health check
+- **JDBC**: Full JDBC 4 driver. `jdbc:petradb:memory`, `jdbc:petradb:file:path`, `jdbc:petradb://host:port`
+- **Drizzle ORM**: `@petradb/drizzle` — type-safe ORM with pgTable schemas, transactions, relational queries
+- **Knex.js**: `@petradb/knex` — query builder dialect
+- **Lucid ORM**: `@petradb/lucid` — AdonisJS ORM driver
+- **Quarry**: `@petradb/quarry` — type-safe AST query builder (no SQL strings)
 
 ## Links
 
 - [Documentation](https://petradb.dev)
 - [Getting Started (JavaScript)](https://petradb.dev/getting-started/javascript/)
+- [Getting Started (Java)](https://petradb.dev/getting-started/java/)
 - [Getting Started (Scala)](https://petradb.dev/getting-started/scala/)
+- [Getting Started (C)](https://petradb.dev/getting-started/c/)
 - [SQL Reference](https://petradb.dev/reference/ddl/)
-- [API Reference (JavaScript)](https://petradb.dev/reference/api-javascript/)
-- [API Reference (Scala)](https://petradb.dev/reference/api-scala/)
+- [PL/pgSQL Reference](https://petradb.dev/reference/plpgsql/)
+- [C API Reference](https://petradb.dev/reference/api-c/)
 - [GitHub](https://github.com/edadma/petradb)
 - [npm](https://www.npmjs.com/package/@petradb/engine)
