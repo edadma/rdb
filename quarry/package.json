@@ -18,7 +18,7 @@
     "test": "node --test test/integration.mjs test/operators.mjs test/schema-tx.mjs test/subqueries.mjs test/upsert.mjs test/aliases.mjs test/joins-aggs.mjs test/insert-select-update-from.mjs test/setops-windows-ctes.mjs",
     "typecheck": "tsc --noEmit -p test/tsconfig.json"
   },
-  "peerDependencies": {
+  "dependencies": {
     "@petradb/engine": ">=1.5.0"
   },
   "devDependencies": {
