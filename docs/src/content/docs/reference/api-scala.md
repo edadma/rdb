@@ -104,6 +104,14 @@ case class CreateSchemaResult(name: String)                         extends Resu
 case object BeginResult                                             extends Result
 case object CommitResult                                            extends Result
 case object RollbackResult                                          extends Result
+case object DoBlockResult                                           extends Result
+case class CreateFunctionResult(name: String)                       extends Result
+case class DropFunctionResult(name: String)                         extends Result
+case class CreateProcedureResult(name: String)                      extends Result
+case class DropProcedureResult(name: String)                        extends Result
+case class CreateTriggerResult(name: String)                        extends Result
+case class DropTriggerResult(name: String)                          extends Result
+case object CallResult                                              extends Result
 ```
 
 ## Accessing Query Data
