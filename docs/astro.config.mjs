@@ -45,6 +45,8 @@ export default defineConfig({
 					items: [
 						{ label: 'JavaScript / TypeScript', slug: 'getting-started/javascript' },
 						{ label: 'Scala', slug: 'getting-started/scala' },
+						{ label: 'Java', slug: 'getting-started/java' },
+						{ label: 'C / Native', slug: 'getting-started/c' },
 						{ label: 'Playground', link: '/playground/' },
 					],
 				},
