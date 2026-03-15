@@ -180,6 +180,14 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
     js.Promise.resolve[Unit](())
 
   @JSExport
+  def registerFunction(name: String, func: js.Function1[js.Array[js.Any], js.Any]): Unit =
+    db.registerScalarFunction(name, { args =>
+      val jsArgs = args.map(toJS).toJSArray
+      val jsResult = func(jsArgs)
+      fromJS(jsResult)
+    })
+
+  @JSExport
   def prepare(sql: String): PreparedStatementJS = new PreparedStatementJS(session.prepare(sql))
 
   class PreparedStatementJS(ps: PreparedStatement):

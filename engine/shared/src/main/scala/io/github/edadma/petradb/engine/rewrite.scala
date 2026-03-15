@@ -321,7 +321,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
             Seq.empty,
           )
         case _ =>
-          scalarFunction get func.toLowerCase match
+          (scalarFunction get func.toLowerCase).orElse(session.db.userScalarFunctions get func.toLowerCase) match
             case None =>
               aggregateFunction get func.toLowerCase match
                 case None =>

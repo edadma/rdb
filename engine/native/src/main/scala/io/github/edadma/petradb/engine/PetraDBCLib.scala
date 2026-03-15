@@ -62,6 +62,49 @@ def petradb_open_persistent(path: CString): Int = withError(0) {
   h
 }
 
+/** Register a native function callable from SQL.
+  * The callback receives (argc, argv_texts, result_buf, result_buf_size).
+  * argv_texts is an array of null-terminated strings (NULL values are null pointers).
+  * Write the result as a null-terminated string into result_buf.
+  * Return 0 for success, -1 for error.
+  */
+@exported("petradb_create_function")
+def petradb_create_function(dbHandle: Int, name: CString, callback: CFuncPtr4[Int, Ptr[CString], Ptr[Byte], Int, Int]): Int = withError(-1) {
+  _dbs.get(dbHandle) match
+    case Some(db) =>
+      val funcName = fromCString(name)
+      db.registerScalarFunction(funcName, { args =>
+        val argc = args.length
+        val argPtrs = stackalloc[CString](argc)
+        val argStrings = args.map { v =>
+          if v.isNull then null
+          else
+            val s = v.string
+            val bytes = (s + "\u0000").getBytes("UTF-8")
+            _lastReturnedString = bytes // pin
+            bytes.at(0).asInstanceOf[CString]
+        }
+        for i <- 0 until argc do
+          argPtrs(i) = argStrings(i)
+        val resultBuf = stackalloc[Byte](4096)
+        val rc = callback(argc, argPtrs, resultBuf, 4096)
+        if rc != 0 then NullValue()
+        else
+          val resultStr = fromCString(resultBuf)
+          if resultStr.isEmpty then NullValue()
+          else
+            try NumberValue(resultStr.toInt)
+            catch case _: NumberFormatException =>
+              try NumberValue(resultStr.toDouble)
+              catch case _: NumberFormatException =>
+                TextValue(resultStr)
+      })
+      0
+    case None =>
+      _lastError = "invalid database handle"
+      -1
+}
+
 @exported("petradb_close")
 def petradb_close(dbHandle: Int): Int = withError(-1) {
   _dbs.remove(dbHandle) match

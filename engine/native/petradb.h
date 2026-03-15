@@ -49,6 +49,20 @@ int petradb_open_persistent(const char *path);
 /** Close a database. Returns 0 on success, -1 on error. */
 int petradb_close(int db);
 
+/* ── User-defined functions ──────────────────────────────────────── */
+
+/** Callback type for user-defined SQL functions.
+  * argc: number of arguments
+  * argv: array of null-terminated strings (NULL values are null pointers)
+  * result: buffer to write the result string into (null-terminated)
+  * result_size: size of result buffer
+  * Return 0 for success, -1 for error.
+  */
+typedef int (*petradb_func_callback)(int argc, const char** argv, char* result, int result_size);
+
+/** Register a native function callable from SQL, triggers, and procedures. */
+int petradb_create_function(int db, const char* name, petradb_func_callback fn);
+
 /* ── Connection ─────────────────────────────────────────────────── */
 
 /** Create a session (connection) to a database. Returns handle, or 0 on error. */

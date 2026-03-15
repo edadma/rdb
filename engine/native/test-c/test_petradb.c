@@ -263,6 +263,38 @@ void test_update_delete(void) {
     petradb_close(db);
 }
 
+int my_double_func(int argc, const char** argv, char* result, int result_size) {
+    if (argc != 1 || argv[0] == NULL) return -1;
+    int val = atoi(argv[0]);
+    snprintf(result, result_size, "%d", val * 2);
+    return 0;
+}
+
+void test_create_function(void) {
+    printf("test_create_function\n");
+    int db = petradb_open();
+
+    int rc = petradb_create_function(db, "my_double", my_double_func);
+    ASSERT_EQ_INT(rc, 0, "create_function returns 0");
+
+    int conn = petradb_connect(db);
+    int cur = petradb_prepare(conn, "SELECT my_double(21) AS val");
+    petradb_step(cur);
+    ASSERT_EQ_INT(petradb_column_int(cur, 0), 42, "native function returns 42");
+    petradb_finalize(cur);
+
+    /* Use in WHERE */
+    petradb_exec(conn, "CREATE TABLE t (val INT); INSERT INTO t VALUES (5); INSERT INTO t VALUES (10);");
+    cur = petradb_prepare(conn, "SELECT my_double(val) AS d FROM t ORDER BY val");
+    petradb_step(cur);
+    ASSERT_EQ_INT(petradb_column_int(cur, 0), 10, "native func on col val=5");
+    petradb_step(cur);
+    ASSERT_EQ_INT(petradb_column_int(cur, 0), 20, "native func on col val=10");
+    petradb_finalize(cur);
+
+    petradb_close(db);
+}
+
 void test_blob(void) {
     printf("test_blob\n");
     int db = petradb_open();
@@ -312,6 +344,7 @@ int main(void) {
     test_multiple_cursors();
     test_update_delete();
     test_blob();
+    test_create_function();
 
     printf("\n====================\n");
     printf("%d/%d tests passed\n", tests_passed, tests_run);

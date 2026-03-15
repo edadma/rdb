@@ -70,6 +70,11 @@ abstract class DB:
   protected[petradb] val schemas = new mutable.LinkedHashSet[String]
   schemas += "public"
 
+  protected[petradb] val userScalarFunctions = new mutable.HashMap[String, ScalarFunction]
+
+  def registerScalarFunction(name: String, func: PartialFunction[Seq[Value], Value], returnType: Type = AnyType): Unit =
+    userScalarFunctions(name.toLowerCase) = ScalarFunction(name.toLowerCase, func, returnType)
+
   protected[petradb] val storedFunctions = new mutable.HashMap[String, StoredFunction]
   protected[petradb] val storedProcedures = new mutable.HashMap[String, StoredProcedure]
   protected[petradb] val triggers = new mutable.ArrayBuffer[TriggerDef]
