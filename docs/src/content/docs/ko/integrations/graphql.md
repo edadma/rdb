@@ -1,17 +1,17 @@
 ---
 title: GraphQL
-description: Construire une API GraphQL avec PetraDB et GraphQL Yoga.
+description: PetraDB와 GraphQL Yoga로 GraphQL API 구축하기.
 ---
 
-PetraDB fonctionne avec tout serveur GraphQL qui s'exécute sur Node.js. Ce guide utilise [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server) — un serveur léger et conforme aux spécifications — mais la même approche s'applique à Apollo Server, Mercurius ou tout autre framework. PetraDB s'exécute en processus, donc les resolvers appellent le moteur directement sans aller-retour réseau.
+PetraDB는 Node.js에서 실행되는 모든 GraphQL 서버와 함께 작동합니다. 이 가이드는 경량의 사양 준수 서버인 [GraphQL Yoga](https://the-guild.dev/graphql/yoga-server)를 사용하지만, Apollo Server, Mercurius 또는 다른 프레임워크에도 동일한 접근 방식이 적용됩니다. PetraDB는 프로세스 내에서 실행되므로, 리졸버가 네트워크 왕복 없이 엔진을 직접 호출합니다.
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/engine graphql-yoga graphql
 ```
 
-## Configuration
+## 설정
 
 ```javascript
 import { Session } from '@petradb/engine';
@@ -29,9 +29,9 @@ await db.execute(`
 `);
 ```
 
-## Schéma et resolvers
+## 스키마와 리졸버
 
-Définissez un schéma GraphQL correspondant à vos tables PetraDB :
+PetraDB 테이블에 매핑되는 GraphQL 스키마를 정의합니다:
 
 ```javascript
 const yoga = createYoga({
@@ -99,9 +99,9 @@ const server = createServer(yoga);
 server.listen(4000, () => console.log('GraphQL API running on http://localhost:4000/graphql'));
 ```
 
-## Requêtes paramétrées
+## 매개변수화된 쿼리
 
-Utilisez toujours `db.prepare()` avec des paramètres positionnels (`$1`, `$2`, ...) pour les valeurs fournies par l'utilisateur. Cela prévient l'injection SQL et gère la conversion de types automatiquement.
+사용자 제공 값에는 항상 `db.prepare()`와 위치 매개변수(`$1`, `$2`, ...)를 사용합니다. 이렇게 하면 SQL 인젝션을 방지하고 타입 변환을 자동으로 처리합니다.
 
 ```javascript
 const [{ rows }] = await db.prepare(
@@ -109,9 +109,9 @@ const [{ rows }] = await db.prepare(
 ).execute([name, email]);
 ```
 
-## Resolvers imbriqués
+## 중첩 리졸버
 
-Pour les données liées, ajoutez des resolvers de champs qui exécutent des requêtes supplémentaires :
+관련 데이터의 경우, 추가 쿼리를 실행하는 필드 리졸버를 추가합니다:
 
 ```javascript
 await db.execute(`
@@ -174,9 +174,9 @@ const schema = createSchema({
 });
 ```
 
-## Pagination
+## 페이지네이션
 
-La pagination par décalage correspond directement au SQL `LIMIT` et `OFFSET` :
+오프셋 기반 페이지네이션은 SQL의 `LIMIT`과 `OFFSET`에 직접 매핑됩니다:
 
 ```javascript
 const resolvers = {
@@ -191,7 +191,7 @@ const resolvers = {
 };
 ```
 
-Pour la pagination par curseur, utilisez l'ID de ligne comme curseur :
+커서 기반 페이지네이션의 경우, 행 ID를 커서로 사용합니다:
 
 ```javascript
 const resolvers = {
@@ -204,7 +204,7 @@ const resolvers = {
         params.push(after);
       }
       sql += ` ORDER BY id LIMIT $${params.length + 1}`;
-      params.push(first + 1); // récupérer un élément supplémentaire pour vérifier hasNextPage
+      params.push(first + 1); // hasNextPage 확인을 위해 하나 더 가져옴
 
       const [{ rows }] = await db.prepare(sql).execute(params);
       const hasNextPage = rows.length > first;
@@ -222,9 +222,9 @@ const resolvers = {
 };
 ```
 
-## Transactions
+## 트랜잭션
 
-Encapsulez les mutations multi-étapes dans une transaction avec `BEGIN` / `COMMIT` / `ROLLBACK` :
+다중 단계 뮤테이션을 `BEGIN` / `COMMIT` / `ROLLBACK`으로 트랜잭션에 래핑합니다:
 
 ```javascript
 const resolvers = {
@@ -249,9 +249,9 @@ const resolvers = {
 };
 ```
 
-## Agrégations
+## 집계
 
-Utilisez les agrégats SQL et retournez des champs calculés :
+SQL 집계를 사용하여 계산된 필드를 반환합니다:
 
 ```javascript
 const resolvers = {
@@ -271,11 +271,11 @@ const resolvers = {
 };
 ```
 
-## Mapping de types
+## 타입 매핑
 
-PetraDB retourne des types JavaScript natifs, donc les scalaires GraphQL fonctionnent sans coercition manuelle :
+PetraDB는 네이티브 JavaScript 타입을 반환하므로, GraphQL 스칼라가 수동 강제 변환 없이 작동합니다:
 
-| Type PetraDB | Type JS | Scalaire GraphQL |
+| PetraDB 타입 | JS 타입 | GraphQL 스칼라 |
 |---|---|---|
 | `SERIAL` / `INTEGER` | `number` | `Int` |
 | `BIGINT` | `number` | `Int` |
@@ -283,6 +283,6 @@ PetraDB retourne des types JavaScript natifs, donc les scalaires GraphQL fonctio
 | `NUMERIC` | `number` | `Float` |
 | `TEXT` / `VARCHAR` | `string` | `String` |
 | `BOOLEAN` | `boolean` | `Boolean` |
-| `DATE` / `TIMESTAMP` | `Date` | `String` (ou scalaire personnalisé) |
-| `JSON` | `object` | scalaire personnalisé ou `String` |
-| `NULL` | `null` | champ nullable |
+| `DATE` / `TIMESTAMP` | `Date` | `String` (또는 커스텀 스칼라) |
+| `JSON` | `object` | 커스텀 스칼라 또는 `String` |
+| `NULL` | `null` | NULL 허용 필드 |

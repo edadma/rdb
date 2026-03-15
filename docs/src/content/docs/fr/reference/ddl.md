@@ -1,11 +1,11 @@
 ---
 title: DDL
-description: Langage de definition de donnees -- instructions CREATE, ALTER, DROP et TRUNCATE.
+description: Langage de définition de données — instructions CREATE, ALTER, DROP et TRUNCATE.
 ---
 
-## Schemas
+## Schémas
 
-PetraDB supporte les espaces de noms de schemas style PostgreSQL. Chaque base de donnees dispose d'un schema `public` par defaut. Les noms de tables non qualifies sont resolus dans `public`.
+PetraDB supporte les espaces de noms de schémas style PostgreSQL. Chaque base de données dispose d'un schéma `public` par défaut. Les noms de tables non qualifiés sont résolus dans `public`.
 
 ### CREATE SCHEMA
 
@@ -14,7 +14,7 @@ CREATE SCHEMA inventory;
 CREATE SCHEMA IF NOT EXISTS inventory;
 ```
 
-### Tables qualifiees par le schema
+### Tables qualifiées par le schéma
 
 Utilisez la syntaxe `schema.table` dans toute instruction DDL ou DML :
 
@@ -29,18 +29,18 @@ INSERT INTO inventory.products (name, price) VALUES ('Widget', 9.99);
 SELECT * FROM inventory.products;
 ```
 
-Des tables portant le meme nom peuvent exister dans differents schemas :
+Des tables portant le même nom peuvent exister dans différents schémas :
 
 ```sql
 CREATE SCHEMA staging;
 CREATE TABLE staging.products (id SERIAL, name TEXT);
 CREATE TABLE public.products (id SERIAL, name TEXT);
--- Ce sont des tables separees
+-- Ce sont des tables séparées
 ```
 
 ### information_schema
 
-PetraDB fournit des tables virtuelles `information_schema` pour l'introspection de la structure de la base de donnees :
+PetraDB fournit des tables virtuelles `information_schema` pour l'introspection de la structure de la base de données :
 
 ```sql
 SELECT * FROM information_schema.schemata;
@@ -68,7 +68,7 @@ CREATE TABLE orders (
 CREATE TABLE IF NOT EXISTS orders (...);
 ```
 
-### Cles etrangeres
+### Clés étrangères
 
 ```sql
 CREATE TABLE line_items (
@@ -78,9 +78,9 @@ CREATE TABLE line_items (
 );
 ```
 
-### Colonnes generees
+### Colonnes générées
 
-Colonnes calculees automatiquement derivees d'autres colonnes :
+Colonnes calculées automatiquement dérivées d'autres colonnes :
 
 ```sql
 CREATE TABLE products (
@@ -94,7 +94,7 @@ SELECT * FROM products;
 -- price: 100, tax_rate: 0.08, total: 108
 ```
 
-Les colonnes generees sont recalculees lors des INSERT et UPDATE. Elles ne peuvent pas etre ecrites directement.
+Les colonnes générées sont recalculées lors des INSERT et UPDATE. Elles ne peuvent pas être écrites directement.
 
 ### ALTER TABLE
 
@@ -107,7 +107,7 @@ ALTER TABLE orders RENAME COLUMN amount TO total;
 ALTER TABLE orders RENAME TO purchases;
 ```
 
-Modifier les proprietes de colonnes :
+Modifier les propriétés de colonnes :
 
 ```sql
 ALTER TABLE orders ALTER COLUMN notes SET NOT NULL;
@@ -141,11 +141,11 @@ CREATE TABLE products (
 );
 ```
 
-Les contraintes CHECK sont appliquees lors des INSERT et UPDATE.
+Les contraintes CHECK sont appliquées lors des INSERT et UPDATE.
 
-## Declencheurs
+## Déclencheurs
 
-Consultez [PL/pgSQL -- Declencheurs](/reference/plpgsql/#triggers) pour la documentation complete.
+Consultez [PL/pgSQL — Déclencheurs](/reference/plpgsql/#triggers) pour la documentation complète.
 
 ```sql
 CREATE TRIGGER trg_audit AFTER INSERT ON orders
@@ -157,7 +157,7 @@ DROP TRIGGER IF EXISTS trg_audit ON orders;
 
 ### TRUNCATE TABLE
 
-Supprime toutes les lignes et reinitialise les sequences serial :
+Supprime toutes les lignes et réinitialise les séquences serial :
 
 ```sql
 TRUNCATE TABLE orders;
@@ -174,7 +174,7 @@ DROP TABLE IF EXISTS orders;
 
 ### CREATE VIEW
 
-Cree une vue nommee soutenue par une requete. Utilisez `OR REPLACE` pour remplacer une vue existante :
+Crée une vue nommée soutenue par une requête. Utilisez `OR REPLACE` pour remplacer une vue existante :
 
 ```sql
 CREATE VIEW active_orders AS
@@ -191,11 +191,11 @@ DROP VIEW active_orders;
 DROP VIEW IF EXISTS active_orders;
 ```
 
-## Types personnalises
+## Types personnalisés
 
 ### CREATE TYPE
 
-Definit un type enumere :
+Définit un type énuméré :
 
 ```sql
 CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
@@ -207,9 +207,9 @@ CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
 DROP TYPE order_status CASCADE;
 ```
 
-## Sequences
+## Séquences
 
-Les sequences sont des compteurs nommes qui generent des valeurs numeriques sequentielles. Elles sont couramment utilisees pour la generation de cles primaires.
+Les séquences sont des compteurs nommés qui génèrent des valeurs numériques séquentielles. Elles sont couramment utilisées pour la génération de clés primaires.
 
 ### CREATE SEQUENCE
 
@@ -221,13 +221,13 @@ CREATE SEQUENCE IF NOT EXISTS order_seq;
 
 Options :
 
-| Option | Par defaut | Description |
+| Option | Par défaut | Description |
 |--------|-----------|-------------|
-| `INCREMENT BY n` | 1 | Pas d'incrementation |
+| `INCREMENT BY n` | 1 | Pas d'incrémentation |
 | `START WITH n` | 1 | Valeur initiale |
 | `MINVALUE n` / `NO MINVALUE` | 1 | Valeur minimale |
 | `MAXVALUE n` / `NO MAXVALUE` | 4611686018427387903 | Valeur maximale |
-| `CYCLE` / `NO CYCLE` | `NO CYCLE` | Reprendre au debut aux limites |
+| `CYCLE` / `NO CYCLE` | `NO CYCLE` | Reprendre au début aux limites |
 
 ### DROP SEQUENCE
 
@@ -236,33 +236,33 @@ DROP SEQUENCE order_seq;
 DROP SEQUENCE IF EXISTS order_seq;
 ```
 
-### SERIAL et sequences
+### SERIAL et séquences
 
-Les colonnes `SERIAL`, `SMALLSERIAL` et `BIGSERIAL` creent automatiquement une sequence de support nommee `<table>_<column>_seq`. Cela correspond au comportement PostgreSQL :
+Les colonnes `SERIAL`, `SMALLSERIAL` et `BIGSERIAL` créent automatiquement une séquence de support nommée `<table>_<column>_seq`. Cela correspond au comportement PostgreSQL :
 
 ```sql
 CREATE TABLE orders (id SERIAL PRIMARY KEY, name TEXT);
--- Cree implicitement la sequence "orders_id_seq"
+-- Crée implicitement la séquence "orders_id_seq"
 
 SELECT nextval('orders_id_seq');   -- fonctionne
-SELECT currval('orders_id_seq');   -- fonctionne apres INSERT ou nextval
+SELECT currval('orders_id_seq');   -- fonctionne après INSERT ou nextval
 ```
 
-La suppression de la table supprime en cascade ses sequences possedees. `TRUNCATE` reinitialise les sequences de support a leurs valeurs de depart.
+La suppression de la table supprime en cascade ses séquences possédées. `TRUNCATE` réinitialise les séquences de support à leurs valeurs de départ.
 
-### Fonctions de sequence
+### Fonctions de séquence
 
 | Fonction | Description |
 |----------|-------------|
 | `nextval('seq_name')` | Avancer et retourner la valeur suivante |
-| `currval('seq_name')` | Retourner la valeur actuelle (nextval doit etre appele d'abord dans la session) |
-| `setval('seq_name', value)` | Definir la valeur actuelle ; le prochain nextval retourne valeur + increment |
-| `setval('seq_name', value, false)` | Definir la valeur actuelle ; le prochain nextval retourne valeur |
-| `lastval()` | Retourner la derniere valeur de toute sequence dans cette session |
+| `currval('seq_name')` | Retourner la valeur actuelle (nextval doit être appelé d'abord dans la session) |
+| `setval('seq_name', value)` | Définir la valeur actuelle ; le prochain nextval retourne valeur + incrément |
+| `setval('seq_name', value, false)` | Définir la valeur actuelle ; le prochain nextval retourne valeur |
+| `lastval()` | Retourner la dernière valeur de toute séquence dans cette session |
 
-## Fonctions et procedures stockees
+## Fonctions et procédures stockées
 
-Consultez [PL/pgSQL](/reference/plpgsql/) pour la documentation complete.
+Consultez [PL/pgSQL](/reference/plpgsql/) pour la documentation complète.
 
 ```sql
 CREATE FUNCTION double(x INT) RETURNS INT AS $$
@@ -285,27 +285,27 @@ DROP INDEX idx_orders_status;
 
 ### Index partiels
 
-Indexent uniquement les lignes correspondant a une condition, rendant l'index plus petit et plus rapide :
+Indexent uniquement les lignes correspondant à une condition, rendant l'index plus petit et plus rapide :
 
 ```sql
 CREATE INDEX idx_active_orders ON orders (customer_id) WHERE status = 'active';
 CREATE UNIQUE INDEX idx_unique_active_email ON users (email) WHERE active = true;
 ```
 
-Le planificateur de requetes utilise un index partiel uniquement lorsque la clause `WHERE` de la requete inclut la condition de l'index.
+Le planificateur de requêtes utilise un index partiel uniquement lorsque la clause `WHERE` de la requête inclut la condition de l'index.
 
 ### Index sur expression
 
-Index sur des valeurs calculees au lieu de colonnes brutes :
+Index sur des valeurs calculées au lieu de colonnes brutes :
 
 ```sql
 CREATE INDEX idx_lower_email ON users ((lower(email)));
 CREATE UNIQUE INDEX idx_lower_name ON users ((lower(name)));
 ```
 
-L'expression doit etre entre parentheses. Le planificateur fait correspondre `WHERE lower(email) = 'alice@test.com'` a l'index automatiquement.
+L'expression doit être entre parenthèses. Le planificateur fait correspondre `WHERE lower(email) = 'alice@test.com'` à l'index automatiquement.
 
-Les index partiels et sur expression peuvent etre combines :
+Les index partiels et sur expression peuvent être combinés :
 
 ```sql
 CREATE INDEX idx_active_lower ON users ((lower(name))) WHERE status = 'active';
@@ -313,7 +313,7 @@ CREATE INDEX idx_active_lower ON users ((lower(name))) WHERE status = 'active';
 
 ## Commandes SHOW
 
-Inspecter les metadonnees de la base de donnees :
+Inspecter les métadonnées de la base de données :
 
 ```sql
 SHOW TABLES;
@@ -331,19 +331,19 @@ SHOW INDEXES;              -- tous les index de toutes les tables
 | Colonne | Type | Description |
 |---------|------|-------------|
 | `view_name` | TEXT | Nom de la vue |
-| `definition` | TEXT | La requete SQL qui definit la vue |
+| `definition` | TEXT | La requête SQL qui définit la vue |
 
 ### Sortie de SHOW COLUMNS
 
 | Colonne | Type | Description |
 |---------|------|-------------|
 | `name` | TEXT | Nom de la colonne |
-| `type` | TEXT | Type de donnees |
+| `type` | TEXT | Type de données |
 | `required` | BOOLEAN | Contrainte NOT NULL |
-| `indexed` | BOOLEAN | Possede un index |
-| `unique` | BOOLEAN | Possede une contrainte d'unicite |
-| `fk_table` | TEXT | Table cible de la cle etrangere |
-| `fk_column` | TEXT | Colonne cible de la cle etrangere |
+| `indexed` | BOOLEAN | Possède un index |
+| `unique` | BOOLEAN | Possède une contrainte d'unicité |
+| `fk_table` | TEXT | Table cible de la clé étrangère |
+| `fk_column` | TEXT | Colonne cible de la clé étrangère |
 | `fk_on_delete` | TEXT | Action ON DELETE |
 | `fk_on_update` | TEXT | Action ON UPDATE |
-| `default_value` | TEXT | Expression par defaut |
+| `default_value` | TEXT | Expression par défaut |

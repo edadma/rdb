@@ -1,17 +1,17 @@
 ---
 title: Drizzle ORM
-description: Utiliser Drizzle ORM avec PetraDB.
+description: PetraDB와 함께 Drizzle ORM을 사용하는 방법.
 ---
 
-PetraDB fournit un pilote [Drizzle ORM](https://orm.drizzle.team) via le package `@petradb/drizzle`. Il implémente un pilote de dialecte PostgreSQL personnalisé — Drizzle génère du SQL en dialecte PostgreSQL, et PetraDB l'exécute en processus sans protocole filaire. Le pilote offre une parité complète des fonctionnalités avec `drizzle-orm/node-postgres`, y compris `db.transaction()`, `returning()` sur toutes les mutations et les requêtes relationnelles.
+PetraDB는 `@petradb/drizzle` 패키지를 통해 [Drizzle ORM](https://orm.drizzle.team) 드라이버를 제공합니다. 커스텀 PostgreSQL 방언 드라이버를 구현하여, Drizzle이 PostgreSQL 방언 SQL을 생성하면 PetraDB가 와이어 프로토콜 없이 프로세스 내에서 직접 실행합니다. 이 드라이버는 `db.transaction()`, 모든 변형에서의 `returning()`, 관계형 쿼리를 포함하여 `drizzle-orm/node-postgres`와 완전한 기능 동등성을 제공합니다.
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/drizzle drizzle-orm @petradb/engine
 ```
 
-## Configuration
+## 설정
 
 ```typescript
 import { Session } from "@petradb/engine";
@@ -21,19 +21,19 @@ const session = new Session({ storage: "memory" });
 const db = drizzle(session);
 ```
 
-### Modes de stockage
+### 스토리지 모드
 
 ```typescript
-// En mémoire (par défaut)
+// 인메모리 (기본값)
 new Session({ storage: "memory" })
 
-// Stockage persistant sur fichier
+// 파일 기반 영구 스토리지
 new Session({ storage: "persistent", path: "./mydb.petra" })
 ```
 
-## Définition du schéma
+## 스키마 정의
 
-Définissez les tables en utilisant le `pgTable` de Drizzle :
+Drizzle의 `pgTable`을 사용하여 테이블을 정의합니다:
 
 ```typescript
 import { pgTable, serial, text, integer, boolean } from "drizzle-orm/pg-core";
@@ -47,7 +47,7 @@ const users = pgTable("users", {
 });
 ```
 
-Créez la table via la session, ou utilisez les [migrations](#migrations) avec `drizzle-kit generate` + `migrate()` :
+세션을 통해 테이블을 생성하거나, `drizzle-kit generate` + `migrate()`로 [마이그레이션](#마이그레이션)을 사용합니다:
 
 ```typescript
 await session.execute(`
@@ -61,60 +61,60 @@ await session.execute(`
 `);
 ```
 
-## Insertion
+## 삽입
 
 ```typescript
-// Ligne unique
+// 단일 행
 await db.insert(users).values({
   name: "Alice",
   email: "alice@example.com",
   age: 30,
 });
 
-// Lignes multiples
+// 여러 행
 await db.insert(users).values([
   { name: "Bob", email: "bob@example.com", age: 25 },
   { name: "Charlie", email: "charlie@example.com", age: 35 },
 ]);
 
-// Avec returning
+// returning과 함께
 const [inserted] = await db
   .insert(users)
   .values({ name: "Diana", email: "diana@example.com", age: 28 })
   .returning();
-console.log(inserted.id); // serial auto-généré
+console.log(inserted.id); // 자동 생성된 serial
 ```
 
-## Sélection
+## 조회
 
 ```typescript
 import { eq, gt } from "drizzle-orm";
 
-// Toutes les lignes
+// 모든 행
 const allUsers = await db.select().from(users);
 
-// Clause where
+// WHERE 절
 const alice = await db.select().from(users).where(eq(users.name, "Alice"));
 
-// Conditions
+// 조건
 const older = await db.select().from(users).where(gt(users.age, 28));
 
-// Colonnes spécifiques
+// 특정 컬럼
 const names = await db
   .select({ name: users.name, email: users.email })
   .from(users);
 
-// Limite
+// Limit
 const first = await db.select().from(users).limit(1);
 ```
 
-## Mise à jour
+## 수정
 
 ```typescript
-// Mettre à jour des lignes
+// 행 수정
 await db.update(users).set({ age: 31 }).where(eq(users.name, "Alice"));
 
-// Avec returning
+// returning과 함께
 const [updated] = await db
   .update(users)
   .set({ active: false })
@@ -122,25 +122,25 @@ const [updated] = await db
   .returning();
 ```
 
-## Suppression
+## 삭제
 
 ```typescript
-// Supprimer des lignes
+// 행 삭제
 await db.delete(users).where(eq(users.name, "Charlie"));
 
-// Avec returning
+// returning과 함께
 const [deleted] = await db
   .delete(users)
   .where(eq(users.name, "Diana"))
   .returning();
 ```
 
-## Transactions
+## 트랜잭션
 
-Utilisez l'API `db.transaction()` de Drizzle pour un commit/rollback automatique :
+Drizzle의 `db.transaction()` API를 사용하여 자동 커밋/롤백합니다:
 
 ```typescript
-// Commit automatique
+// 자동 커밋
 const result = await db.transaction(async (tx) => {
   const [inserted] = await tx
     .insert(users)
@@ -149,21 +149,21 @@ const result = await db.transaction(async (tx) => {
   return inserted;
 });
 
-// Rollback automatique en cas d'erreur
+// 오류 시 자동 롤백
 await db.transaction(async (tx) => {
   await tx.insert(users).values({ name: "Frank", email: "frank@example.com" });
   throw new Error("something went wrong");
-  // Frank n'est pas inséré — la transaction est annulée
+  // Frank는 삽입되지 않음 — 트랜잭션이 롤백됨
 });
 
-// Rollback explicite
+// 명시적 롤백
 await db.transaction(async (tx) => {
   await tx.insert(users).values({ name: "Grace", email: "grace@example.com" });
-  tx.rollback(); // lance TransactionRollbackError
+  tx.rollback(); // TransactionRollbackError를 throw
 });
 ```
 
-Vous pouvez également utiliser `db.$session` pour un contrôle manuel des transactions :
+수동 트랜잭션 제어를 위해 `db.$session`을 사용할 수도 있습니다:
 
 ```typescript
 await db.$session.execute("BEGIN");
@@ -171,11 +171,11 @@ await db.insert(users).values({ name: "Hank", email: "hank@example.com" });
 await db.$session.execute("COMMIT");
 ```
 
-## Mapping de types
+## 타입 매핑
 
-PetraDB retourne des types JS natifs — pas de coercition de chaînes nécessaire :
+PetraDB는 네이티브 JS 타입을 반환합니다 — 문자열 강제 변환이 필요 없습니다:
 
-| Type Drizzle | Colonne PetraDB | Type JS |
+| Drizzle 타입 | PetraDB 컬럼 | JS 타입 |
 |---|---|---|
 | `serial()` | `SERIAL` | `number` |
 | `integer()` | `INTEGER` | `number` |
@@ -183,11 +183,11 @@ PetraDB retourne des types JS natifs — pas de coercition de chaînes nécessai
 | `boolean()` | `BOOLEAN` | `boolean` |
 | `numeric()` | `NUMERIC` | `string` |
 
-Les colonnes nullables retournent `null` lorsqu'aucune valeur n'est présente.
+NULL 허용 컬럼은 값이 없을 때 `null`을 반환합니다.
 
-## Migrations
+## 마이그레이션
 
-Appliquez les migrations [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) avec la fonction `migrate()` :
+`migrate()` 함수로 [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) 마이그레이션을 적용합니다:
 
 ```typescript
 import { migrate } from "@petradb/drizzle";
@@ -195,15 +195,15 @@ import { migrate } from "@petradb/drizzle";
 await migrate(db, { migrationsFolder: "./drizzle" });
 ```
 
-Cela lit le journal de migration et les fichiers SQL générés par `drizzle-kit generate`, les exécute dans l'ordre et suit les migrations appliquées dans une table `drizzle.__drizzle_migrations` (créée automatiquement).
+이 함수는 `drizzle-kit generate`가 생성한 마이그레이션 저널과 SQL 파일을 읽고, 순서대로 실행하며, 적용된 마이그레이션을 `drizzle.__drizzle_migrations` 테이블(자동 생성)에 추적합니다.
 
-Flux de travail typique :
+일반적인 워크플로:
 
 ```bash
-# Générer les migrations à partir des changements de schéma
+# 스키마 변경에서 마이그레이션 생성
 npx drizzle-kit generate
 
-# Appliquer les migrations au démarrage
+# 시작 시 마이그레이션 적용
 ```
 
 ```typescript
@@ -214,10 +214,10 @@ const session = new Session({ storage: "memory" });
 const db = drizzle(session);
 
 await migrate(db, { migrationsFolder: "./drizzle" });
-// Les tables sont maintenant créées — utilisez db normalement
+// 테이블이 생성됨 — db를 정상적으로 사용
 ```
 
-## Nettoyage
+## 정리
 
 ```typescript
 await session.close();

@@ -1,11 +1,11 @@
 ---
-title: Client
-description: Connexion à un serveur PetraDB depuis JavaScript/TypeScript et Scala.
+title: 클라이언트
+description: JavaScript/TypeScript와 Scala에서 PetraDB 서버에 연결하기.
 ---
 
-La bibliothèque client se connecte à un [serveur PetraDB](/guides/server/) en cours d'exécution via HTTP.
+클라이언트 라이브러리는 실행 중인 [PetraDB 서버](/guides/server/)에 HTTP를 통해 연결합니다.
 
-## Installation
+## 설치
 
 ### JavaScript / TypeScript
 
@@ -19,14 +19,14 @@ npm install @petradb/client
 libraryDependencies += "io.github.edadma" %%% "petradb-client" % "1.5.0"
 ```
 
-## Options de connexion
+## 연결 옵션
 
-| Option | Par défaut | Description |
-|--------|-----------|-------------|
-| `host` | `"localhost"` | Nom d'hôte du serveur |
-| `port` | `5480` | Port du serveur |
-| `username` | -- | Nom d'utilisateur pour l'authentification Basic |
-| `password` | -- | Mot de passe pour l'authentification Basic |
+| 옵션 | 기본값 | 설명 |
+|--------|---------|-------------|
+| `host` | `"localhost"` | 서버 호스트 이름 |
+| `port` | `5480` | 서버 포트 |
+| `username` | — | Basic 인증용 사용자 이름 |
+| `password` | — | Basic 인증용 비밀번호 |
 
 ## JavaScript / TypeScript
 
@@ -41,18 +41,18 @@ const db = new Session({
 });
 ```
 
-### Utilisation sans état
+### 무상태 사용
 
-Sans appeler `connect()`, chaque appel `execute()` s'exécute dans une session transitoire unique sur le serveur. C'est le mode le plus simple — pas de session à gérer.
+`connect()`를 호출하지 않으면, 각 `execute()` 호출이 서버의 일회성 임시 세션에서 실행됩니다. 이것이 가장 간단한 모드입니다 — 관리할 세션이 없습니다.
 
 ```javascript
 const [{ rows }] = await db.execute('SELECT * FROM users');
 console.log(rows);
 ```
 
-### Utilisation avec état
+### 상태 유지 사용
 
-Appelez `connect()` pour créer une session côté serveur. L'identifiant de session est envoyé automatiquement avec chaque appel `execute()` subséquent, de sorte que les transactions et l'état temporaire persistent entre les requêtes.
+`connect()`를 호출하여 서버 측 세션을 생성합니다. 세션 ID가 이후 모든 `execute()` 호출과 함께 자동으로 전송되므로, 트랜잭션과 임시 상태가 요청 간에 유지됩니다.
 
 ```javascript
 await db.connect();
@@ -67,7 +67,7 @@ console.log(rows);
 await db.close();
 ```
 
-### Exemple complet
+### 전체 예제
 
 ```javascript
 import { Session } from '@petradb/client';
@@ -109,14 +109,14 @@ val session = new Session(SessionOptions(
 ))
 ```
 
-### Utilisation sans état
+### 무상태 사용
 
 ```scala
 for results <- session.execute("SELECT * FROM users")
 yield results.foreach(println)
 ```
 
-### Utilisation avec état
+### 상태 유지 사용
 
 ```scala
 for
@@ -129,4 +129,4 @@ for
 yield results.foreach(println)
 ```
 
-Toutes les méthodes retournent des valeurs `Future`. `connect()` retourne l'identifiant de session, `execute()` retourne `Seq[Result]`, et `close()` retourne `Unit`.
+모든 메서드는 `Future` 값을 반환합니다. `connect()`는 세션 ID를, `execute()`는 `Seq[Result]`를, `close()`는 `Unit`을 반환합니다.

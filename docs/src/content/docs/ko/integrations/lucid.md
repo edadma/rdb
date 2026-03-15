@@ -1,23 +1,23 @@
 ---
 title: Lucid ORM
-description: Utiliser Lucid ORM avec PetraDB.
+description: PetraDB와 함께 Lucid ORM을 사용하는 방법.
 ---
 
-PetraDB fournit un pilote [AdonisJS Lucid](https://lucid.adonisjs.com) via le package `@petradb/lucid`. Cela vous permet d'utiliser l'ORM, les migrations, les seeders et le constructeur de requêtes de Lucid avec le moteur SQL embarquable de PetraDB.
+PetraDB는 `@petradb/lucid` 패키지를 통해 [AdonisJS Lucid](https://lucid.adonisjs.com) 드라이버를 제공합니다. 이를 통해 Lucid의 ORM, 마이그레이션, 시더, 쿼리 빌더를 PetraDB의 임베더블 SQL 엔진과 함께 사용할 수 있습니다.
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/lucid @petradb/knex knex
 ```
 
-## Configuration
+## 설정
 
-Importez `@petradb/lucid` avant de créer toute connexion Lucid. L'import modifie les composants internes de Lucid pour accepter `petradb` comme client de base de données valide.
+Lucid 연결을 생성하기 전에 `@petradb/lucid`를 가져옵니다. 이 가져오기는 Lucid 내부를 패치하여 `petradb`를 유효한 데이터베이스 클라이언트로 받아들입니다.
 
-### Application AdonisJS
+### AdonisJS 앱
 
-Dans votre projet AdonisJS, ajoutez un import à effet de bord en haut de votre configuration de base de données :
+AdonisJS 프로젝트에서 데이터베이스 설정 상단에 사이드 이펙트 가져오기를 추가합니다:
 
 ```typescript
 // config/database.ts
@@ -39,9 +39,9 @@ export default defineConfig({
 })
 ```
 
-### Utilisation autonome
+### 독립 실행형 사용
 
-Vous pouvez utiliser la classe `Database` de Lucid directement sans AdonisJS :
+AdonisJS 없이 Lucid의 `Database` 클래스를 직접 사용할 수 있습니다:
 
 ```typescript
 import '@petradb/lucid'
@@ -61,22 +61,22 @@ const db = new Database({
 }, logger, emitter)
 ```
 
-## Modes de stockage
+## 스토리지 모드
 
-Configuration via `connection` :
+`connection`으로 설정합니다:
 
 ```typescript
-// En mémoire (par défaut)
+// 인메모리 (기본값)
 { storage: "memory" }
 
-// Stockage persistant sur fichier
+// 파일 기반 영구 스토리지
 { storage: "persistent", path: "./mydb.petra" }
 ```
 
-## Constructeur de schémas
+## 스키마 빌더
 
 ```typescript
-// Créer une table
+// 테이블 생성
 await db.schema.createTable("users", (t) => {
   t.increments("id")
   t.string("name").notNullable()
@@ -86,51 +86,51 @@ await db.schema.createTable("users", (t) => {
   t.timestamps(true, true)
 })
 
-// Vérifier si une table/colonne existe
+// 테이블/컬럼 존재 여부 확인
 await db.schema.hasTable("users")
 await db.schema.hasColumn("users", "email")
 
-// Ajouter une colonne
+// 컬럼 추가
 await db.schema.alterTable("users", (t) => {
   t.string("bio")
 })
 
-// Supprimer une table
+// 테이블 삭제
 await db.schema.dropTableIfExists("users")
 ```
 
-## Constructeur de requêtes
+## 쿼리 빌더
 
 ```typescript
-// Insertion
+// 삽입
 await db.table("users").insert({ name: "Alice", age: 30 })
 
-// Insertion avec returning
+// returning과 함께 삽입
 const [user] = await db.table("users")
   .insert({ name: "Bob", age: 25 })
   .returning("*")
 
-// Sélection
+// 조회
 const users = await db.from("users").where("age", ">", 25)
 const first = await db.from("users").where("name", "Alice").first()
 
-// Mise à jour
+// 수정
 await db.from("users").where("name", "Alice").update({ age: 31 })
 
-// Suppression
+// 삭제
 await db.from("users").where("active", false).delete()
 
-// Agrégats
+// 집계
 const [{ count }] = await db.from("users").count("* as count")
 ```
 
-## Requêtes brutes
+## 원시 쿼리
 
 ```typescript
 const result = await db.rawQuery("SELECT * FROM users WHERE age > ?", [25])
 ```
 
-## Transactions
+## 트랜잭션
 
 ```typescript
 await db.transaction(async (trx) => {
@@ -139,9 +139,9 @@ await db.transaction(async (trx) => {
 })
 ```
 
-## Modèles ORM
+## ORM 모델
 
-Définissez des modèles en utilisant le `BaseModel` de Lucid :
+Lucid의 `BaseModel`을 사용하여 모델을 정의합니다:
 
 ```typescript
 import { BaseModel, column } from '@adonisjs/lucid/orm'
@@ -157,27 +157,27 @@ class User extends BaseModel {
   declare email: string
 }
 
-// Créer
+// 생성
 const user = await User.create({ name: "Alice", email: "alice@example.com" })
 
-// Trouver
+// 찾기
 const found = await User.find(user.id)
 const all = await User.all()
 
-// Mettre à jour
+// 수정
 found.name = "Alicia"
 await found.save()
 
-// Supprimer
+// 삭제
 await found.delete()
 
-// Portées de requête
+// 쿼리 스코프
 const active = await User.query().where("active", true)
 ```
 
-## Migrations
+## 마이그레이션
 
-Créez des fichiers de migration et exécutez-les avec le migrateur Lucid :
+마이그레이션 파일을 작성하고 Lucid의 마이그레이터로 실행합니다:
 
 ```typescript
 import { BaseSchema } from '@adonisjs/lucid/schema'
@@ -198,22 +198,22 @@ export default class CreateUsersTable extends BaseSchema {
 }
 ```
 
-## Fonctionnalités du dialecte
+## 방언 기능
 
-Le dialecte PetraDB supporte :
+PetraDB 방언은 다음을 지원합니다:
 
-- Introspection de schéma (`getAllTables`, `getAllViews`, `getAllTypes`)
-- Instructions `RETURNING`
-- Troncature de tables
-- Suppression de toutes les tables/vues/types
-- DDL dans les transactions (entièrement atomique avec rollback DML)
+- 스키마 인트로스펙션 (`getAllTables`, `getAllViews`, `getAllTypes`)
+- `RETURNING` 구문
+- 테이블 truncation
+- 모든 테이블/뷰/타입 삭제
+- 트랜잭션 내 DDL (DML 롤백과 완전히 원자적)
 
-Non supporté :
+미지원 사항:
 
-- Verrous consultatifs (non nécessaires pour un moteur embarquable)
-- Domaines
+- Advisory lock (임베더블 엔진에는 불필요)
+- Domain
 
-## Nettoyage
+## 정리
 
 ```typescript
 await db.manager.closeAll()

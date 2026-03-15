@@ -3,7 +3,7 @@ title: Utilisation Scala
 description: Utiliser PetraDB depuis Scala sur JVM, JS et Native.
 ---
 
-## Base de donnees en memoire
+## Base de données en mémoire
 
 ```scala
 import io.github.edadma.petradb.*
@@ -33,13 +33,13 @@ val results = executeSQL("""
 results.foreach(println)
 ```
 
-Chaque instance `MemoryDB` est isolee et independante. Toutes les donnees restent en memoire.
+Chaque instance `MemoryDB` est isolée et indépendante. Toutes les données restent en mémoire.
 
-## Base de donnees persistante
+## Base de données persistante
 
-PetraDB supporte le stockage durable resistant aux pannes sur JVM et Native via [stow](https://github.com/edadma/stow).
+PetraDB supporte le stockage durable résistant aux pannes sur JVM et Native via [stow](https://github.com/edadma/stow).
 
-### Creer une nouvelle base de donnees
+### Créer une nouvelle base de données
 
 ```scala
 import io.github.edadma.petradb.*
@@ -62,7 +62,7 @@ executeSQL("""
 db.close()
 ```
 
-### Rouvrir une base de donnees existante
+### Rouvrir une base de données existante
 
 ```scala
 val db = PersistentDB.open("mydata.db")
@@ -74,13 +74,13 @@ results.foreach(println)
 db.close()
 ```
 
-Toutes les tables, donnees, types enum et l'etat d'auto-increment sont restaures a la reouverture.
+Toutes les tables, données, types enum et l'état d'auto-incrément sont restaurés à la réouverture.
 
-Les bases de donnees persistantes utilisent des pages en copie-sur-ecriture et des en-tetes a double tampon pour la resistance aux pannes. Toutes les operations DDL et DML sont durables.
+Les bases de données persistantes utilisent des pages en copie-sur-écriture et des en-têtes à double tampon pour la résistance aux pannes. Toutes les opérations DDL et DML sont durables.
 
-## Base de donnees texte
+## Base de données texte
 
-`TextDB` stocke la base de donnees sous forme de fichier `.ptxt` editable par l'homme. Elle charge en memoire a l'ouverture et reecrit le fichier apres chaque modification. Ideale pour le developpement initial, la configuration et le controle de version.
+`TextDB` stocke la base de données sous forme de fichier `.ptxt` éditable par l'homme. Elle charge en mémoire à l'ouverture et réécrit le fichier après chaque modification. Idéale pour le développement initial, la configuration et le contrôle de version.
 
 ```scala
 import io.github.edadma.petradb.*
@@ -97,7 +97,7 @@ executeSQL("""
 db.close()
 ```
 
-Rouvrez le meme fichier pour restaurer toutes les donnees :
+Rouvrez le même fichier pour restaurer toutes les données :
 
 ```scala
 val db = TextDB.open("mydata.ptxt")
@@ -107,36 +107,36 @@ val results = executeSQL("SELECT * FROM settings")
 results.foreach(println)
 ```
 
-Fonctionne sur JVM et Native. Le format `.ptxt` est lisible par l'homme et compatible avec les diffs. Utilisez `PersistentDB` lorsque vous avez besoin d'une durabilite resistante aux pannes pour les donnees de production.
+Fonctionne sur JVM et Native. Le format `.ptxt` est lisible par l'homme et compatible avec les diffs. Utilisez `PersistentDB` lorsque vous avez besoin d'une durabilité résistante aux pannes pour les données de production.
 
-## Executer du SQL
+## Exécuter du SQL
 
-`executeSQL(sql)` execute une ou plusieurs instructions separees par des points-virgules et retourne un `Seq[Result]`.
+`executeSQL(sql)` exécute une ou plusieurs instructions séparées par des points-virgules et retourne un `Seq[Result]`.
 
 ```scala
 val results: Seq[Result] = executeSQL("SELECT * FROM users; SELECT * FROM products;")
 ```
 
-Consultez la [reference API Scala](/reference/api-scala/) pour les types de resultats, l'extraction de valeurs et l'API complete.
+Consultez la [référence API Scala](/reference/api-scala/) pour les types de résultats, l'extraction de valeurs et l'API complète.
 
 ## Tests
 
 ```bash
-# Executer les tests pour toutes les plateformes
+# Exécuter les tests pour toutes les plateformes
 sbt test
 
-# Executer les tests JavaScript uniquement
+# Exécuter les tests JavaScript uniquement
 sbt engineJS/test
 
-# Executer les tests JVM uniquement
+# Exécuter les tests JVM uniquement
 sbt engineJVM/test
 
-# Executer les tests Native uniquement
+# Exécuter les tests Native uniquement
 sbt engineNative/test
 ```
 
 ## Notes sur les plateformes
 
-- **JVM** -- thread-safe, s'integre avec Spring Boot, Play Framework, Akka, etc.
-- **Scala.js** -- fonctionne dans Node.js et les navigateurs
-- **Scala Native** -- compile en executables natifs ; ideal pour les outils CLI et les systemes embarques
+- **JVM** — thread-safe, s'intègre avec Spring Boot, Play Framework, Akka, etc.
+- **Scala.js** — fonctionne dans Node.js et les navigateurs
+- **Scala Native** — compile en exécutables natifs ; idéal pour les outils CLI et les systèmes embarqués

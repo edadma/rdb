@@ -1,13 +1,13 @@
 ---
-title: Premiers pas avec Java
-description: Ajoutez PetraDB à votre projet Java via JDBC et exécutez vos premières requêtes SQL.
+title: Java 시작하기
+description: JDBC를 통해 Java 프로젝트에 PetraDB를 추가하고 첫 번째 SQL 쿼리를 실행합니다.
 ---
 
-PetraDB fournit un pilote JDBC 4 standard, vous utilisez donc l'API familière `java.sql` — `Connection`, `Statement`, `ResultSet`, `PreparedStatement`.
+PetraDB는 표준 JDBC 4 드라이버를 제공하므로, 익숙한 `java.sql` API를 사용합니다 — `Connection`, `Statement`, `ResultSet`, `PreparedStatement`.
 
-## Installation
+## 설치
 
-**Maven :**
+**Maven:**
 ```xml
 <dependency>
     <groupId>io.github.edadma</groupId>
@@ -16,14 +16,14 @@ PetraDB fournit un pilote JDBC 4 standard, vous utilisez donc l'API familière `
 </dependency>
 ```
 
-**Gradle :**
+**Gradle:**
 ```groovy
 implementation 'io.github.edadma:petradb-jdbc:1.5.0'
 ```
 
-Le pilote s'enregistre automatiquement — pas besoin de `Class.forName()`.
+드라이버가 자동으로 등록됩니다 — `Class.forName()`이 필요 없습니다.
 
-## Exécutez votre première requête
+## 첫 번째 쿼리 실행
 
 ```java
 import java.sql.*;
@@ -59,28 +59,28 @@ public class Main {
 }
 ```
 
-Sortie :
+출력:
 ```
 1: Alice <alice@example.com>
 2: Bob <bob@example.com>
 ```
 
-## Stockage persistant
+## 영구 스토리지
 
-Pour des données qui survivent aux redémarrages, utilisez une URL de connexion fichier :
+재시작 후에도 데이터를 유지하려면 파일 연결 URL을 사용합니다:
 
 ```java
 Connection conn = DriverManager.getConnection("jdbc:petradb:file:mydata.petra");
 ```
 
-Le fichier est créé lors de la première utilisation. Extensions supportées :
+파일은 처음 사용 시 생성됩니다. 지원되는 확장자:
 
-| Extension | Type de stockage |
-|-----------|-----------------|
-| `.petra` | Stockage persistant résistant aux pannes |
-| `.ptxt` | Format texte lisible par l'homme |
+| 확장자 | 스토리지 유형 |
+|-----------|-------------|
+| `.petra` | 충돌 안전 영구 스토리지 |
+| `.ptxt` | 사람이 읽을 수 있는 텍스트 형식 |
 
-## Prepared statements
+## 준비된 구문
 
 ```java
 PreparedStatement ps = conn.prepareStatement(
@@ -90,7 +90,7 @@ ps.setInt(2, 0);
 ResultSet rs = ps.executeQuery();
 ```
 
-## Transactions
+## 트랜잭션
 
 ```java
 conn.setAutoCommit(false);
@@ -103,6 +103,6 @@ try {
 }
 ```
 
-## Étapes suivantes
+## 다음 단계
 
-Consultez la [référence JDBC](/integrations/jdbc/) pour l'API complète, y compris les opérations par lots, les métadonnées, le mapping de types et les connexions serveur.
+배치 작업, 메타데이터, 타입 매핑, 서버 연결을 포함한 전체 API는 [JDBC 레퍼런스](/integrations/jdbc/)를 참고하세요.

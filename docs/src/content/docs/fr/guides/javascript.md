@@ -3,22 +3,22 @@ title: Utilisation JavaScript / TypeScript
 description: Utiliser PetraDB depuis JavaScript et TypeScript.
 ---
 
-## Creer une base de donnees
+## Créer une base de données
 
-Chaque instance `Session` est une base de donnees entierement isolee. Par defaut, elle fonctionne en memoire, mais vous pouvez choisir un stockage persistant ou texte.
+Chaque instance `Session` est une base de données entièrement isolée. Par défaut, elle fonctionne en mémoire, mais vous pouvez choisir un stockage persistant ou texte.
 
 ```javascript
 import { Session } from '@petradb/engine';
 
-// En memoire (par defaut)
+// En mémoire (par défaut)
 const db = new Session();
 ```
 
 ## Modes de stockage
 
-### Memoire (par defaut)
+### Mémoire (par défaut)
 
-Les donnees restent en memoire et sont perdues a la fin du processus. Fonctionne partout : Node.js, Deno, Bun et navigateurs.
+Les données restent en mémoire et sont perdues à la fin du processus. Fonctionne partout : Node.js, Deno, Bun et navigateurs.
 
 ```javascript
 const db = new Session();
@@ -28,18 +28,18 @@ const db = new Session({ storage: 'memory' });
 
 ### Persistant (Node.js)
 
-Stockage durable resistant aux pannes dans un seul fichier binaire, utilisant des pages en copie-sur-ecriture et des en-tetes a double tampon. Si le fichier existe, il est ouvert ; sinon, une nouvelle base de donnees est creee.
+Stockage durable résistant aux pannes dans un seul fichier binaire, utilisant des pages en copie-sur-écriture et des en-têtes à double tampon. Si le fichier existe, il est ouvert ; sinon, une nouvelle base de données est créée.
 
 ```javascript
 const db = new Session({ storage: 'persistent', path: './mydb' });
 
-// Optionnel : definir la taille de page (par defaut 4096)
+// Optionnel : définir la taille de page (par défaut 4096)
 const db = new Session({ storage: 'persistent', path: './mydb', pageSize: 8192 });
 ```
 
 ### Texte (Node.js)
 
-Stocke les donnees dans un fichier texte lisible par l'homme (`.ptxt`). Utile pour le debogage, le controle de version ou l'edition manuelle des donnees.
+Stocke les données dans un fichier texte lisible par l'homme (`.ptxt`). Utile pour le débogage, le contrôle de version ou l'édition manuelle des données.
 
 ```javascript
 const db = new Session({ storage: 'text', path: './data.ptxt' });
@@ -47,17 +47,17 @@ const db = new Session({ storage: 'text', path: './data.ptxt' });
 
 ### Fermeture
 
-Appelez `await db.close()` pour liberer les descripteurs de fichiers lors de l'utilisation du stockage persistant ou texte. Pour les bases de donnees en memoire, `close()` est un no-op.
+Appelez `await db.close()` pour libérer les descripteurs de fichiers lors de l'utilisation du stockage persistant ou texte. Pour les bases de données en mémoire, `close()` est un no-op.
 
 ```javascript
 const db = new Session({ storage: 'persistent', path: './mydb' });
-// ... utiliser la base de donnees ...
+// ... utiliser la base de données ...
 await db.close();
 ```
 
-## Executer du SQL
+## Exécuter du SQL
 
-Utilisez `db.execute(sql)` pour executer une ou plusieurs instructions SQL separees par des points-virgules. Elle retourne une promesse qui se resout en un tableau d'objets de resultats.
+Utilisez `db.execute(sql)` pour exécuter une ou plusieurs instructions SQL séparées par des points-virgules. Elle retourne une promesse qui se résout en un tableau d'objets de résultats.
 
 ```javascript
 await db.execute(`
@@ -79,10 +79,10 @@ const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 
 ## Modes de lignes
 
-Par defaut, les lignes SELECT sont retournees sous forme d'objets indexes par nom de colonne. Utilisez `rowMode: 'array'` pour obtenir des tableaux positionnels a la place.
+Par défaut, les lignes SELECT sont retournées sous forme d'objets indexés par nom de colonne. Utilisez `rowMode: 'array'` pour obtenir des tableaux positionnels à la place.
 
 ```javascript
-// Definir la valeur par defaut pour toutes les requetes
+// Définir la valeur par défaut pour toutes les requêtes
 const db = new Session({ rowMode: 'array' });
 
 // Ou surcharger par appel
@@ -92,7 +92,7 @@ const [{ rows }] = await db.execute('SELECT id, name FROM users', { rowMode: 'ar
 
 ## Prepared statements
 
-Utilisez `db.prepare(sql)` avec les placeholders de parametres `$1`, `$2`, ... Retourne un objet statement avec une methode `execute(params, options?)`.
+Utilisez `db.prepare(sql)` avec les placeholders de paramètres `$1`, `$2`, ... Retourne un objet statement avec une méthode `execute(params, options?)`.
 
 ```javascript
 const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
@@ -102,13 +102,13 @@ const [{ rows }] = await stmt.execute([42]);
 const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
-Le SQL `PREPARE` / `EXECUTE` / `DEALLOCATE` est egalement supporte -- consultez la [reference Transactions](/reference/transactions/) pour les details.
+Le SQL `PREPARE` / `EXECUTE` / `DEALLOCATE` est également supporté — consultez la [référence Transactions](/reference/transactions/) pour les détails.
 
-Consultez la [reference API JavaScript](/reference/api-javascript/) pour les types de resultats, le mapping de valeurs et les interfaces TypeScript completes.
+Consultez la [référence API JavaScript](/reference/api-javascript/) pour les types de résultats, le mapping de valeurs et les interfaces TypeScript complètes.
 
 ## TypeScript
 
-Les definitions de types completes sont incluses. Utilisez les unions discriminees pour affiner les types de resultats :
+Les définitions de types complètes sont incluses. Utilisez les unions discriminées pour affiner les types de résultats :
 
 ```typescript
 import { Session, ExecuteResult } from '@petradb/engine';
@@ -118,7 +118,7 @@ const results: ExecuteResult[] = await db.execute('SELECT * FROM users');
 
 for (const result of results) {
   if (result.command === 'select') {
-    // result.rows et result.fields sont types ici
+    // result.rows et result.fields sont typés ici
   }
 }
 ```
@@ -174,8 +174,8 @@ async function safeExecute(db, sql) {
 
 ## Notes sur les plateformes
 
-- Le mode en memoire fonctionne partout : Node.js, Deno, Bun et navigateurs (avec bundlers)
-- Le stockage persistant et texte necessite Node.js (ils utilisent le systeme de fichiers)
-- Aucune dependance externe ou module natif requis
-- Definitions TypeScript incluses
-- Envisagez les Web Workers pour les grands jeux de donnees dans les navigateurs
+- Le mode en mémoire fonctionne partout : Node.js, Deno, Bun et navigateurs (avec bundlers)
+- Le stockage persistant et texte nécessite Node.js (ils utilisent le système de fichiers)
+- Aucune dépendance externe ou module natif requis
+- Définitions TypeScript incluses
+- Envisagez les Web Workers pour les grands jeux de données dans les navigateurs

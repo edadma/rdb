@@ -1,17 +1,17 @@
 ---
 title: Quarry
-description: Constructeur de requêtes type-safe pour PetraDB générant un AST au lieu de SQL.
+description: SQL 대신 AST를 생성하는 PetraDB용 타입 안전 쿼리 빌더.
 ---
 
-Quarry est un constructeur de requêtes type-safe pour PetraDB qui génère des objets AST au lieu de chaînes SQL, contournant entièrement le parseur. Les définitions de schémas servent de source unique de vérité pour le DDL, les requêtes et les types TypeScript à la compilation.
+Quarry는 SQL 문자열 대신 AST 객체를 생성하는 PetraDB용 타입 안전 쿼리 빌더로, 파서를 완전히 우회합니다. 스키마 정의가 DDL, 쿼리, 컴파일 타임 TypeScript 타입의 단일 소스로 사용됩니다.
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/quarry @petradb/engine
 ```
 
-## Configuration
+## 설정
 
 ```typescript
 import { Session } from "@petradb/engine";
@@ -21,19 +21,19 @@ const session = new Session({ storage: "memory" });
 const db = quarry(session);
 ```
 
-### Modes de stockage
+### 스토리지 모드
 
 ```typescript
-// En mémoire (par défaut)
+// 인메모리 (기본값)
 new Session({ storage: "memory" });
 
-// Stockage persistant sur fichier
+// 파일 기반 영구 스토리지
 new Session({ storage: "persistent", path: "./mydb.petra" });
 ```
 
-## Définition du schéma
+## 스키마 정의
 
-Définissez les tables en utilisant les constructeurs de colonnes de Quarry. Le schéma pilote la création de tables, la construction de requêtes et l'inférence de types TypeScript :
+Quarry의 컬럼 생성자를 사용하여 테이블을 정의합니다. 스키마는 테이블 생성, 쿼리 빌딩, TypeScript 타입 추론을 구동합니다:
 
 ```typescript
 import { table, serial, text, integer, boolean } from "@petradb/quarry";
@@ -47,9 +47,9 @@ const users = table("users", {
 });
 ```
 
-### Types de colonnes
+### 컬럼 타입
 
-| Constructeur | Type SQL | Type TypeScript |
+| 생성자 | SQL 타입 | TypeScript 타입 |
 |---|---|---|
 | `serial(name)` | `SERIAL` | `number` |
 | `bigserial(name)` | `BIGSERIAL` | `number` |
@@ -73,19 +73,19 @@ const users = table("users", {
 | `json(name)` | `JSON` | `unknown` |
 | `bytea(name)` | `BYTEA` | `number[]` |
 
-### Modificateurs de colonnes
+### 컬럼 수정자
 
-| Modificateur | Effet |
+| 수정자 | 효과 |
 |---|---|
-| `.notNull()` | La colonne ne peut pas être null ; le type `InferSelect` exclut `null` |
-| `.default(value)` | La colonne est optionnelle dans `InferInsert` |
-| `.primaryKey()` | Clé primaire ; implique notNull + hasDefault (auto-incrément pour serial) |
-| `.unique()` | Ajoute une contrainte d'unicité |
-| `.references(table, column)` | Ajoute une référence de clé étrangère |
+| `.notNull()` | 컬럼에 null 불가; `InferSelect` 타입에서 `null` 제외 |
+| `.default(value)` | `InferInsert`에서 컬럼이 선택적 |
+| `.primaryKey()` | 기본 키; notNull + hasDefault 암시 (serial의 경우 자동 증가) |
+| `.unique()` | 유니크 제약 조건 추가 |
+| `.references(table, column)` | 외래 키 참조 추가 |
 
-### Types inférés
+### 추론된 타입
 
-Quarry infère deux types à partir de chaque définition de table :
+Quarry는 각 테이블 정의에서 두 가지 타입을 추론합니다:
 
 ```typescript
 import type { InferSelect, InferInsert } from "@petradb/quarry";
@@ -97,35 +97,35 @@ type NewUser = InferInsert<typeof users>;
 // { name: string, email: string, age?: number | null, active?: boolean, id?: number }
 ```
 
-**`InferSelect`** — le type de ligne retourné par les requêtes :
-- colonnes `notNull` -> type non-nullable
-- colonnes nullables -> `type | null`
+**`InferSelect`** — 쿼리가 반환하는 행 타입:
+- `notNull` 컬럼 → null 불가 타입
+- null 허용 컬럼 → `type | null`
 
-**`InferInsert`** — le type accepté par `.values()` :
-- colonnes `notNull` sans valeur par défaut -> obligatoire
-- colonnes avec valeur par défaut (`.default()`, `.primaryKey()`, serial) -> optionnel
-- colonnes nullables -> optionnel, accepte `null`
+**`InferInsert`** — `.values()`가 받는 타입:
+- 기본값 없는 `notNull` 컬럼 → 필수
+- 기본값이 있는 컬럼 (`.default()`, `.primaryKey()`, serial) → 선택적
+- null 허용 컬럼 → 선택적, `null` 허용
 
-## Créer une table
+## 테이블 생성
 
 ```typescript
 await db.createTable(users);
 ```
 
-Cela génère et exécute une commande `CREATE TABLE` à partir de la définition du schéma — pas de SQL nécessaire.
+스키마 정의에서 `CREATE TABLE` 명령을 생성하고 실행합니다 — SQL이 필요 없습니다.
 
-## Insertion
+## 삽입
 
 ```typescript
-// Ligne unique — retourne la ligne insérée avec toutes les colonnes
+// 단일 행 — 모든 컬럼이 포함된 삽입된 행을 반환
 const [user] = await db
   .insert(users)
   .values({ name: "Alice", email: "alice@example.com", age: 30 })
   .execute();
-// user.id → serial auto-généré
-// user.active → true (valeur par défaut)
+// user.id → 자동 생성된 serial
+// user.active → true (기본값)
 
-// Lignes multiples
+// 여러 행
 await db
   .insert(users)
   .values(
@@ -135,11 +135,11 @@ await db
   .execute();
 ```
 
-L'insertion requiert toutes les colonnes `notNull` sans valeur par défaut. Les champs optionnels peuvent être omis. TypeScript impose cela à la compilation.
+삽입은 기본값이 없는 모든 `notNull` 컬럼을 필요로 합니다. 선택적 필드는 생략할 수 있습니다. TypeScript가 이를 컴파일 타임에 강제합니다.
 
 ### RETURNING
 
-Par défaut, l'insertion retourne toutes les colonnes (`*`). Utilisez `.returning()` pour sélectionner des colonnes spécifiques :
+기본적으로 삽입은 모든 컬럼(`*`)을 반환합니다. `.returning()`을 사용하여 특정 컬럼을 선택합니다:
 
 ```typescript
 const [{ id }] = await db
@@ -151,17 +151,17 @@ const [{ id }] = await db
 
 ### Upsert (ON CONFLICT)
 
-Gérez les conflits lors de l'insertion avec `onConflictDoNothing()` ou `onConflictDoUpdate()` :
+`onConflictDoNothing()` 또는 `onConflictDoUpdate()`로 삽입 시 충돌을 처리합니다:
 
 ```typescript
-// Ignorer silencieusement les lignes en conflit
+// 충돌하는 행을 조용히 건너뛰기
 await db
   .insert(users)
   .values({ name: "Alice", email: "alice@example.com" })
   .onConflictDoNothing()
   .execute();
 
-// Mettre à jour des colonnes spécifiques en cas de conflit
+// 충돌 시 특정 컬럼 업데이트
 await db
   .insert(users)
   .values({ name: "Alice", email: "alice@example.com", age: 31 })
@@ -169,14 +169,14 @@ await db
   .execute();
 ```
 
-Le premier argument de `onConflictDoUpdate` spécifie les colonnes de conflit, le second spécifie les colonnes à mettre à jour. Les deux sont type-safe — TypeScript impose que seules les clés de colonnes valides soient utilisées.
+`onConflictDoUpdate`의 첫 번째 인수는 충돌 컬럼을, 두 번째는 업데이트할 컬럼을 지정합니다. 둘 다 타입 안전합니다 — TypeScript가 유효한 컬럼 키만 사용되도록 강제합니다.
 
 ### INSERT...SELECT
 
-Insérez des lignes à partir d'une requête au lieu de valeurs littérales :
+리터럴 값 대신 쿼리에서 행을 삽입합니다:
 
 ```typescript
-// Archiver tous les utilisateurs actifs
+// 모든 활성 사용자를 아카이브
 const query = db
   .select(users)
   .columns(users.name, users.email)
@@ -186,37 +186,37 @@ const query = db
 await db.insertFrom(archive, query, ["name", "email"]).execute();
 ```
 
-Le deuxième argument est la requête de sélection (utilisez `.toExpr()`). Le troisième argument optionnel spécifie les colonnes cibles à remplir — s'il est omis, le moteur attend que la requête produise des valeurs pour toutes les colonnes.
+두 번째 인수는 select 쿼리입니다(`.toExpr()` 사용). 선택적 세 번째 인수는 채울 대상 컬럼을 지정합니다 — 생략하면 엔진은 쿼리가 모든 컬럼의 값을 생성할 것으로 기대합니다.
 
 ```typescript
-// Sans liste de colonnes (la requête doit correspondre à toutes les colonnes cibles)
+// 컬럼 목록 없이 (쿼리가 모든 대상 컬럼과 일치해야 함)
 await db.insertFrom(archive, query).execute();
 
-// Avec onConflictDoNothing
+// onConflictDoNothing과 함께
 await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().execute();
 ```
 
-## Sélection
+## 조회
 
 ```typescript
 import { eq, gt, asc, desc } from "@petradb/quarry";
 
-// Toutes les lignes
+// 모든 행
 const allUsers = await db.select(users).execute();
 
-// Clause where
+// WHERE 절
 const alice = await db
   .select(users)
   .where(eq(users.name, "Alice"))
   .execute();
 
-// Colonnes spécifiques
+// 특정 컬럼
 const names = await db
   .select(users)
   .columns(users.name, users.email)
   .execute();
 
-// Tri, limite, décalage
+// 정렬, limit, offset
 const page = await db
   .select(users)
   .orderBy(asc(users.name))
@@ -231,27 +231,27 @@ const statuses = await db
   .distinct()
   .execute();
 
-// Distinct on — une ligne par valeur distincte des colonnes données
+// Distinct on — 주어진 컬럼의 고유값당 하나의 행
 const perCategory = await db
   .select(products)
   .distinctOn(products.category)
   .orderBy(asc(products.category), asc(products.price))
   .execute();
-// Retourne le produit le moins cher dans chaque catégorie
+// 각 카테고리에서 가장 저렴한 상품을 반환
 ```
 
-### Références de colonnes
+### 컬럼 참조
 
-Les colonnes sont accessibles directement comme propriétés sur l'objet table. TypeScript empêche l'accès aux colonnes qui n'existent pas dans le schéma :
+컬럼은 테이블 객체의 속성으로 직접 접근합니다. TypeScript가 스키마에 없는 컬럼 접근을 방지합니다:
 
 ```typescript
-users.name;  // ✓ compile
-users.title; // ✗ erreur de compilation — 'title' n'existe pas dans users
+users.name;  // ✓ 컴파일됨
+users.title; // ✗ 컴파일 오류 — 'title'이 users에 없음
 ```
 
-## Expressions
+## 표현식
 
-### Comparaison
+### 비교
 
 ```typescript
 import { eq, ne, gt, gte, lt, lte, like, ilike } from "@petradb/quarry";
@@ -268,12 +268,12 @@ notLike(users.name, "A%")   // name NOT LIKE 'A%'
 ilike(users.email, "%@x%")  // email ILIKE '%@x%'
 notIlike(users.email, "%@x%")
 
-// Comparaison null-safe
+// NULL 안전 비교
 isDistinctFrom(users.age, null)     // age IS DISTINCT FROM NULL
 isNotDistinctFrom(users.age, null)  // age IS NOT DISTINCT FROM NULL
 ```
 
-### Logique
+### 논리
 
 ```typescript
 import { and, or, not } from "@petradb/quarry";
@@ -283,13 +283,13 @@ or(eq(users.name, "Alice"), eq(users.name, "Bob"))
 not(eq(users.active, false))
 ```
 
-`and()` et `or()` acceptent un nombre quelconque d'arguments :
+`and()`와 `or()`은 여러 개의 인수를 받습니다:
 
 ```typescript
 and(cond1, cond2, cond3) // cond1 AND cond2 AND cond3
 ```
 
-### Vérification de null
+### NULL 검사
 
 ```typescript
 import { isNull, isNotNull } from "@petradb/quarry";
@@ -298,7 +298,7 @@ isNull(users.age)     // age IS NULL
 isNotNull(users.age)  // age IS NOT NULL
 ```
 
-### Tests booléens
+### 부울 테스트
 
 ```typescript
 import { isTrue, isNotTrue, isFalse, isNotFalse, isUnknown, isNotUnknown } from "@petradb/quarry";
@@ -311,7 +311,7 @@ isUnknown(users.active)    // active IS UNKNOWN
 isNotUnknown(users.active) // active IS NOT UNKNOWN
 ```
 
-### Collections
+### 컬렉션
 
 ```typescript
 import { inList, notInList, between, notBetween, betweenSymmetric } from "@petradb/quarry";
@@ -324,7 +324,7 @@ betweenSymmetric(users.age, 65, 18)              // age BETWEEN SYMMETRIC 65 AND
 notBetweenSymmetric(users.age, 65, 18)           // age NOT BETWEEN SYMMETRIC 65 AND 18
 ```
 
-### Arithmétique
+### 산술
 
 ```typescript
 import { add, sub, mul, div, mod, pow, neg } from "@petradb/quarry";
@@ -338,7 +338,7 @@ pow(users.age, 2)   // age ^ 2
 neg(users.age)      // -age
 ```
 
-### Opérateurs de chaînes
+### 문자열 연산자
 
 ```typescript
 import { concat } from "@petradb/quarry";
@@ -346,7 +346,7 @@ import { concat } from "@petradb/quarry";
 concat(users.name, " Jr.")  // name || ' Jr.'
 ```
 
-### Opérateurs bit à bit
+### 비트 연산자
 
 ```typescript
 import { bitAnd, bitOr, bitXor, bitNot, leftShift, rightShift } from "@petradb/quarry";
@@ -359,7 +359,7 @@ leftShift(users.flags, 2)   // flags << 2
 rightShift(users.flags, 1)  // flags >> 1
 ```
 
-### Opérateurs JSON
+### JSON 연산자
 
 ```typescript
 import { jsonGet, jsonGetText, jsonPath, jsonPathText } from "@petradb/quarry";
@@ -376,17 +376,17 @@ jsonHasAnyKey(t.data, keys)   // data ?| keys
 jsonHasAllKeys(t.data, keys)  // data ?& keys
 ```
 
-### Opérateurs de tableaux
+### 배열 연산자
 
 ```typescript
 import { arrayOverlap } from "@petradb/quarry";
 
-arrayOverlap(t.tags, t.otherTags)  // tags && otherTags (les tableaux se chevauchent)
+arrayOverlap(t.tags, t.otherTags)  // tags && otherTags (배열 겹침)
 ```
 
-### Opérateurs génériques
+### 일반 연산자
 
-Pour les opérateurs non couverts par un helper nommé, utilisez `op()` et `unaryOp()` :
+이름이 있는 헬퍼에서 다루지 않는 연산자에는 `op()`과 `unaryOp()`을 사용합니다:
 
 ```typescript
 import { op, unaryOp } from "@petradb/quarry";
@@ -395,7 +395,7 @@ op(users.age, ">=", 18)       // age >= 18
 unaryOp("NOT", eq(users.active, true))
 ```
 
-### Expression CASE
+### CASE 표현식
 
 ```typescript
 import { caseWhen, literal } from "@petradb/quarry";
@@ -405,11 +405,11 @@ caseWhen(
     { when: gt(users.age, 60), then: literal("senior") },
     { when: gt(users.age, 18), then: literal("adult") },
   ],
-  "minor", // sinon
+  "minor", // else
 )
 ```
 
-### Expression CAST
+### CAST 표현식
 
 ```typescript
 import { cast } from "@petradb/quarry";
@@ -418,34 +418,34 @@ cast(users.age, "text")    // CAST(age AS TEXT)
 cast(users.age, "double")  // CAST(age AS DOUBLE)
 ```
 
-### Alias et littéraux
+### 별칭과 리터럴
 
 ```typescript
 import { alias, literal } from "@petradb/quarry";
 
 alias(add(users.age, 10), "age_plus_10")
 
-literal("hello")  // chaîne
-literal(42)        // nombre
-literal(true)      // booléen
+literal("hello")  // 문자열
+literal(42)        // 숫자
+literal(true)      // 부울
 literal(null)      // null
 ```
 
-## Agrégats et regroupement
+## 집계와 그룹화
 
-### Agrégats intégrés
+### 내장 집계
 
 ```typescript
 import { count, sum, avg, min, max, alias } from "@petradb/quarry";
 import { stringAgg, arrayAgg, boolAnd, boolOr, jsonAgg, jsonObjectAgg } from "@petradb/quarry";
 
-// Compter toutes les lignes
+// 모든 행 수 세기
 const [{ total }] = await db
   .select(users)
   .columns(alias(count(), "total"))
   .execute();
 
-// Regrouper avec agrégat
+// 집계와 함께 그룹화
 const stats = await db
   .select(users)
   .columns(users.active, alias(count(), "cnt"))
@@ -460,7 +460,7 @@ const popular = await db
   .having(gt(alias(count(), "cnt"), 5))
   .execute();
 
-// Autres agrégats
+// 기타 집계
 sum(users.age)                              // SUM(age)
 avg(users.age)                              // AVG(age)
 min(users.age)                              // MIN(age)
@@ -473,20 +473,20 @@ jsonAgg(users.name)                         // JSON_AGG(name)
 jsonObjectAgg(users.name, users.age)        // JSON_OBJECT_AGG(name, age)
 ```
 
-### Agrégats statistiques
+### 통계 집계
 
 ```typescript
 import { variance, varSamp, varPop, stddev, stddevSamp, stddevPop } from "@petradb/quarry";
 
-variance(emp.salary)   // VARIANCE(salary) — variance échantillon
-varSamp(emp.salary)    // VAR_SAMP(salary) — identique à variance
-varPop(emp.salary)     // VAR_POP(salary) — variance de population
-stddev(emp.salary)     // STDDEV(salary) — écart type échantillon
-stddevSamp(emp.salary) // STDDEV_SAMP(salary) — identique à stddev
-stddevPop(emp.salary)  // STDDEV_POP(salary) — écart type de population
+variance(emp.salary)   // VARIANCE(salary) — 표본 분산
+varSamp(emp.salary)    // VAR_SAMP(salary) — variance와 동일
+varPop(emp.salary)     // VAR_POP(salary) — 모집단 분산
+stddev(emp.salary)     // STDDEV(salary) — 표본 표준편차
+stddevSamp(emp.salary) // STDDEV_SAMP(salary) — stddev와 동일
+stddevPop(emp.salary)  // STDDEV_POP(salary) — 모집단 표준편차
 ```
 
-### Agrégats bit à bit
+### 비트 집계
 
 ```typescript
 import { bitAndAgg, bitOrAgg, bitXorAgg } from "@petradb/quarry";
@@ -501,12 +501,12 @@ bitXorAgg(emp.flags)  // BIT_XOR(flags)
 ```typescript
 import { every } from "@petradb/quarry";
 
-every(emp.active)  // EVERY(active) — vrai quand toutes les lignes sont vraies
+every(emp.active)  // EVERY(active) — 모든 행이 true일 때 true
 ```
 
-### FILTER sur les agrégats
+### 집계 FILTER
 
-Restreignez les lignes traitées par un agrégat avec `filter()` :
+`filter()`로 집계가 처리하는 행을 제한합니다:
 
 ```typescript
 import { filter } from "@petradb/quarry";
@@ -518,7 +518,7 @@ filter(count(), gt(emp.salary, 100))
 filter(sum(emp.salary), eq(emp.active, true))
 ```
 
-Exemple avec plusieurs agrégats filtrés :
+여러 필터된 집계를 사용하는 예제:
 
 ```typescript
 const [row] = await db
@@ -531,9 +531,9 @@ const [row] = await db
   .execute();
 ```
 
-## Fonctions
+## 함수
 
-Appelez toute fonction SQL avec `fn()` :
+`fn()`으로 모든 SQL 함수를 호출합니다:
 
 ```typescript
 import { fn } from "@petradb/quarry";
@@ -546,13 +546,13 @@ fn("abs", users.age)           // ABS(age)
 fn("round", users.score, 2)    // ROUND(score, 2)
 ```
 
-## Jointures
+## 조인
 
-Quarry supporte les jointures inner, left, right, full et cross avec typage des résultats à la compilation.
+Quarry는 컴파일 타임 결과 타이핑과 함께 inner, left, right, full, cross 조인을 지원합니다.
 
-### Jointure inner
+### Inner 조인
 
-Toutes les colonnes des deux tables sont incluses dans le résultat. La nullabilité est préservée depuis le schéma original :
+두 테이블의 모든 컬럼이 결과에 포함됩니다. 원래 스키마의 NULL 허용 여부가 유지됩니다:
 
 ```typescript
 const posts = table("posts", {
@@ -568,15 +568,15 @@ const rows = await db
   .where(eq(users.name, "Alice"))
   .execute();
 
-// Type du résultat : (InferSelect<users> & InferSelect<posts>)[]
+// 결과 타입: (InferSelect<users> & InferSelect<posts>)[]
 // rows[0].name  → string
 // rows[0].title → string
-// rows[0].body  → string | null (nullable dans le schéma posts)
+// rows[0].body  → string | null (posts 스키마에서 null 허용)
 ```
 
-### Jointure left
+### Left 조인
 
-Les colonnes de la table jointe deviennent toutes nullables, car les lignes non correspondantes produisent `null` :
+조인된 테이블의 모든 컬럼이 null 허용이 됩니다. 매칭되지 않는 행이 `null`을 생성하기 때문입니다:
 
 ```typescript
 const rows = await db
@@ -584,15 +584,15 @@ const rows = await db
   .leftJoin(posts, eq(users.id, posts.userId))
   .execute();
 
-// Type du résultat : (InferSelect<users> & Nullable<InferSelect<posts>>)[]
-// rows[0].name   → string       (table de base, non affectée)
-// rows[0].title  → string | null (la jointure left la rend nullable)
-// rows[0].userId → number | null (la jointure left la rend nullable)
+// 결과 타입: (InferSelect<users> & Nullable<InferSelect<posts>>)[]
+// rows[0].name   → string       (기본 테이블, 영향 없음)
+// rows[0].title  → string | null (left join으로 null 허용)
+// rows[0].userId → number | null (left join으로 null 허용)
 ```
 
-### Jointure right
+### Right 조인
 
-Les colonnes de la table de base deviennent nullables, les colonnes de la table jointe préservent leur nullabilité originale :
+기본 테이블의 컬럼이 null 허용이 되고, 조인된 테이블의 컬럼은 원래의 null 허용 여부를 유지합니다:
 
 ```typescript
 const rows = await db
@@ -600,14 +600,14 @@ const rows = await db
   .rightJoin(posts, eq(users.id, posts.userId))
   .execute();
 
-// Type du résultat : (Nullable<InferSelect<users>> & InferSelect<posts>)[]
-// rows[0].name  → string | null (la jointure right rend la table de base nullable)
-// rows[0].title → string        (table jointe, non affectée)
+// 결과 타입: (Nullable<InferSelect<users>> & InferSelect<posts>)[]
+// rows[0].name  → string | null (right join으로 기본 테이블 null 허용)
+// rows[0].title → string        (조인된 테이블, 영향 없음)
 ```
 
-### Jointure full
+### Full 조인
 
-Les deux côtés deviennent nullables :
+양쪽 모두 null 허용이 됩니다:
 
 ```typescript
 const rows = await db
@@ -615,14 +615,14 @@ const rows = await db
   .fullJoin(posts, eq(users.id, posts.userId))
   .execute();
 
-// Type du résultat : (Nullable<InferSelect<users>> & Nullable<InferSelect<posts>>)[]
+// 결과 타입: (Nullable<InferSelect<users>> & Nullable<InferSelect<posts>>)[]
 // rows[0].name  → string | null
 // rows[0].title → string | null
 ```
 
-### Jointure cross
+### Cross 조인
 
-Produit le produit cartésien des deux tables — pas de condition `on` :
+두 테이블의 데카르트 곱을 생성합니다 — `on` 조건 없음:
 
 ```typescript
 const rows = await db
@@ -630,13 +630,13 @@ const rows = await db
   .crossJoin(posts)
   .execute();
 
-// Type du résultat : (InferSelect<users> & InferSelect<posts>)[]
-// Chaque combinaison utilisateur x article
+// 결과 타입: (InferSelect<users> & InferSelect<posts>)[]
+// 사용자 × 게시물의 모든 조합
 ```
 
-### Jointures chaînées
+### 연쇄 조인
 
-Les jointures multiples accumulent les types correctement :
+여러 조인이 타입을 올바르게 누적합니다:
 
 ```typescript
 const comments = table("comments", {
@@ -651,13 +651,13 @@ const rows = await db
   .leftJoin(comments, eq(posts.id, comments.postId))
   .execute();
 
-// colonnes posts : non-null (jointure inner)
-// colonnes comments : nullable (jointure left)
-// rows[0].title   → string        (jointure inner)
-// rows[0].content → string | null  (jointure left)
+// posts 컬럼: non-null (inner join)
+// comments 컬럼: nullable (left join)
+// rows[0].title   → string        (inner join)
+// rows[0].content → string | null  (left join)
 ```
 
-### Jointure avec sélection de colonnes
+### 컬럼 선택과 조인
 
 ```typescript
 const rows = await db
@@ -667,7 +667,7 @@ const rows = await db
   .execute();
 ```
 
-### Jointure avec agrégats
+### 집계와 조인
 
 ```typescript
 const rows = await db
@@ -679,9 +679,9 @@ const rows = await db
   .execute();
 ```
 
-## Alias de tables
+## 테이블 별칭
 
-Utilisez `tableAs()` pour créer des tables avec alias pour les auto-jointures ou quand la même table apparaît plusieurs fois :
+셀프 조인이나 같은 테이블이 여러 번 나타날 때 `tableAs()`를 사용하여 별칭이 지정된 테이블을 생성합니다:
 
 ```typescript
 import { tableAs } from "@petradb/quarry";
@@ -699,16 +699,16 @@ const rows = await db
   .execute();
 ```
 
-Les alias sont type-safe — `mgr.name` impose toujours que `name` existe dans le schéma employees.
+별칭은 타입 안전합니다 — `mgr.name`은 여전히 employees 스키마에 `name`이 존재하는지 강제합니다.
 
-## Sous-requêtes
+## 서브쿼리
 
-### Sous-requête IN
+### IN 서브쿼리
 
 ```typescript
 import { inSubquery, notInSubquery } from "@petradb/quarry";
 
-// Utilisateurs ayant au moins un article
+// 게시물이 하나 이상 있는 사용자
 const rows = await db
   .select(users)
   .where(
@@ -719,7 +719,7 @@ const rows = await db
   )
   .execute();
 
-// Utilisateurs n'ayant AUCUN article
+// 게시물이 없는 사용자
 const rows = await db
   .select(users)
   .where(
@@ -731,7 +731,7 @@ const rows = await db
   .execute();
 ```
 
-### Sous-requête EXISTS
+### EXISTS 서브쿼리
 
 ```typescript
 import { exists } from "@petradb/quarry";
@@ -750,14 +750,14 @@ const rows = await db
   .execute();
 ```
 
-### Sous-requête scalaire
+### 스칼라 서브쿼리
 
-Utilisez `subquery()` pour encapsuler une sélection comme valeur scalaire :
+`subquery()`를 사용하여 select를 스칼라 값으로 래핑합니다:
 
 ```typescript
 import { subquery } from "@petradb/quarry";
 
-// Utilisateurs plus âgés que l'âge moyen
+// 평균 나이보다 나이가 많은 사용자
 const rows = await db
   .select(users)
   .where(
@@ -770,19 +770,19 @@ const rows = await db
 ```
 
 :::note
-Utilisez `.toExpr()` (pas `.toAST()`) lors de l'intégration d'une sélection comme sous-requête. `.toExpr()` retourne le noeud `ASTSelect` brut, tandis que `.toAST()` l'encapsule dans un `QueryCommand`.
+서브쿼리로 select를 임베딩할 때는 `.toAST()`가 아닌 `.toExpr()`을 사용합니다. `.toExpr()`은 원시 `ASTSelect` 노드를 반환하고, `.toAST()`는 이를 `QueryCommand`로 래핑합니다.
 :::
 
-## Tri
+## 정렬
 
 ```typescript
 import { asc, desc } from "@petradb/quarry";
 
-// Tri simple
+// 기본 정렬
 db.select(users).orderBy(asc(users.name))
 db.select(users).orderBy(desc(users.age))
 
-// Colonnes multiples
+// 여러 컬럼
 db.select(users).orderBy(asc(users.name), desc(users.age))
 
 // NULLS FIRST / NULLS LAST
@@ -790,12 +790,12 @@ db.select(users).orderBy(asc(users.age, { nulls: "first" }))
 db.select(users).orderBy(desc(users.age, { nulls: "last" }))
 ```
 
-Lorsque `nulls` n'est pas spécifié, le moteur utilise le comportement par défaut (les null sont triés en dernier en ordre ascendant, en premier en ordre descendant).
+`nulls`를 지정하지 않으면 엔진이 기본 동작을 사용합니다(오름차순에서 null이 마지막, 내림차순에서 null이 처음).
 
-## Mise à jour
+## 수정
 
 ```typescript
-// Mise à jour avec where
+// WHERE와 함께 수정
 const result = await db
   .update(users)
   .set({ age: 31 })
@@ -803,14 +803,14 @@ const result = await db
   .execute();
 // result.rowCount → 1
 
-// Mettre à jour plusieurs champs
+// 여러 필드 수정
 await db
   .update(users)
   .set({ name: "Alice Smith", age: 32, active: false })
   .where(eq(users.id, 1))
   .execute();
 
-// Mettre à null
+// null로 설정
 await db
   .update(users)
   .set({ age: null })
@@ -818,11 +818,11 @@ await db
   .execute();
 ```
 
-La méthode `.set()` accepte `Partial<InferSelect<T>>` — TypeScript impose des noms et types de colonnes valides.
+`.set()` 메서드는 `Partial<InferSelect<T>>`를 받습니다 — TypeScript가 유효한 컬럼 이름과 타입을 강제합니다.
 
 ### UPDATE...FROM
 
-Joignez une autre table pour piloter les mises à jour :
+다른 테이블을 조인하여 업데이트를 구동합니다:
 
 ```typescript
 const priceUpdates = table("price_updates", {
@@ -833,13 +833,13 @@ const priceUpdates = table("price_updates", {
 
 await db
   .update(products)
-  .set({ price: 0 }) // valeur définie ; utilisez les références de colonnes dans WHERE pour la logique conditionnelle
+  .set({ price: 0 }) // 값 설정; 조건부 로직에는 WHERE의 컬럼 참조 사용
   .from(priceUpdates)
   .where(eq(products.name, priceUpdates.productName))
   .execute();
 ```
 
-`.from()` accepte plusieurs tables :
+`.from()`은 여러 테이블을 받습니다:
 
 ```typescript
 db.update(t1).set({ ... }).from(t2, t3).where(and(...))
@@ -847,7 +847,7 @@ db.update(t1).set({ ... }).from(t2, t3).where(and(...))
 
 ### RETURNING
 
-Update et delete supportent `.returning()` pour récupérer les lignes affectées :
+수정과 삭제는 `.returning()`으로 영향받은 행을 돌려받습니다:
 
 ```typescript
 const result = await db
@@ -859,7 +859,7 @@ const result = await db
 // result.rows → [{ id: 3, name: "Charlie" }, ...]
 ```
 
-## Suppression
+## 삭제
 
 ```typescript
 const result = await db
@@ -871,7 +871,7 @@ const result = await db
 
 ### DELETE...USING
 
-Joignez une autre table pour déterminer les lignes à supprimer :
+다른 테이블을 조인하여 삭제할 행을 결정합니다:
 
 ```typescript
 const deleteList = table("delete_list", {
@@ -886,15 +886,15 @@ await db
   .execute();
 ```
 
-`.using()` accepte plusieurs tables :
+`.using()`은 여러 테이블을 받습니다:
 
 ```typescript
 db.delete(t1).using(t2, t3).where(and(...))
 ```
 
-## Transactions
+## 트랜잭션
 
-Encapsulez plusieurs opérations dans une transaction avec commit/rollback automatique :
+자동 커밋/롤백과 함께 여러 작업을 트랜잭션에 래핑합니다:
 
 ```typescript
 const result = await db.transaction(async (tx) => {
@@ -910,14 +910,14 @@ const result = await db.transaction(async (tx) => {
 
   return user;
 });
-// Si une opération échoue, la transaction entière est annulée
+// 어떤 작업이든 throw하면 전체 트랜잭션이 롤백됨
 ```
 
-Le callback reçoit une instance `QuarryDB` scopée à la transaction. La valeur de retour du callback devient la valeur de retour de `transaction()`, avec le type préservé.
+콜백은 트랜잭션에 스코프된 `QuarryDB` 인스턴스를 받습니다. 콜백의 반환 값이 타입이 보존된 채 `transaction()`의 반환 값이 됩니다.
 
-## Inspection de l'AST
+## AST 검사
 
-Chaque builder dispose d'une méthode `.toAST()` qui retourne l'objet AST brut sans l'exécuter. Utile pour le débogage, la journalisation ou la construction d'abstractions de niveau supérieur :
+모든 빌더에는 실행 없이 원시 AST 객체를 반환하는 `.toAST()` 메서드가 있습니다. 디버깅, 로깅, 상위 수준 추상화 구축에 유용합니다:
 
 ```typescript
 const ast = db
@@ -941,18 +941,18 @@ console.log(JSON.stringify(ast, null, 2));
 // }
 ```
 
-## Comment ça fonctionne
+## 작동 원리
 
-Quarry construit de simples objets JavaScript (unions discriminées avec un champ `kind`) qui représentent l'AST de la requête. Lorsque vous appelez `.execute()`, ces objets sont passés à la méthode `executeAST()` du moteur, qui les convertit directement dans l'AST interne Scala du moteur — en évitant entièrement la génération et l'analyse de chaînes SQL.
+Quarry는 쿼리 AST를 나타내는 일반 JavaScript 객체(`kind` 필드가 있는 구별된 유니온)를 빌드합니다. `.execute()`를 호출하면 이 객체가 엔진의 `executeAST()` 메서드에 전달되어, SQL 문자열 생성과 파싱을 완전히 건너뛰고 엔진의 내부 Scala AST로 직접 변환됩니다.
 
 ```
-Schéma → API Builder → Objets AST JS → AST Moteur → Réécriture → Exécution
-                              ↑ pas de parseur SQL
+스키마 → 빌더 API → JS AST 객체 → 엔진 AST → 재작성 → 실행
+                          ↑ SQL 파서 없음
 ```
 
-Cela donne à Quarry les mêmes capacités de requête que le SQL tout en éliminant le coût d'analyse et en permettant une sécurité de type complète à la compilation.
+이를 통해 Quarry는 파싱 오버헤드를 제거하고 완전한 컴파일 타임 타입 안전성을 가능하게 하면서 SQL과 동일한 쿼리 기능을 제공합니다.
 
-## Nettoyage
+## 정리
 
 ```typescript
 await session.close();

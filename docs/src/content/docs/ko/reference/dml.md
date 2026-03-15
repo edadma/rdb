@@ -1,6 +1,6 @@
 ---
 title: DML
-description: Langage de manipulation de données — instructions INSERT, UPDATE, DELETE et COPY.
+description: 데이터 조작 언어 — INSERT, UPDATE, DELETE, COPY 문.
 ---
 
 ## INSERT
@@ -12,7 +12,7 @@ VALUES ('Alice Smith', 149.99);
 
 ### RETURNING
 
-Retourne des valeurs de la ligne insérée :
+삽입된 행의 값을 반환합니다:
 
 ```sql
 INSERT INTO orders (customer_name, amount)
@@ -24,7 +24,7 @@ VALUES ('Carol', 200.00)
 RETURNING *;
 ```
 
-### Insertion depuis une requête
+### 쿼리에서 삽입
 
 ```sql
 INSERT INTO archive (customer_name, amount)
@@ -33,7 +33,7 @@ SELECT customer_name, amount FROM orders WHERE status = 'delivered';
 
 ### INSERT ... ON CONFLICT (Upsert)
 
-Ignorer les lignes en conflit :
+충돌하는 행 건너뛰기:
 
 ```sql
 INSERT INTO users (email, name)
@@ -41,7 +41,7 @@ VALUES ('alice@example.com', 'Alice')
 ON CONFLICT DO NOTHING;
 ```
 
-Mettre à jour en cas de conflit avec des colonnes spécifiques :
+특정 컬럼에 대한 충돌 시 업데이트:
 
 ```sql
 INSERT INTO users (email, name)
@@ -49,7 +49,7 @@ VALUES ('alice@example.com', 'Alice Updated')
 ON CONFLICT (email) DO UPDATE SET name = 'Alice Updated';
 ```
 
-Peut être combiné avec RETURNING :
+RETURNING과 결합 가능:
 
 ```sql
 INSERT INTO users (email, name)
@@ -64,9 +64,9 @@ RETURNING *;
 UPDATE orders SET status = 'shipped' WHERE amount > 100;
 ```
 
-### Mise à jour en masse depuis VALUES
+### VALUES에서 대량 업데이트
 
-`UPDATE ... FROM` style PostgreSQL :
+PostgreSQL 스타일 `UPDATE ... FROM`:
 
 ```sql
 UPDATE orders
@@ -76,7 +76,7 @@ UPDATE orders
   WHERE orders.id = d.id;
 ```
 
-### UPDATE avec RETURNING
+### RETURNING이 있는 UPDATE
 
 ```sql
 UPDATE orders SET status = 'shipped'
@@ -92,7 +92,7 @@ DELETE FROM orders WHERE status = 'delivered';
 
 ### DELETE ... USING
 
-Joindre d'autres tables pour déterminer les lignes à supprimer :
+삭제할 행을 결정하기 위해 다른 테이블을 조인합니다:
 
 ```sql
 DELETE FROM orders
@@ -101,7 +101,7 @@ WHERE orders.customer_id = customers.id
   AND customers.status = 'inactive';
 ```
 
-Plusieurs tables USING :
+여러 USING 테이블:
 
 ```sql
 DELETE FROM order_items
@@ -111,7 +111,7 @@ WHERE order_items.product_id = products.id
   AND categories.name = 'discontinued';
 ```
 
-### DELETE avec RETURNING
+### RETURNING이 있는 DELETE
 
 ```sql
 DELETE FROM orders WHERE status = 'delivered'
@@ -120,11 +120,11 @@ RETURNING *;
 
 ## COPY
 
-Import et export de données en masse au format CSV.
+CSV 형식으로 데이터를 대량 가져오기 및 내보내기합니다.
 
 ### COPY FROM
 
-Importer des lignes depuis un fichier CSV :
+CSV 파일에서 행을 가져옵니다:
 
 ```sql
 COPY orders FROM 'data/orders.csv';
@@ -135,7 +135,7 @@ COPY orders (customer_name, amount) FROM 'data/partial.csv' WITH (HEADER);
 
 ### COPY TO
 
-Exporter une table ou une requête vers un fichier CSV :
+테이블이나 쿼리를 CSV 파일로 내보냅니다:
 
 ```sql
 COPY orders TO 'export/orders.csv';
@@ -143,33 +143,33 @@ COPY orders TO 'export/orders.csv' WITH (HEADER);
 COPY (SELECT * FROM orders WHERE status = 'pending') TO 'export/pending.csv' WITH (HEADER);
 ```
 
-### Options
+### 옵션
 
-| Option | Description |
+| 옵션 | 설명 |
 |--------|-------------|
-| `HEADER` | La première ligne est un en-tête (ignoré à l'import, écrit à l'export) |
-| `DELIMITER 'c'` | Caractère séparateur de champs (par défaut : `,`) |
+| `HEADER` | 첫 번째 행이 헤더 (가져오기 시 건너뜀, 내보내기 시 작성) |
+| `DELIMITER 'c'` | 필드 구분 문자 (기본값: `,`) |
 
-## csv_file() — Interroger des fichiers CSV directement
+## csv_file() - CSV 파일 직접 쿼리
 
-Interrogez un fichier CSV comme table virtuelle sans importation :
+가져오기 없이 CSV 파일을 가상 테이블로 쿼리합니다:
 
 ```sql
 SELECT * FROM csv_file('data/sales.csv');
 SELECT name, age::int FROM csv_file('data/people.csv') WHERE age::int > 25;
 ```
 
-Toutes les valeurs sont retournées en `TEXT` — utilisez `::type` pour la conversion. Supporte `WHERE`, `ORDER BY`, `LIMIT`, `JOIN` et les agrégats.
+모든 값은 `TEXT`로 반환됩니다 — `::type`으로 캐스팅합니다. `WHERE`, `ORDER BY`, `LIMIT`, `JOIN`, 집계를 지원합니다.
 
-Options :
+옵션:
 
 ```sql
-csv_file('path')                        -- avec en-tête (par défaut)
-csv_file('path', false)                 -- sans en-tête (colonnes nommées column1, column2, ...)
-csv_file('path', true, '|')            -- délimiteur personnalisé
+csv_file('path')                        -- 헤더 포함 (기본값)
+csv_file('path', false)                 -- 헤더 없음 (컬럼 이름 column1, column2, ...)
+csv_file('path', true, '|')            -- 커스텀 구분자
 ```
 
-Jointure de fichiers CSV entre eux ou avec des tables de la base de données :
+CSV 파일끼리 또는 데이터베이스 테이블과 조인:
 
 ```sql
 SELECT e.name, d.department
@@ -177,9 +177,9 @@ FROM csv_file('employees.csv') e
 JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
 ```
 
-## Tables virtuelles
+## 가상 테이블
 
-Enregistrez des sources de données externes comme tables interrogeables avec `CREATE VIRTUAL TABLE` :
+`CREATE VIRTUAL TABLE`을 사용하여 외부 데이터 소스를 쿼리 가능한 테이블로 등록합니다:
 
 ```sql
 CREATE VIRTUAL TABLE sales USING csv('data/sales.csv');
@@ -189,9 +189,9 @@ SELECT * FROM sales WHERE amount::int > 100;
 DROP TABLE sales;
 ```
 
-Les tables virtuelles apparaissent dans `SHOW TABLES` et supportent `SELECT`, `WHERE`, `JOIN`, `ORDER BY` et les agrégats. Elles sont en lecture seule — `INSERT`, `UPDATE` et `DELETE` ne sont pas supportés.
+가상 테이블은 `SHOW TABLES`에 표시되며 `SELECT`, `WHERE`, `JOIN`, `ORDER BY`, 집계를 지원합니다. 읽기 전용으로, `INSERT`, `UPDATE`, `DELETE`는 지원되지 않습니다.
 
-Le module `csv` intégré est enregistré par défaut. Des modules personnalisés peuvent être enregistrés via l'API Scala :
+내장 `csv` 모듈이 기본으로 등록됩니다. 커스텀 모듈은 Scala API를 통해 등록할 수 있습니다:
 
 ```scala
 db.registerVirtualTableModule("mymodule", new VirtualTableModule { ... })

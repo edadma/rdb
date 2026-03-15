@@ -3,19 +3,19 @@ title: Premiers pas avec C
 description: Utilisez PetraDB depuis C, C++, Rust, Go, Python ou tout langage supportant le FFI C.
 ---
 
-PetraDB fournit une bibliotheque partagee native (`libpetradb-engine.so` sous Linux, `.dylib` sous macOS) avec une API C style SQLite. La bibliotheque est autonome -- pas besoin de JVM, Scala ou autre runtime.
+PetraDB fournit une bibliothèque partagée native (`libpetradb-engine.so` sous Linux, `.dylib` sous macOS) avec une API C style SQLite. La bibliothèque est autonome — pas besoin de JVM, Scala ou autre runtime.
 
-## Obtenir la bibliotheque
+## Obtenir la bibliothèque
 
-Vous avez besoin de deux fichiers : la bibliotheque partagee et l'en-tete.
+Vous avez besoin de deux fichiers : la bibliothèque partagée et l'en-tête.
 
-### Option 1 : Telecharger depuis les releases GitHub
+### Option 1 : Télécharger depuis les releases GitHub
 
-Telechargez `libpetradb-engine.so` et `petradb.h` depuis la [derniere release](https://github.com/edadma/petradb/releases). Placez-les dans un repertoire de votre choix (ex. `/usr/local/lib` et `/usr/local/include`, ou un repertoire local au projet).
+Téléchargez `libpetradb-engine.so` et `petradb.h` depuis la [dernière release](https://github.com/edadma/petradb/releases). Placez-les dans un répertoire de votre choix (ex. `/usr/local/lib` et `/usr/local/include`, ou un répertoire local au projet).
 
 ### Option 2 : Compiler depuis les sources
 
-Necessite [sbt](https://www.scala-sbt.org/) et une chaine de compilation C (gcc/clang).
+Nécessite [sbt](https://www.scala-sbt.org/) et une chaîne de compilation C (gcc/clang).
 
 ```bash
 git clone https://github.com/edadma/petradb.git
@@ -24,12 +24,12 @@ sbt engineNative/nativeLink
 ```
 
 Cela produit :
-- **Bibliotheque** : `engine/native/target/scala-3.8.2/libpetradb-engine.so`
-- **En-tete** : `engine/native/petradb.h`
+- **Bibliothèque** : `engine/native/target/scala-3.8.2/libpetradb-engine.so`
+- **En-tête** : `engine/native/petradb.h`
 
 ## Votre premier programme
 
-Creez `myapp.c` :
+Créez `myapp.c` :
 
 ```c
 #include <stdio.h>
@@ -56,16 +56,16 @@ int main(void) {
 }
 ```
 
-## Compiler et executer
+## Compiler et exécuter
 
-En supposant que la bibliotheque et l'en-tete sont dans `/usr/local/lib` et `/usr/local/include` :
+En supposant que la bibliothèque et l'en-tête sont dans `/usr/local/lib` et `/usr/local/include` :
 
 ```bash
 gcc -o myapp myapp.c -lpetradb-engine
 ./myapp
 ```
 
-Si les fichiers sont dans un repertoire local au projet (ex. `./lib` et `./include`) :
+Si les fichiers sont dans un répertoire local au projet (ex. `./lib` et `./include`) :
 
 ```bash
 gcc -o myapp myapp.c \
@@ -78,10 +78,10 @@ gcc -o myapp myapp.c \
 ```
 
 Les options :
-- `-I` indique au compilateur ou trouver `petradb.h`
-- `-L` indique a l'editeur de liens ou trouver `libpetradb-engine.so`
-- `-l` specifie le nom de la bibliotheque (l'editeur de liens ajoute le prefixe `lib` et le suffixe `.so`)
-- `-Wl,-rpath` integre le chemin de la bibliotheque dans l'executable pour qu'il puisse trouver le `.so` a l'execution
+- `-I` indique au compilateur où trouver `petradb.h`
+- `-L` indique à l'éditeur de liens où trouver `libpetradb-engine.so`
+- `-l` spécifie le nom de la bibliothèque (l'éditeur de liens ajoute le préfixe `lib` et le suffixe `.so`)
+- `-Wl,-rpath` intègre le chemin de la bibliothèque dans l'exécutable pour qu'il puisse trouver le `.so` à l'exécution
 
 Sortie :
 ```
@@ -91,17 +91,17 @@ Sortie :
 
 ## Stockage persistant
 
-Pour des donnees qui survivent aux redemarrages, utilisez `petradb_open_persistent` :
+Pour des données qui survivent aux redémarrages, utilisez `petradb_open_persistent` :
 
 ```c
 int db = petradb_open_persistent("mydata.db");
 ```
 
-Le fichier de base de donnees est cree lors de la premiere utilisation et rouvert lors des executions suivantes. Toutes les tables, donnees, index, declencheurs et procedures stockees persistent automatiquement.
+Le fichier de base de données est créé lors de la première utilisation et rouvert lors des exécutions suivantes. Toutes les tables, données, index, déclencheurs et procédures stockées persistent automatiquement.
 
-## Fonctions definies par l'utilisateur
+## Fonctions définies par l'utilisateur
 
-Enregistrez des fonctions C natives appelables depuis SQL, les declencheurs et les procedures stockees :
+Enregistrez des fonctions C natives appelables depuis SQL, les déclencheurs et les procédures stockées :
 
 ```c
 void my_double(int ctx, int argc, const int* argv) {
@@ -118,13 +118,13 @@ petradb_create_function(db, "my_double", 1, NULL, my_double);
 
 ## Autres langages
 
-La meme bibliotheque partagee fonctionne avec tout langage supportant le FFI C :
+La même bibliothèque partagée fonctionne avec tout langage supportant le FFI C :
 
-- **Rust** : declarations `unsafe extern "C"` + liaison avec `-lpetradb-engine`
+- **Rust** : déclarations `unsafe extern "C"` + liaison avec `-lpetradb-engine`
 - **Python** : `ctypes.cdll.LoadLibrary("libpetradb-engine.so")`
 - **Go** : `cgo` avec `// #cgo LDFLAGS: -lpetradb-engine`
 - **Ruby** : `FFI::Library` du gem `ffi`
 
-## Etapes suivantes
+## Étapes suivantes
 
-Consultez la [reference API C](/reference/api-c/) pour la liste complete des fonctions, y compris les curseurs, les accesseurs de colonnes, les fonctions definies par l'utilisateur et la gestion des erreurs.
+Consultez la [référence API C](/reference/api-c/) pour la liste complète des fonctions, y compris les curseurs, les accesseurs de colonnes, les fonctions définies par l'utilisateur et la gestion des erreurs.

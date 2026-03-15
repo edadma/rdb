@@ -3,13 +3,13 @@ title: API C
 description: API C style SQLite pour embarquer PetraDB en C, C++, Rust, Go, Python et d'autres langages.
 ---
 
-PetraDB fournit une bibliotheque partagee native (`libpetradb-engine.so` / `.dylib`) avec une API C modelee d'apres SQLite. La bibliotheque est autonome -- pas de JVM ou de runtime necessaire.
+PetraDB fournit une bibliothèque partagée native (`libpetradb-engine.so` / `.dylib`) avec une API C modelée d'après SQLite. La bibliothèque est autonome — pas de JVM ou de runtime nécessaire.
 
-Telechargez depuis les [releases GitHub](https://github.com/edadma/petradb/releases) ou compilez depuis les sources avec `sbt engineNative/nativeLink`. Consultez [Premiers pas avec C](/getting-started/c/) pour les instructions de configuration.
+Téléchargez depuis les [releases GitHub](https://github.com/edadma/petradb/releases) ou compilez depuis les sources avec `sbt engineNative/nativeLink`. Consultez [Premiers pas avec C](/getting-started/c/) pour les instructions de configuration.
 
 Incluez `petradb.h` et liez avec `-lpetradb-engine`.
 
-## Demarrage rapide
+## Démarrage rapide
 
 ```c
 #include "petradb.h"
@@ -30,22 +30,22 @@ petradb_finalize(cur);
 petradb_close(db);
 ```
 
-## Cycle de vie de la base de donnees
+## Cycle de vie de la base de données
 
 ```c
-int petradb_open(void);                       // base de donnees en memoire
-int petradb_open_persistent(const char *path); // base de donnees persistante
-int petradb_close(int db);                     // fermer et liberer
-int petradb_connect(int db);                   // creer une session
+int petradb_open(void);                       // base de données en mémoire
+int petradb_open_persistent(const char *path); // base de données persistante
+int petradb_close(int db);                     // fermer et libérer
+int petradb_connect(int db);                   // créer une session
 ```
 
-## Executer des instructions
+## Exécuter des instructions
 
 ```c
-int petradb_exec(int conn, const char *sql);   // retourne le nombre de lignes affectees, -1 en cas d'erreur
+int petradb_exec(int conn, const char *sql);   // retourne le nombre de lignes affectées, -1 en cas d'erreur
 ```
 
-## Curseurs (resultats de requete)
+## Curseurs (résultats de requête)
 
 ```c
 int petradb_prepare(int conn, const char *sql); // retourne un handle de curseur
@@ -53,7 +53,7 @@ int petradb_step(int cursor);                   // PETRADB_ROW (1), PETRADB_DONE
 int petradb_finalize(int cursor);               // fermer le curseur
 ```
 
-### Metadonnees de colonnes
+### Métadonnées de colonnes
 
 ```c
 int petradb_column_count(int cursor);
@@ -67,15 +67,15 @@ int         petradb_column_type(int cursor, int index);     // PETRADB_INTEGER/F
 int         petradb_column_int(int cursor, int index);
 long long   petradb_column_int64(int cursor, int index);
 double      petradb_column_double(int cursor, int index);
-const char *petradb_column_text(int cursor, int index);     // ne PAS liberer
-const void *petradb_column_blob(int cursor, int index);     // ne PAS liberer
+const char *petradb_column_text(int cursor, int index);     // ne PAS libérer
+const void *petradb_column_blob(int cursor, int index);     // ne PAS libérer
 int         petradb_column_bytes(int cursor, int index);    // longueur en octets du texte/blob
 int         petradb_column_is_null(int cursor, int index);
 ```
 
-## Fonctions definies par l'utilisateur
+## Fonctions définies par l'utilisateur
 
-Enregistrez des fonctions C natives appelables depuis SQL, les declencheurs et les procedures stockees :
+Enregistrez des fonctions C natives appelables depuis SQL, les déclencheurs et les procédures stockées :
 
 ```c
 void my_double(int ctx, int argc, const int* argv) {
@@ -109,7 +109,7 @@ int         petradb_value_type(int value);
 int         petradb_value_is_null(int value);
 ```
 
-### Definition des resultats
+### Définition des résultats
 
 ```c
 void petradb_result_int(int ctx, int value);
@@ -120,9 +120,9 @@ void petradb_result_null(int ctx);
 void petradb_result_error(int ctx, const char* msg);  // interrompt l'instruction SQL
 ```
 
-### Donnees utilisateur
+### Données utilisateur
 
-Passez un contexte specifique a l'application via `user_data` :
+Passez un contexte spécifique à l'application via `user_data` :
 
 ```c
 static int call_count = 0;
@@ -139,31 +139,31 @@ petradb_create_function(db, "call_count", 0, &call_count, my_counter);
 ## Gestion des erreurs
 
 ```c
-const char *petradb_errmsg(void);   // dernier message d'erreur, chaine vide si aucun
+const char *petradb_errmsg(void);   // dernier message d'erreur, chaîne vide si aucun
 ```
 
-Toutes les fonctions retournant des handles retournent `0` en cas d'erreur. Les fonctions retournant des codes de statut retournent `-1` en cas d'erreur. Apres toute erreur, appelez `petradb_errmsg()` pour les details. Les operations reussies effacent l'erreur.
+Toutes les fonctions retournant des handles retournent `0` en cas d'erreur. Les fonctions retournant des codes de statut retournent `-1` en cas d'erreur. Après toute erreur, appelez `petradb_errmsg()` pour les détails. Les opérations réussies effacent l'erreur.
 
 ## Constantes de types
 
 | Constante | Valeur | Description |
 |-----------|--------|-------------|
-| `PETRADB_INTEGER` | 1 | Valeur entiere |
-| `PETRADB_FLOAT` | 2 | Valeur a virgule flottante |
-| `PETRADB_TEXT` | 3 | Chaine de texte |
-| `PETRADB_BLOB` | 4 | Donnees binaires |
+| `PETRADB_INTEGER` | 1 | Valeur entière |
+| `PETRADB_FLOAT` | 2 | Valeur à virgule flottante |
+| `PETRADB_TEXT` | 3 | Chaîne de texte |
+| `PETRADB_BLOB` | 4 | Données binaires |
 | `PETRADB_NULL` | 5 | SQL NULL |
 
-## Gestion de la memoire
+## Gestion de la mémoire
 
-- Les pointeurs de chaines provenant de `petradb_column_text`, `petradb_value_text` et `petradb_errmsg` appartiennent a PetraDB. Ne les liberez PAS. Ils restent valides jusqu'au prochain appel retournant une chaine.
-- La bibliotheque partagee inclut le ramasse-miettes de Scala Native. Aucune gestion manuelle de la memoire n'est necessaire pour les objets de base de donnees -- appelez simplement `petradb_finalize` et `petradb_close` lorsque vous avez termine.
+- Les pointeurs de chaînes provenant de `petradb_column_text`, `petradb_value_text` et `petradb_errmsg` appartiennent à PetraDB. Ne les libérez PAS. Ils restent valides jusqu'au prochain appel retournant une chaîne.
+- La bibliothèque partagée inclut le ramasse-miettes de Scala Native. Aucune gestion manuelle de la mémoire n'est nécessaire pour les objets de base de données — appelez simplement `petradb_finalize` et `petradb_close` lorsque vous avez terminé.
 
 ## Liaisons de langages
 
 L'API C fonctionne avec tout langage supportant le FFI C :
 
-- **Rust** : declarations `unsafe extern "C"` + `-lpetradb-engine`
+- **Rust** : déclarations `unsafe extern "C"` + `-lpetradb-engine`
 - **Python** : `ctypes.cdll.LoadLibrary("libpetradb-engine.so")`
 - **Go** : `// #cgo LDFLAGS: -lpetradb-engine` + `import "C"`
 - **Ruby** : `FFI::Library` du gem `ffi`

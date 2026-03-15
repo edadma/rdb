@@ -1,9 +1,9 @@
 ---
-title: Requêtes
-description: Instructions SELECT, jointures, sous-requêtes, opérations ensemblistes et plus.
+title: 쿼리
+description: SELECT 문, 조인, 서브쿼리, 집합 연산 등.
 ---
 
-## Requêtes de base
+## 기본 쿼리
 
 ```sql
 SELECT * FROM orders
@@ -12,7 +12,7 @@ ORDER BY amount DESC
 LIMIT 10 OFFSET 5;
 ```
 
-## Agrégations
+## 집계
 
 ```sql
 SELECT status, COUNT(*), AVG(amount), SUM(amount)
@@ -21,9 +21,9 @@ GROUP BY status
 HAVING COUNT(*) > 5;
 ```
 
-### FILTER sur les agrégats
+### 집계 FILTER
 
-Appliquer un filtre par agrégat sans affecter les autres agrégats de la même requête :
+같은 쿼리의 다른 집계에 영향을 주지 않고 집계별 필터를 적용합니다:
 
 ```sql
 SELECT
@@ -33,11 +33,11 @@ SELECT
 FROM orders;
 ```
 
-## Fonctions de fenêtre
+## 윈도우 함수
 
-Les fonctions de fenêtre calculent des valeurs sur un ensemble de lignes liées à la ligne courante, sans regrouper les lignes comme `GROUP BY`.
+윈도우 함수는 `GROUP BY`처럼 행을 축소하지 않고, 현재 행에 관련된 행 집합에 대해 값을 계산합니다.
 
-### Fonctions de classement
+### 순위 함수
 
 ```sql
 SELECT name, department, salary,
@@ -47,7 +47,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-### Fonctions de décalage
+### 오프셋 함수
 
 ```sql
 SELECT name, salary,
@@ -57,9 +57,9 @@ SELECT name, salary,
 FROM employees;
 ```
 
-`LAG(expr [, offset [, default]])` et `LEAD(expr [, offset [, default]])` acceptent un décalage optionnel (par défaut 1) et une valeur par défaut (par défaut NULL).
+`LAG(expr [, offset [, default]])`과 `LEAD(expr [, offset [, default]])`는 선택적 오프셋(기본값 1)과 기본값(기본값 NULL)을 받습니다.
 
-### Fonctions de valeur
+### 값 함수
 
 ```sql
 SELECT name, department, salary,
@@ -71,17 +71,17 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-| Fonction | Description |
+| 함수 | 설명 |
 |----------|-------------|
-| `FIRST_VALUE(expr)` | Valeur de `expr` à la première ligne du cadre de fenêtre |
-| `LAST_VALUE(expr)` | Valeur de `expr` à la dernière ligne du cadre de fenêtre |
-| `NTH_VALUE(expr, n)` | Valeur de `expr` à la n-ième ligne du cadre (base 1), ou NULL si pas de telle ligne |
+| `FIRST_VALUE(expr)` | 윈도우 프레임의 첫 번째 행에서의 `expr` 값 |
+| `LAST_VALUE(expr)` | 윈도우 프레임의 마지막 행에서의 `expr` 값 |
+| `NTH_VALUE(expr, n)` | 프레임의 n번째 행에서의 `expr` 값 (1부터 시작), 해당 행이 없으면 NULL |
 
-Le cadre par défaut est `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. Pour `LAST_VALUE` et `NTH_VALUE`, vous voudrez généralement `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` pour voir la partition entière.
+기본 프레임은 `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`입니다. `LAST_VALUE`와 `NTH_VALUE`의 경우, 전체 파티션을 보려면 일반적으로 `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`이 필요합니다.
 
-### Fonctions de fenêtre avec agrégats
+### 집계 윈도우 함수
 
-Toute fonction d'agrégation peut être utilisée avec `OVER()` :
+모든 집계 함수를 `OVER()`와 함께 사용할 수 있습니다:
 
 ```sql
 SELECT name, department, salary,
@@ -91,9 +91,9 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-### Spécifications de cadre
+### 프레임 사양
 
-Contrôlez quelles lignes au sein de la partition contribuent à une fonction de fenêtre avec agrégat :
+파티션 내에서 집계 윈도우 함수에 기여하는 행을 제어합니다:
 
 ```sql
 SELECT name, salary,
@@ -104,16 +104,16 @@ SELECT name, salary,
 FROM employees;
 ```
 
-Bornes de cadre supportées :
-- `UNBOUNDED PRECEDING` / `UNBOUNDED FOLLOWING` — début/fin de la partition
-- `CURRENT ROW` — la ligne courante
-- `N PRECEDING` / `N FOLLOWING` — N lignes avant/après la ligne courante
+지원되는 프레임 경계:
+- `UNBOUNDED PRECEDING` / `UNBOUNDED FOLLOWING` — 파티션 시작/끝
+- `CURRENT ROW` — 현재 행
+- `N PRECEDING` / `N FOLLOWING` — 현재에서 N행 앞/뒤
 
-Sans clause de cadre, les fonctions de fenêtre avec agrégats calculent sur l'ensemble de la partition.
+프레임 절이 없으면 집계 윈도우 함수는 전체 파티션에 대해 계산합니다.
 
-### FILTER avec fonctions de fenêtre
+### 윈도우 함수와 FILTER
 
-La clause `FILTER` fonctionne avec les fonctions de fenêtre avec agrégats :
+`FILTER` 절은 집계 윈도우 함수와 함께 작동합니다:
 
 ```sql
 SELECT name, salary,
@@ -123,9 +123,9 @@ SELECT name, salary,
 FROM employees;
 ```
 
-## Jointures
+## 조인
 
-Jointures INNER, LEFT, RIGHT, FULL et CROSS :
+INNER, LEFT, RIGHT, FULL, CROSS 조인:
 
 ```sql
 SELECT o.id, o.amount, c.name
@@ -133,7 +133,7 @@ FROM orders o
 INNER JOIN customers c ON o.customer_id = c.id;
 ```
 
-## Sous-requêtes et EXISTS
+## 서브쿼리와 EXISTS
 
 ```sql
 SELECT * FROM customers c
@@ -143,9 +143,9 @@ WHERE EXISTS (
 );
 ```
 
-## Jointures LATERAL
+## LATERAL 조인
 
-Sous-requêtes corrélées dans FROM :
+FROM에서의 상관 서브쿼리:
 
 ```sql
 SELECT c.name, recent.amount
@@ -157,13 +157,13 @@ LATERAL (
 ) AS recent;
 ```
 
-## VALUES comme source
+## 소스로서의 VALUES
 
 ```sql
 SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS t (id, name);
 ```
 
-## Opérations ensemblistes
+## 집합 연산
 
 ```sql
 SELECT name FROM customers
@@ -171,11 +171,11 @@ UNION
 SELECT name FROM suppliers;
 ```
 
-`UNION`, `UNION ALL`, `INTERSECT` et `EXCEPT` sont supportés.
+`UNION`, `UNION ALL`, `INTERSECT`, `EXCEPT`가 지원됩니다.
 
-## Expressions de table communes (WITH)
+## 공통 테이블 표현식 (WITH)
 
-Les CTE définissent des sous-requêtes nommées qui peuvent être référencées dans la requête principale, améliorant la lisibilité et permettant la réutilisation :
+CTE는 메인 쿼리에서 참조할 수 있는 명명된 서브쿼리를 정의하여 가독성과 재사용성을 개선합니다:
 
 ```sql
 WITH active_users AS (
@@ -190,16 +190,16 @@ user_orders AS (
 SELECT name, order_count FROM user_orders ORDER BY order_count DESC;
 ```
 
-Les alias de colonnes peuvent être spécifiés : `WITH t(x, y) AS (SELECT 1, 2)`.
+컬럼 별칭을 지정할 수 있습니다: `WITH t(x, y) AS (SELECT 1, 2)`.
 
-Les CTE suivantes peuvent référencer les CTE précédentes. Un nom de CTE masque toute table portant le même nom.
+뒤의 CTE는 앞의 CTE를 참조할 수 있습니다. CTE 이름은 같은 이름의 테이블을 가립니다.
 
-### CTE récursives
+### 재귀 CTE
 
-`WITH RECURSIVE` permet des requêtes itératives pour les données hiérarchiques, la traversée de graphes et la génération de séries :
+`WITH RECURSIVE`는 계층적 데이터, 그래프 순회, 시리즈 생성을 위한 반복 쿼리를 가능하게 합니다:
 
 ```sql
--- Générer une série de nombres
+-- 숫자 시리즈 생성
 WITH RECURSIVE nums(n) AS (
   SELECT 1
   UNION ALL
@@ -207,7 +207,7 @@ WITH RECURSIVE nums(n) AS (
 )
 SELECT n FROM nums;
 
--- Traversée d'arbre
+-- 트리 순회
 WITH RECURSIVE tree(id, name, depth) AS (
   SELECT id, name, 0 FROM categories WHERE parent_id IS NULL
   UNION ALL
@@ -217,9 +217,9 @@ WITH RECURSIVE tree(id, name, depth) AS (
 SELECT name, depth FROM tree ORDER BY depth, name;
 ```
 
-Le corps de la CTE récursive doit être un `UNION ALL` ou `UNION` d'une requête ancre (cas de base non récursif) et d'une requête récursive (qui référence le nom de la CTE). L'exécution s'arrête quand la requête récursive ne produit plus de nouvelles lignes, ou après 1000 itérations.
+재귀 CTE 본문은 앵커 쿼리(비재귀 기본 케이스)와 재귀 쿼리(CTE 이름을 참조)의 `UNION ALL` 또는 `UNION`이어야 합니다. 재귀 쿼리가 새 행을 생성하지 않거나 1000번 반복 후 실행이 멈춥니다.
 
-## Expressions CASE
+## CASE 표현식
 
 ```sql
 SELECT name,
@@ -227,11 +227,11 @@ SELECT name,
 FROM orders;
 ```
 
-## Correspondance de motifs
+## 패턴 매칭
 
 ```sql
 SELECT * FROM products WHERE name LIKE '%phone%';
-SELECT * FROM products WHERE name ILIKE '%Phone%';   -- insensible à la casse
+SELECT * FROM products WHERE name ILIKE '%Phone%';   -- 대소문자 구분 없음
 ```
 
 ## BETWEEN, IN, ANY
@@ -244,7 +244,7 @@ SELECT * FROM orders WHERE status = ANY(ARRAY['pending', 'shipped']);
 
 ## OVERLAPS
 
-Teste si deux intervalles de dates/heures se chevauchent :
+두 날짜/시간 범위가 겹치는지 테스트합니다:
 
 ```sql
 SELECT (DATE '2024-01-01', DATE '2024-01-31')
@@ -259,7 +259,7 @@ SELECT DISTINCT category FROM products;
 
 ### DISTINCT ON
 
-Retourne une ligne par valeur distincte des expressions données. La première ligne de chaque groupe (selon `ORDER BY`) est conservée :
+주어진 표현식의 고유 값당 하나의 행을 반환합니다. 각 그룹의 첫 번째 행(`ORDER BY`에 따라)이 유지됩니다:
 
 ```sql
 SELECT DISTINCT ON (department) department, name, salary
@@ -267,17 +267,17 @@ FROM employees
 ORDER BY department, salary DESC;
 ```
 
-Cela retourne l'employé le mieux payé par département.
+부서별 최고 급여를 받는 직원을 반환합니다.
 
 ## EXPLAIN
 
-Afficher le plan d'exécution de la requête :
+쿼리 실행 계획을 보여줍니다:
 
 ```sql
 EXPLAIN SELECT * FROM orders WHERE status = 'pending';
 ```
 
-## Constructeur ARRAY
+## ARRAY 생성자
 
 ```sql
 SELECT ARRAY[1, 2, 3];

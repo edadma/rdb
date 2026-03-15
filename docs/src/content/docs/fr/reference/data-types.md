@@ -1,48 +1,48 @@
 ---
-title: Types de donnees
-description: Types de donnees SQL supportes par PetraDB.
+title: Types de données
+description: Types de données SQL supportés par PetraDB.
 ---
 
 PetraDB suit les conventions PostgreSQL pour la syntaxe SQL, la gestion des identifiants et la conversion de types.
 
-## Compatibilite SQL
+## Compatibilité SQL
 
-- **Mots-cles insensibles a la casse** -- `SELECT`, `select` et `Select` sont equivalents
-- **Pliage des identifiants non quotes** -- les identifiants non quotes sont convertis en minuscules (`CREATE TABLE Users` -> nom de table `users`)
-- **Identifiants entre guillemets doubles** -- preservent la casse (`"MixedCase"` reste tel quel)
-- **Echappement de chaines** -- guillemets simples doubles (`'it''s'`) et E-strings (`E'it\'s'`)
-- **Operateurs** -- `!=` et `<>` pour l'inegalite
+- **Mots-clés insensibles à la casse** — `SELECT`, `select` et `Select` sont équivalents
+- **Pliage des identifiants non quotés** — les identifiants non quotés sont convertis en minuscules (`CREATE TABLE Users` -> nom de table `users`)
+- **Identifiants entre guillemets doubles** — préservent la casse (`"MixedCase"` reste tel quel)
+- **Échappement de chaînes** — guillemets simples doublés (`'it''s'`) et E-strings (`E'it\'s'`)
+- **Opérateurs** — `!=` et `<>` pour l'inégalité
 
-## Types supportes
+## Types supportés
 
 | Type | Description |
 |------|-------------|
-| `SMALLINT` | Entier 16 bits (-32768 a 32767) |
+| `SMALLINT` | Entier 16 bits (-32768 à 32767) |
 | `INT` / `INTEGER` | Entier 32 bits |
 | `BIGINT` | Entier 64 bits |
-| `SMALLSERIAL` | Entier 16 bits auto-incremente (cree une sequence de support) |
-| `SERIAL` | Entier 32 bits auto-incremente (cree une sequence de support) |
-| `BIGSERIAL` | Entier 64 bits auto-incremente (cree une sequence de support) |
-| `DOUBLE` / `FLOAT` / `REAL` | Virgule flottante double precision |
-| `NUMERIC(p,s)` / `DECIMAL(p,s)` | Decimal a precision fixe |
-| `TEXT` | Chaine de longueur variable |
-| `CHAR(n)` | Chaine de longueur fixe (completee par des espaces a droite) |
-| `VARCHAR(n)` | Chaine de longueur variable (max n caracteres, sans completion) |
+| `SMALLSERIAL` | Entier 16 bits auto-incrémenté (crée une séquence de support) |
+| `SERIAL` | Entier 32 bits auto-incrémenté (crée une séquence de support) |
+| `BIGSERIAL` | Entier 64 bits auto-incrémenté (crée une séquence de support) |
+| `DOUBLE` / `FLOAT` / `REAL` | Virgule flottante double précision |
+| `NUMERIC(p,s)` / `DECIMAL(p,s)` | Décimal à précision fixe |
+| `TEXT` | Chaîne de longueur variable |
+| `CHAR(n)` | Chaîne de longueur fixe (complétée par des espaces à droite) |
+| `VARCHAR(n)` | Chaîne de longueur variable (max n caractères, sans complétion) |
 | `BOOLEAN` | Vrai/faux |
 | `DATE` | Date du calendrier (`yyyy-MM-dd`) |
 | `TIME` | Heure du jour (`HH:mm:ss`) |
 | `TIMESTAMP` | Date et heure |
-| `TIMESTAMP WITH TIME ZONE` | Date et heure avec decalage de fuseau horaire |
-| `INTERVAL` | Duree (ISO 8601 ou `N days N hours N minutes N seconds`) |
+| `TIMESTAMP WITH TIME ZONE` | Date et heure avec décalage de fuseau horaire |
+| `INTERVAL` | Durée (ISO 8601 ou `N days N hours N minutes N seconds`) |
 | `UUID` | Identifiant universel unique |
-| `JSON` / `JSONB` | Objets et tableaux JSON structures |
-| `BYTEA` | Donnees binaires |
-| `ENUM` | Types enumeres personnalises (via `CREATE TYPE ... AS ENUM`) |
-| `INT[]`, `TEXT[]`, etc. | Tableaux types (tout type de base avec le suffixe `[]`) |
+| `JSON` / `JSONB` | Objets et tableaux JSON structurés |
+| `BYTEA` | Données binaires |
+| `ENUM` | Types énumérés personnalisés (via `CREATE TYPE ... AS ENUM`) |
+| `INT[]`, `TEXT[]`, etc. | Tableaux typés (tout type de base avec le suffixe `[]`) |
 
 ## Conversion de types
 
-Utilisez l'operateur `::` ou `CAST(expr AS type)` pour convertir entre types :
+Utilisez l'opérateur `::` ou `CAST(expr AS type)` pour convertir entre types :
 
 ```sql
 SELECT '2024-06-15'::DATE;
@@ -54,7 +54,7 @@ SELECT 1::BOOLEAN;
 SELECT EXTRACT(year FROM created_at);
 ```
 
-## Arithmetique date/heure
+## Arithmétique date/heure
 
 ```sql
 SELECT '2024-01-01'::DATE + 10;                        -- ajouter des jours

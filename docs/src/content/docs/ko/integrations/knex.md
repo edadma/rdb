@@ -1,17 +1,17 @@
 ---
 title: Knex.js
-description: Utiliser le constructeur de requêtes Knex.js avec PetraDB.
+description: PetraDB와 함께 Knex.js 쿼리 빌더를 사용하는 방법.
 ---
 
-PetraDB fournit un dialecte [Knex.js](https://knexjs.org) via le package `@petradb/knex`. Cela vous permet d'utiliser le constructeur de requêtes, le constructeur de schémas et les migrations de Knex avec le moteur SQL embarquable de PetraDB.
+PetraDB는 `@petradb/knex` 패키지를 통해 [Knex.js](https://knexjs.org) 방언을 제공합니다. 이를 통해 Knex의 쿼리 빌더, 스키마 빌더, 마이그레이션을 PetraDB의 임베더블 SQL 엔진과 함께 사용할 수 있습니다.
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/knex knex
 ```
 
-## Configuration
+## 설정
 
 ```typescript
 import Knex from "knex";
@@ -24,20 +24,20 @@ const knex = Knex({
 });
 ```
 
-### Modes de stockage
+### 스토리지 모드
 
 ```typescript
-// En mémoire (par défaut)
+// 인메모리 (기본값)
 { storage: "memory" }
 
-// Stockage persistant sur fichier
+// 파일 기반 영구 스토리지
 { storage: "persistent", path: "./mydb.petra" }
 ```
 
-## Constructeur de schémas
+## 스키마 빌더
 
 ```typescript
-// Créer une table
+// 테이블 생성
 await knex.schema.createTable("users", (t) => {
   t.increments("id");
   t.string("name").notNullable();
@@ -46,65 +46,65 @@ await knex.schema.createTable("users", (t) => {
   t.timestamps(true, true);
 });
 
-// Vérifier si une table existe
+// 테이블 존재 여부 확인
 const exists = await knex.schema.hasTable("users");
 
-// Vérifier si une colonne existe
+// 컬럼 존재 여부 확인
 const hasAge = await knex.schema.hasColumn("users", "age");
 
-// Ajouter une colonne
+// 컬럼 추가
 await knex.schema.alterTable("users", (t) => {
   t.string("email");
 });
 
-// Créer un index
+// 인덱스 생성
 await knex.schema.alterTable("users", (t) => {
   t.index(["name"]);
 });
 
-// Supprimer une table
+// 테이블 삭제
 await knex.schema.dropTableIfExists("users");
 ```
 
-## Requêtes
+## 쿼리
 
 ```typescript
-// Insertion
+// 삽입
 await knex("users").insert({ name: "Alice", age: 30 });
 await knex("users").insert([
   { name: "Bob", age: 25 },
   { name: "Carol", age: 35 },
 ]);
 
-// Insertion avec returning
+// returning과 함께 삽입
 const [inserted] = await knex("users")
   .insert({ name: "Dave", age: 28 })
   .returning("*");
 
-// Sélection
+// 조회
 const users = await knex("users").where("age", ">", 25);
 const first = await knex("users").where("name", "Alice").first();
 
-// Mise à jour
+// 수정
 const updated = await knex("users")
   .where("name", "Alice")
   .update({ age: 31 });
 
-// Mise à jour avec returning
+// returning과 함께 수정
 const [changed] = await knex("users")
   .where("name", "Alice")
   .update({ age: 32 })
   .returning("*");
 
-// Suppression
+// 삭제
 const deleted = await knex("users").where("active", false).del();
 
-// Agrégats
+// 집계
 const [{ count }] = await knex("users").count("* as count");
 const [{ max }] = await knex("users").max("age as max");
 ```
 
-## Jointures
+## 조인
 
 ```typescript
 await knex.schema.createTable("orders", (t) => {
@@ -119,7 +119,7 @@ const results = await knex("orders")
   .select("users.name", "orders.product", "orders.amount");
 ```
 
-## Transactions
+## 트랜잭션
 
 ```typescript
 await knex.transaction(async (trx) => {
@@ -128,9 +128,9 @@ await knex.transaction(async (trx) => {
 });
 ```
 
-## Types de colonnes supportés
+## 지원되는 컬럼 타입
 
-| Méthode Knex | Type PetraDB |
+| Knex 메서드 | PetraDB 타입 |
 |---|---|
 | `increments()` | `SERIAL PRIMARY KEY` |
 | `bigIncrements()` | `BIGSERIAL PRIMARY KEY` |
@@ -150,9 +150,9 @@ await knex.transaction(async (trx) => {
 | `json()` | `JSON` |
 | `jsonb()` | `JSONB` |
 | `binary()` | `BYTEA` |
-| `enum()` | `TEXT CHECK (...)` ou `ENUM` natif |
+| `enum()` | `TEXT CHECK (...)` 또는 네이티브 `ENUM` |
 
-## Nettoyage
+## 정리
 
 ```typescript
 await knex.destroy();

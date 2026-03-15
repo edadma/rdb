@@ -1,9 +1,9 @@
 ---
 title: JavaScript / TypeScript
-description: Référence de l'API JavaScript et TypeScript pour PetraDB.
+description: PetraDB의 JavaScript 및 TypeScript API 레퍼런스.
 ---
 
-## Installation
+## 설치
 
 ```bash
 npm install @petradb/engine
@@ -13,31 +13,31 @@ npm install @petradb/engine
 
 ### `new Session(options?)`
 
-Crée une nouvelle instance de base de données.
+새 데이터베이스 인스턴스를 생성합니다.
 
-| Option | Type | Par défaut | Description |
-|--------|------|-----------|-------------|
-| `rowMode` | `'object' \| 'array'` | `'object'` | Format de ligne par défaut pour les résultats SELECT |
-| `storage` | `'memory' \| 'persistent' \| 'text'` | `'memory'` | Backend de stockage |
-| `path` | `string` | -- | Chemin du fichier (requis pour persistent et text) |
-| `pageSize` | `number` | `4096` | Taille de page en octets (persistent uniquement) |
+| 옵션 | 타입 | 기본값 | 설명 |
+|--------|------|---------|-------------|
+| `rowMode` | `'object' \| 'array'` | `'object'` | SELECT 결과의 기본 행 형식 |
+| `storage` | `'memory' \| 'persistent' \| 'text'` | `'memory'` | 스토리지 백엔드 |
+| `path` | `string` | — | 파일 경로 (persistent와 text에 필수) |
+| `pageSize` | `number` | `4096` | 페이지 크기 (바이트, persistent만 해당) |
 
 ```javascript
-// En mémoire (par défaut)
+// 인메모리 (기본값)
 const db = new Session();
 
-// Stockage persistant résistant aux pannes (Node.js)
+// 충돌 안전 영구 스토리지 (Node.js)
 const db = new Session({ storage: 'persistent', path: './mydb' });
 
-// Fichier texte lisible par l'homme (Node.js)
+// 사람이 읽을 수 있는 텍스트 파일 (Node.js)
 const db = new Session({ storage: 'text', path: './data.ptxt' });
 ```
 
-Pour le stockage persistant, PetraDB détecte automatiquement s'il faut créer un nouveau fichier ou ouvrir un fichier existant.
+영구 스토리지의 경우, PetraDB는 새 파일을 생성할지 기존 파일을 열지 자동 감지합니다.
 
 ### `db.close()`
 
-Libère les descripteurs de fichiers. Retourne une `Promise<void>`. Requis pour le stockage persistant et texte. No-op (mais toujours asynchrone) pour les bases de données en mémoire.
+파일 핸들을 해제합니다. `Promise<void>`를 반환합니다. 영구 및 텍스트 스토리지에 필수입니다. 메모리 데이터베이스에서는 아무 작업도 하지 않습니다(하지만 여전히 비동기).
 
 ```javascript
 await db.close();
@@ -45,11 +45,11 @@ await db.close();
 
 ### `db.execute(sql, options?)`
 
-Exécute une ou plusieurs instructions SQL séparées par `;`. Retourne une promesse qui se résout en un tableau de résultats.
+`;`로 구분된 하나 이상의 SQL 문을 실행합니다. 결과 배열로 해석되는 프라미스를 반환합니다.
 
-| Option | Type | Par défaut | Description |
-|--------|------|-----------|-------------|
-| `rowMode` | `'object' \| 'array'` | valeur du constructeur | Format de ligne pour cet appel |
+| 옵션 | 타입 | 기본값 | 설명 |
+|--------|------|---------|-------------|
+| `rowMode` | `'object' \| 'array'` | 생성자 기본값 | 이 호출의 행 형식 |
 
 ```javascript
 const [{ rows, fields }] = await db.execute('SELECT * FROM users');
@@ -57,31 +57,31 @@ const [{ rows, fields }] = await db.execute('SELECT * FROM users');
 
 ### `db.prepare(sql)`
 
-Crée un prepared statement avec les placeholders de paramètres `$1`, `$2`, ... Retourne un objet statement avec une méthode `execute(params, options?)`.
+`$1`, `$2`, ... 매개변수 플레이스홀더로 준비된 구문을 생성합니다. `execute(params, options?)` 메서드가 있는 구문 객체를 반환합니다.
 
 ```javascript
 const stmt = db.prepare('SELECT * FROM users WHERE id = $1');
 const [{ rows }] = await stmt.execute([42]);
 
-// Avec options
+// 옵션과 함께
 const [{ rows }] = await stmt.execute([42], { rowMode: 'array' });
 ```
 
 ### `db.registerFunction(name, callback)`
 
-Enregistre une fonction JavaScript native appelable depuis SQL, les déclencheurs et les procédures stockées :
+SQL, 트리거, 저장 프로시저에서 호출 가능한 네이티브 JavaScript 함수를 등록합니다:
 
 ```javascript
 db.registerFunction('my_double', (args) => args[0] * 2);
 
-// Maintenant utilisable en SQL :
+// SQL에서 사용 가능:
 const [{ rows }] = await db.execute('SELECT my_double(21) AS val');
 // rows[0].val === 42
 ```
 
-Le callback reçoit un tableau de valeurs JavaScript (nombres, chaînes, booléens ou `null`) et doit retourner une valeur JavaScript.
+콜백은 JavaScript 값 배열(숫자, 문자열, 부울, 또는 `null`)을 받고 JavaScript 값을 반환해야 합니다.
 
-## Interfaces TypeScript
+## TypeScript 인터페이스
 
 ```typescript
 interface SessionOptions {
@@ -107,9 +107,9 @@ class Session {
 }
 ```
 
-## Types de résultats
+## 결과 타입
 
-Chaque résultat possède un champ `command` pour la discrimination :
+모든 결과에는 구별을 위한 `command` 필드가 있습니다:
 
 ```typescript
 // DDL
@@ -137,7 +137,7 @@ Chaque résultat possède un champ `command` pour la discrimination :
 { command: 'drop procedure', procedure: string }
 { command: 'call' }
 
-// Plan de requête
+// 쿼리 계획
 { command: 'explain', plan: string }
 
 // DML
@@ -147,26 +147,26 @@ Chaque résultat possède un champ `command` pour la discrimination :
 { command: 'delete', rowCount: number }
 { command: 'copy', rowCount: number }
 
-// Transactions
+// 트랜잭션
 { command: 'begin' }
 { command: 'commit' }
 { command: 'rollback' }
 
-// Prepared statements
+// 준비된 구문
 { command: 'prepare', name: string }
 { command: 'deallocate', name: string }
 ```
 
-## Mapping de valeurs
+## 값 매핑
 
-| Type SQL | Type JavaScript |
+| SQL 타입 | JavaScript 타입 |
 |----------|----------------|
 | INT, BIGINT, DOUBLE, NUMERIC | `number` |
 | TEXT, CHAR, VARCHAR | `string` |
 | BOOLEAN | `boolean` |
 | UUID | `string` |
 | TIMESTAMP | `Date` |
-| ENUM | `string` (label) |
-| Tableau JSON | `Array` |
-| Objet JSON | `Object` |
+| ENUM | `string` (라벨) |
+| JSON 배열 | `Array` |
+| JSON 객체 | `Object` |
 | NULL | `null` |

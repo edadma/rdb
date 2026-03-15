@@ -1,6 +1,6 @@
 ---
 title: Premiers pas avec JavaScript / TypeScript
-description: Installez PetraDB et executez vos premieres requetes SQL depuis JavaScript ou TypeScript.
+description: Installez PetraDB et exécutez vos premières requêtes SQL depuis JavaScript ou TypeScript.
 ---
 
 ## Installation
@@ -9,9 +9,9 @@ description: Installez PetraDB et executez vos premieres requetes SQL depuis Jav
 npm install @petradb/engine
 ```
 
-Pas de modules natifs, pas de scripts post-installation -- juste du JavaScript.
+Pas de modules natifs, pas de scripts post-installation — juste du JavaScript.
 
-## Executez votre premiere requete
+## Exécutez votre première requête
 
 ```javascript
 import { Session } from '@petradb/engine';
@@ -38,28 +38,28 @@ console.log(rows);
 // ]
 ```
 
-C'est tout -- une base de donnees SQL complete compatible PostgreSQL, en memoire, sans aucune configuration. Chaque `Session` est une instance de base de donnees isolee.
+C'est tout — une base de données SQL complète compatible PostgreSQL, en mémoire, sans aucune configuration. Chaque `Session` est une instance de base de données isolée.
 
-## Ou elle fonctionne
+## Où elle fonctionne
 
-Le moteur est du JavaScript pur sans dependance native, il fonctionne donc partout ou JavaScript s'execute : Node.js, Deno, Bun et directement dans le navigateur. Vous pouvez [l'essayer maintenant dans le playground](/playground/).
+Le moteur est du JavaScript pur sans dépendance native, il fonctionne donc partout où JavaScript s'exécute : Node.js, Deno, Bun et directement dans le navigateur. Vous pouvez [l'essayer maintenant dans le playground](/playground/).
 
 ## Stockage persistant
 
-Lorsque vous avez besoin que les donnees survivent aux redemarrages, passez une option `storage` au constructeur :
+Lorsque vous avez besoin que les données survivent aux redémarrages, passez une option `storage` au constructeur :
 
 ```javascript
-// Stockage durable resistant aux pannes dans un seul fichier (Node.js)
+// Stockage durable résistant aux pannes dans un seul fichier (Node.js)
 const db = new Session({ storage: 'persistent', path: './mydb' });
 
 // Fichier texte lisible par l'homme (Node.js)
 const db = new Session({ storage: 'text', path: './data.ptxt' });
 ```
 
-Pour les bases de donnees persistantes, PetraDB detecte automatiquement s'il faut creer un nouveau fichier ou ouvrir un fichier existant. Appelez `await db.close()` lorsque vous avez termine pour liberer le descripteur de fichier.
+Pour les bases de données persistantes, PetraDB détecte automatiquement s'il faut créer un nouveau fichier ou ouvrir un fichier existant. Appelez `await db.close()` lorsque vous avez terminé pour libérer le descripteur de fichier.
 
-Pour l'acces multi-processus ou en reseau, executez PetraDB en tant que [serveur](/guides/server/) et connectez-vous avec la bibliotheque [client](/guides/client/).
+Pour l'accès multi-processus ou en réseau, exécutez PetraDB en tant que [serveur](/guides/server/) et connectez-vous avec la bibliothèque [client](/guides/client/).
 
-## Etapes suivantes
+## Étapes suivantes
 
-Le [guide JavaScript / TypeScript](/guides/javascript/) couvre les modes de stockage, les modes de lignes, les prepared statements et l'API complete. Consultez egalement les guides [CLI](/guides/cli/), [Serveur](/guides/server/) et [Client](/guides/client/).
+Le [guide JavaScript / TypeScript](/guides/javascript/) couvre les modes de stockage, les modes de lignes, les prepared statements et l'API complète. Consultez également les guides [CLI](/guides/cli/), [Serveur](/guides/server/) et [Client](/guides/client/).

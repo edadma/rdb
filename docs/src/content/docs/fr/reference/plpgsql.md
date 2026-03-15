@@ -1,13 +1,13 @@
 ---
 title: PL/pgSQL
-description: Langage procedural -- blocs DO, fonctions stockees et procedures stockees.
+description: Langage procédural — blocs DO, fonctions stockées et procédures stockées.
 ---
 
-PetraDB supporte PL/pgSQL, le langage procedural de PostgreSQL, pour ecrire de la logique de flux de controle, des boucles et l'execution SQL conditionnelle.
+PetraDB supporte PL/pgSQL, le langage procédural de PostgreSQL, pour écrire de la logique de flux de contrôle, des boucles et l'exécution SQL conditionnelle.
 
 ## Blocs DO
 
-Blocs anonymes qui s'executent immediatement sans etre stockes :
+Blocs anonymes qui s'exécutent immédiatement sans être stockés :
 
 ```sql
 DO $$
@@ -22,9 +22,9 @@ BEGIN
 END $$;
 ```
 
-## Fonctions stockees
+## Fonctions stockées
 
-Les fonctions retournent une valeur et peuvent etre appelees dans toute expression SQL :
+Les fonctions retournent une valeur et peuvent être appelées dans toute expression SQL :
 
 ```sql
 CREATE FUNCTION factorial(n INT) RETURNS INT AS $$
@@ -44,9 +44,9 @@ SELECT factorial(5);  -- 120
 
 Utilisez `CREATE OR REPLACE FUNCTION` pour remplacer une fonction existante.
 
-### Utilisation des fonctions dans les requetes
+### Utilisation des fonctions dans les requêtes
 
-Les fonctions fonctionnent partout ou les expressions sont autorisees :
+Les fonctions fonctionnent partout où les expressions sont autorisées :
 
 ```sql
 SELECT name, classify(score) AS grade FROM students;
@@ -54,9 +54,9 @@ SELECT * FROM orders WHERE is_valid(status);
 INSERT INTO logs VALUES (format_msg(code, detail));
 ```
 
-## Procedures stockees
+## Procédures stockées
 
-Les procedures effectuent des actions et sont invoquees avec `CALL` :
+Les procédures effectuent des actions et sont invoquées avec `CALL` :
 
 ```sql
 CREATE PROCEDURE seed_users(n INT) AS $$
@@ -71,7 +71,7 @@ END $$ LANGUAGE plpgsql;
 CALL seed_users(100);
 ```
 
-Utilisez `CREATE OR REPLACE PROCEDURE` pour remplacer une procedure existante.
+Utilisez `CREATE OR REPLACE PROCEDURE` pour remplacer une procédure existante.
 
 ## DROP
 
@@ -84,7 +84,7 @@ DROP PROCEDURE IF EXISTS seed_users;
 
 ## Structure de bloc
 
-Tous les blocs PL/pgSQL (blocs DO, corps de fonctions, corps de procedures) partagent la meme structure :
+Tous les blocs PL/pgSQL (blocs DO, corps de fonctions, corps de procédures) partagent la même structure :
 
 ```
 [DECLARE
@@ -100,7 +100,7 @@ END
 
 ## Variables
 
-Declarez les variables avec un type et une valeur par defaut optionnelle :
+Déclarez les variables avec un type et une valeur par défaut optionnelle :
 
 ```sql
 DECLARE
@@ -109,7 +109,7 @@ DECLARE
   total NUMERIC := 100.50;
 ```
 
-Les variables sans valeur par defaut sont initialisees a `NULL`. L'affectation utilise `:=` :
+Les variables sans valeur par défaut sont initialisées à `NULL`. L'affectation utilise `:=` :
 
 ```sql
 x := x + 1;
@@ -117,9 +117,9 @@ name := 'Alice';
 total := (SELECT SUM(amount) FROM orders);
 ```
 
-Les variables peuvent etre utilisees dans toute instruction SQL au sein du bloc -- dans `VALUES`, `WHERE`, `SET`, etc.
+Les variables peuvent être utilisées dans toute instruction SQL au sein du bloc — dans `VALUES`, `WHERE`, `SET`, etc.
 
-## Flux de controle
+## Flux de contrôle
 
 ### IF / ELSIF / ELSE
 
@@ -142,7 +142,7 @@ WHILE balance > 0 LOOP
 END LOOP;
 ```
 
-Limite de securite de 10 000 iterations maximum.
+Limite de sécurité de 10 000 itérations maximum.
 
 ### Boucle FOR avec plage
 
@@ -152,11 +152,11 @@ FOR i IN 1..10 LOOP
 END LOOP;
 ```
 
-La variable de boucle doit etre declaree dans `DECLARE`. Les deux bornes sont inclusives.
+La variable de boucle doit être déclarée dans `DECLARE`. Les deux bornes sont inclusives.
 
-### Boucle FOR avec requete
+### Boucle FOR avec requête
 
-Iterez sur les resultats d'une requete :
+Itérez sur les résultats d'une requête :
 
 ```sql
 FOR name IN SELECT name FROM users ORDER BY id LOOP
@@ -164,7 +164,7 @@ FOR name IN SELECT name FROM users ORDER BY id LOOP
 END LOOP;
 ```
 
-Pour les requetes a colonne unique, la variable recoit la valeur scalaire. Pour les requetes a colonnes multiples, la variable recoit un enregistrement.
+Pour les requêtes à colonne unique, la variable reçoit la valeur scalaire. Pour les requêtes à colonnes multiples, la variable reçoit un enregistrement.
 
 ## RETURN
 
@@ -174,7 +174,7 @@ Sortir d'un bloc ou retourner une valeur depuis une fonction :
 -- Dans une fonction :
 RETURN x * 2;
 
--- Dans un bloc DO ou une procedure (sortie anticipee) :
+-- Dans un bloc DO ou une procédure (sortie anticipée) :
 RETURN;
 ```
 
@@ -187,11 +187,11 @@ RAISE NOTICE 'Processing row %', row_id;
 RAISE EXCEPTION 'Invalid input: %', value;
 ```
 
-Les placeholders `%` sont remplaces par les valeurs des arguments dans l'ordre. `RAISE EXCEPTION` interrompt l'execution.
+Les placeholders `%` sont remplis par les valeurs des arguments dans l'ordre. `RAISE EXCEPTION` interrompt l'exécution.
 
 ## PERFORM
 
-Executer une requete et ignorer le resultat :
+Exécuter une requête et ignorer le résultat :
 
 ```sql
 PERFORM SELECT notify_user(user_id);
@@ -207,27 +207,27 @@ BEGIN
   CREATE TABLE t (id INT);
 EXCEPTION
   WHEN duplicate_object THEN
-    NULL;  -- la table existe deja, ignorer
+    NULL;  -- la table existe déjà, ignorer
 END $$;
 ```
 
 Conditions d'exception :
-- `duplicate_object` -- table/type/contrainte existe deja
-- `unique_violation` -- contrainte d'unicite violee
-- `others` -- capture toute exception
+- `duplicate_object` — table/type/contrainte existe déjà
+- `unique_violation` — contrainte d'unicité violée
+- `others` — capture toute exception
 
 ## Instruction NULL
 
-Une instruction sans effet, couramment utilisee dans les gestionnaires d'exceptions :
+Une instruction sans effet, couramment utilisée dans les gestionnaires d'exceptions :
 
 ```sql
 EXCEPTION
   WHEN others THEN NULL;
 ```
 
-## Declencheurs
+## Déclencheurs
 
-Les declencheurs executent une fonction automatiquement lorsque des lignes sont inserees, mises a jour ou supprimees :
+Les déclencheurs exécutent une fonction automatiquement lorsque des lignes sont insérées, mises à jour ou supprimées :
 
 ```sql
 CREATE FUNCTION audit_changes() RETURNS INT AS $$
@@ -255,28 +255,28 @@ DROP TRIGGER IF EXISTS name ON table;
 
 ### Chronologie
 
-- Les declencheurs **BEFORE** s'executent avant l'operation. Retournez `NULL` pour annuler l'operation sur la ligne. Retournez toute valeur non-NULL pour continuer.
-- Les declencheurs **AFTER** s'executent apres l'operation. La valeur de retour est ignoree.
+- Les déclencheurs **BEFORE** s'exécutent avant l'opération. Retournez `NULL` pour annuler l'opération sur la ligne. Retournez toute valeur non-NULL pour continuer.
+- Les déclencheurs **AFTER** s'exécutent après l'opération. La valeur de retour est ignorée.
 
-### Variables speciales
+### Variables spéciales
 
-Les fonctions declencheur ont acces a :
+Les fonctions déclencheur ont accès à :
 
 | Variable | Description |
 |----------|-------------|
-| `tg_op` | Nom de l'operation : `'INSERT'`, `'UPDATE'` ou `'DELETE'` |
-| `tg_table_name` | Nom de la table qui a declenche le trigger |
-| `OLD` | Ligne avant l'operation (UPDATE, DELETE) |
-| `NEW` | Ligne apres l'operation (INSERT, UPDATE) |
+| `tg_op` | Nom de l'opération : `'INSERT'`, `'UPDATE'` ou `'DELETE'` |
+| `tg_table_name` | Nom de la table qui a déclenché le trigger |
+| `OLD` | Ligne avant l'opération (UPDATE, DELETE) |
+| `NEW` | Ligne après l'opération (INSERT, UPDATE) |
 
-### Evenements
+### Événements
 
-Les declencheurs se declenchent pour :
-- `INSERT` -- y compris les lignes inserees via `COPY FROM`
-- `UPDATE` -- se declenche par ligne mise a jour
-- `DELETE` -- se declenche par ligne supprimee
+Les déclencheurs se déclenchent pour :
+- `INSERT` — y compris les lignes insérées via `COPY FROM`
+- `UPDATE` — se déclenche par ligne mise à jour
+- `DELETE` — se déclenche par ligne supprimée
 
-### Exemple de declencheur de garde
+### Exemple de déclencheur de garde
 
 ```sql
 CREATE FUNCTION prevent_delete() RETURNS INT AS $$
@@ -290,10 +290,10 @@ CREATE TRIGGER trg_protect BEFORE DELETE ON important_data
 
 ### Callbacks de fonctions natives
 
-Les fonctions natives enregistrees (Scala, JavaScript ou C) sont appelables depuis les fonctions declencheur, permettant l'integration avec des systemes externes :
+Les fonctions natives enregistrées (Scala, JavaScript ou C) sont appelables depuis les fonctions déclencheur, permettant l'intégration avec des systèmes externes :
 
 ```sql
--- En supposant que notify_webhook() est enregistree comme fonction native
+-- En supposant que notify_webhook() est enregistrée comme fonction native
 CREATE FUNCTION on_order() RETURNS INT AS $$
 DECLARE dummy INT;
 BEGIN
@@ -309,11 +309,11 @@ Consultez l'[API Scala](/reference/api-scala/), l'[API JavaScript](/reference/ap
 
 ## Persistance
 
-Les fonctions stockees, les procedures et les declencheurs persistent entre les redemarrages de la base de donnees, tant pour le stockage en memoire (duree de la session) que pour le stockage persistant (survit a la fermeture/reouverture). Le SQL source est stocke et re-execute a l'ouverture de la base de donnees.
+Les fonctions stockées, les procédures et les déclencheurs persistent entre les redémarrages de la base de données, tant pour le stockage en mémoire (durée de la session) que pour le stockage persistant (survit à la fermeture/réouverture). Le SQL source est stocké et ré-exécuté à l'ouverture de la base de données.
 
 ## Composition
 
-Les fonctions peuvent appeler d'autres fonctions. Les procedures peuvent appeler des fonctions :
+Les fonctions peuvent appeler d'autres fonctions. Les procédures peuvent appeler des fonctions :
 
 ```sql
 CREATE FUNCTION double(x INT) RETURNS INT AS $$

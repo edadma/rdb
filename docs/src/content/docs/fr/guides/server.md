@@ -1,6 +1,6 @@
 ---
 title: Serveur
-description: Executer PetraDB en tant que serveur HTTP.
+description: Exécuter PetraDB en tant que serveur HTTP.
 ---
 
 ## Installation
@@ -15,24 +15,24 @@ npm install -g @petradb/server
 petradb-server [OPTIONS] [path]
 ```
 
-Si un chemin est donne, le serveur ouvre (ou cree) une base de donnees persistante a cet emplacement. Sans chemin, une base de donnees en memoire est utilisee.
+Si un chemin est donné, le serveur ouvre (ou crée) une base de données persistante à cet emplacement. Sans chemin, une base de données en mémoire est utilisée.
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `-m`, `--memory` | Utiliser une base de donnees en memoire |
-| `-p`, `--port` | Numero de port (par defaut : `5480`) |
-| `-h`, `--host` | Adresse de l'hote (par defaut : `127.0.0.1`) |
+| `-m`, `--memory` | Utiliser une base de données en mémoire |
+| `-p`, `--port` | Numéro de port (par défaut : `5480`) |
+| `-h`, `--host` | Adresse de l'hôte (par défaut : `127.0.0.1`) |
 | `-c`, `--config` | Chemin vers un fichier de configuration TOML |
 
 ### Exemples
 
 ```bash
-# Base de donnees en memoire sur le port par defaut
+# Base de données en mémoire sur le port par défaut
 petradb-server
 
-# Base de donnees persistante sur un port personnalise
+# Base de données persistante sur un port personnalisé
 petradb-server -p 8080 mydata.db
 
 # Avec un fichier de configuration
@@ -41,7 +41,7 @@ petradb-server -c petradb.toml mydata.db
 
 ## Configuration
 
-Un fichier TOML controle l'authentification, le CORS et les limites de sessions.
+Un fichier TOML contrôle l'authentification, le CORS et les limites de sessions.
 
 ```toml
 auth = "basic"
@@ -55,36 +55,36 @@ username = "reader"
 password = "$HASHED_PASSWORD"
 
 [cors]
-origin = "*"          # "*" (par defaut), "none", ou une origine specifique
+origin = "*"          # "*" (par défaut), "none", ou une origine spécifique
 
 [sessions]
-max_sessions = 100    # 0 = illimite (par defaut)
+max_sessions = 100    # 0 = illimité (par défaut)
 ```
 
 ### Modes d'authentification
 
 | Mode | Description |
 |------|-------------|
-| `"none"` | Pas d'authentification (par defaut sans fichier de configuration) |
+| `"none"` | Pas d'authentification (par défaut sans fichier de configuration) |
 | `"basic"` | Authentification HTTP Basic contre la liste `[[users]]` |
 
-Les mots de passe dans le fichier de configuration sont stockes sous forme de hachages PBKDF2.
+Les mots de passe dans le fichier de configuration sont stockés sous forme de hachages PBKDF2.
 
-Lorsque `auth = "basic"`, chaque requete (sauf `GET /health`) doit inclure un en-tete `Authorization: Basic <credentials>`.
+Lorsque `auth = "basic"`, chaque requête (sauf `GET /health`) doit inclure un en-tête `Authorization: Basic <credentials>`.
 
 ### CORS
 
 | Valeur de `origin` | Comportement |
 |---------------------|-------------|
-| `"*"` (par defaut) | Autoriser toutes les origines |
-| `"none"` | Pas d'en-tetes CORS |
+| `"*"` (par défaut) | Autoriser toutes les origines |
+| `"none"` | Pas d'en-têtes CORS |
 | Une URL (ex. `"https://app.example.com"`) | Autoriser uniquement cette origine |
 
 ## API HTTP
 
-Toutes les requetes et reponses SQL utilisent le codec binaire PetraDB (`application/octet-stream`). Utilisez la bibliotheque [`@petradb/client`](/guides/client/) au lieu d'appeler ces endpoints directement.
+Toutes les requêtes et réponses SQL utilisent le codec binaire PetraDB (`application/octet-stream`). Utilisez la bibliothèque [`@petradb/client`](/guides/client/) au lieu d'appeler ces endpoints directement.
 
-### Executer du SQL
+### Exécuter du SQL
 
 ```
 POST /sql
@@ -94,15 +94,15 @@ X-Session-Id: <session-id>   (optionnel)
 <sql text>
 ```
 
-Retourne un `Seq[Result]` encode en binaire. Sans en-tete `X-Session-Id`, chaque requete s'execute dans une session transitoire unique.
+Retourne un `Seq[Result]` encodé en binaire. Sans en-tête `X-Session-Id`, chaque requête s'exécute dans une session transitoire unique.
 
-### Creer une session
+### Créer une session
 
 ```
 POST /session
 ```
 
-Retourne `{ "sessionId": "<id>" }`. Utilisez l'ID retourne dans les en-tetes `X-Session-Id` subsequents pour partager l'etat transactionnel entre les requetes.
+Retourne `{ "sessionId": "<id>" }`. Utilisez l'ID retourné dans les en-têtes `X-Session-Id` subséquents pour partager l'état transactionnel entre les requêtes.
 
 ### Fermer une session
 
@@ -110,21 +110,21 @@ Retourne `{ "sessionId": "<id>" }`. Utilisez l'ID retourne dans les en-tetes `X-
 DELETE /session/<id>
 ```
 
-Retourne `{ "ok": "true" }` en cas de succes, ou `404` si la session n'existe pas.
+Retourne `{ "ok": "true" }` en cas de succès, ou `404` si la session n'existe pas.
 
-### Verification de sante
+### Vérification de santé
 
 ```
 GET /health
 ```
 
-Retourne `{ "status": "ok" }`. Non soumis a l'authentification.
+Retourne `{ "status": "ok" }`. Non soumis à l'authentification.
 
-## Reponses d'erreur
+## Réponses d'erreur
 
 | Statut | Signification |
 |--------|--------------|
-| 400 | Erreur de syntaxe SQL, erreur de type ou reference indefinie |
+| 400 | Erreur de syntaxe SQL, erreur de type ou référence indéfinie |
 | 401 | Identifiants manquants ou invalides |
-| 409 | Violation de schema ou de contrainte |
+| 409 | Violation de schéma ou de contrainte |
 | 503 | Limite de sessions atteinte |
