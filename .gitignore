@@ -49,3 +49,4 @@ python/petradb/*.dylib
 python/dist/
 python/build/
 python/*.egg-info
+python/.venv/
