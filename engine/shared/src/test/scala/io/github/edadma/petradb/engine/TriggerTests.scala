@@ -146,6 +146,89 @@ class TriggerTests extends AnyFreeSpec with Matchers with Testing {
   }
 
   // ══════════════════════════════════════════════════════════════════
+  // AFTER UPDATE TRIGGER
+  // ══════════════════════════════════════════════════════════════════
+
+  "after update trigger" - {
+    "fires after UPDATE" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, val INT);
+          |CREATE TABLE audit (msg TEXT);
+          |INSERT INTO t VALUES (1, 10);
+          |CREATE FUNCTION log_update() RETURNS INT AS $$
+          |BEGIN
+          |  INSERT INTO audit VALUES ('updated');
+          |  RETURN 0;
+          |END $$ LANGUAGE plpgsql;
+          |CREATE TRIGGER trg_upd AFTER UPDATE ON t FOR EACH ROW EXECUTE FUNCTION log_update();
+          |UPDATE t SET val = 20 WHERE id = 1;
+          |SELECT msg FROM audit;
+          |""".stripMargin
+      )
+      table.data.length shouldBe 1
+      table.data(0).data(0) shouldBe TextValue("updated")
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // BEFORE UPDATE TRIGGER — cancel
+  // ══════════════════════════════════════════════════════════════════
+
+  "before update trigger" - {
+    "returning NULL cancels the update" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id INT, val INT);
+          |INSERT INTO t VALUES (1, 10);
+          |CREATE FUNCTION block_update() RETURNS INT AS $$
+          |BEGIN
+          |  RETURN NULL;
+          |END $$ LANGUAGE plpgsql;
+          |CREATE TRIGGER trg_block BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION block_update();
+          |UPDATE t SET val = 999 WHERE id = 1;
+          |SELECT val FROM t WHERE id = 1;
+          |""".stripMargin
+      )
+      table.data(0).data(0) shouldBe NumberValue(10) // unchanged
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // COPY FROM fires INSERT triggers
+  // ══════════════════════════════════════════════════════════════════
+
+  "copy from triggers" - {
+    "INSERT triggers fire during COPY FROM" in {
+      import io.github.edadma.cross_platform.{createTempFile, deleteFile, writeFile as cpWriteFile}
+
+      val csvFile = createTempFile("petradb-trig-copy-", ".csv")
+      cpWriteFile(csvFile, "name\nAlice\nBob\nCarol")
+
+      try {
+        val session = setupSession(
+          """
+            |CREATE TABLE t (name TEXT);
+            |CREATE TABLE audit (msg TEXT);
+            |CREATE FUNCTION log_copy() RETURNS INT AS $$
+            |BEGIN
+            |  INSERT INTO audit VALUES ('copied');
+            |  RETURN 0;
+            |END $$ LANGUAGE plpgsql;
+            |CREATE TRIGGER trg_copy AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION log_copy();
+            |""".stripMargin
+        )
+        given Session = session
+        executeSQL(s"COPY t FROM '$csvFile' WITH (HEADER);")
+        val table = executeSQL("SELECT COUNT(*) AS cnt FROM audit;").collect { case QueryResult(t) => t }.last
+        table.data(0).data(0) shouldBe NumberValue(3)
+      } finally {
+        try deleteFile(csvFile) catch { case _: Exception => }
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
   // MULTIPLE TRIGGERS
   // ══════════════════════════════════════════════════════════════════
 
@@ -219,7 +302,7 @@ class TriggerTests extends AnyFreeSpec with Matchers with Testing {
   // ══════════════════════════════════════════════════════════════════
 
   "tg_op variable" - {
-    "provides operation name" in {
+    "provides operation name for INSERT, UPDATE, DELETE" in {
       val table = query(
         """
           |CREATE TABLE t (val INT);
@@ -230,15 +313,18 @@ class TriggerTests extends AnyFreeSpec with Matchers with Testing {
           |  RETURN 0;
           |END $$ LANGUAGE plpgsql;
           |CREATE TRIGGER trg_ins AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION log_op();
+          |CREATE TRIGGER trg_upd AFTER UPDATE ON t FOR EACH ROW EXECUTE FUNCTION log_op();
           |CREATE TRIGGER trg_del AFTER DELETE ON t FOR EACH ROW EXECUTE FUNCTION log_op();
           |INSERT INTO t VALUES (1);
-          |DELETE FROM t WHERE val = 1;
+          |UPDATE t SET val = 2 WHERE val = 1;
+          |DELETE FROM t WHERE val = 2;
           |SELECT op FROM audit;
           |""".stripMargin
       )
-      table.data.length shouldBe 2
+      table.data.length shouldBe 3
       table.data(0).data(0) shouldBe TextValue("INSERT")
-      table.data(1).data(0) shouldBe TextValue("DELETE")
+      table.data(1).data(0) shouldBe TextValue("UPDATE")
+      table.data(2).data(0) shouldBe TextValue("DELETE")
     }
   }
 

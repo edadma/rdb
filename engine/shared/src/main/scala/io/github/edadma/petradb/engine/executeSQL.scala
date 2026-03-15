@@ -761,6 +761,10 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
 
         val rwReturning = returning.map(_.map(rewrite))
 
+        val qualTableUpd = db.resolveKey(table)
+        val beforeUpdateTriggers = db.getTriggersFor(qualTableUpd, "before", "update")
+        val afterUpdateTriggers = db.getTriggersFor(qualTableUpd, "after", "update")
+
         def applyUpdate(targetRow: Row, evalRow: Row): Unit =
           targetRow.updater match
             case None    => throw ExecutionException(id.pos, "not updatable")
@@ -801,7 +805,27 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
                   newRowData(t.columnMap(col)) = value
                 for fk <- childFKs do
                   db.checkParentExists(table, fk, newRowData.toIndexedSeq, t.columnMap)
+              // Fire BEFORE UPDATE triggers
+              val oldRowMap = t.columns.zip(targetRow.data).map((c, v) => (c.name, v)).toMap
+              val newRowData2 = targetRow.data.toArray
+              for (col, value) <- allUpdates do newRowData2(t.columnMap(col)) = value
+              val newRowMap = t.columns.zip(newRowData2.toIndexedSeq).map((c, v) => (c.name, v)).toMap
+              var proceed = true
+              for trig <- beforeUpdateTriggers if proceed do
+                val sf = db.storedFunctions(trig.functionName)
+                fireTrigger(sf, table, "UPDATE", Some(oldRowMap), Some(newRowMap), t.meta) match
+                  case None => proceed = false
+                  case _    => ()
+
+              if !proceed then return
+
               u(allUpdates)
+
+              // Fire AFTER UPDATE triggers
+              for trig <- afterUpdateTriggers do
+                val sf = db.storedFunctions(trig.functionName)
+                fireTrigger(sf, table, "UPDATE", Some(oldRowMap), Some(newRowMap), t.meta)
+
               // Evaluate RETURNING against the new row state
               rwReturning.foreach { retExprs =>
                 val newRowData = targetRow.data.toArray
@@ -1038,23 +1062,43 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
             for fk <- fks do db.checkParentExists(table, fk, row, t.columnMap)
           }
 
+        val qualTableCopy = db.resolveKey(table)
+        val beforeCopyTriggers = db.getTriggersFor(qualTableCopy, "before", "insert")
+        val afterCopyTriggers = db.getTriggersFor(qualTableCopy, "after", "insert")
+        val hasTriggers = beforeCopyTriggers.nonEmpty || afterCopyTriggers.nonEmpty
+
         var count = 0
         var isFirst = true
         val batch = new mutable.ArrayBuffer[Seq[Value]]
         val content = readFile(file)
+        val colNames = resolvedColumns.map(_.name)
         CSVRead.fromStringStreamed(content, { row =>
           if isFirst && header then isFirst = false
           else
             isFirst = false
             val values: Seq[Value] = row.map(s => if s.isEmpty then NullValue() else TextValue(s))
-            batch += values
-            if batch.size >= 100 then
-              t.bulkInsert(resolvedColumns.map(_.name), batch.toSeq, None, fkCheck)
-              count += batch.size
-              batch.clear()
+            if hasTriggers then
+              val rowMap = colNames.zip(values).toMap
+              var currentRow: Option[Map[String, Value]] = Some(rowMap)
+              for trig <- beforeCopyTriggers if currentRow.isDefined do
+                val sf = db.storedFunctions(trig.functionName)
+                currentRow = fireTrigger(sf, table, "INSERT", None, currentRow, t.meta)
+              if currentRow.isDefined then
+                val filteredValues = colNames.map(c => currentRow.get.getOrElse(c, NullValue()))
+                t.bulkInsert(colNames, Seq(filteredValues), None, fkCheck)
+                for trig <- afterCopyTriggers do
+                  val sf = db.storedFunctions(trig.functionName)
+                  fireTrigger(sf, table, "INSERT", None, currentRow, t.meta)
+                count += 1
+            else
+              batch += values
+              if batch.size >= 100 then
+                t.bulkInsert(colNames, batch.toSeq, None, fkCheck)
+                count += batch.size
+                batch.clear()
         }, delimiter)
         if batch.nonEmpty then
-          t.bulkInsert(resolvedColumns.map(_.name), batch.toSeq, None, fkCheck)
+          t.bulkInsert(colNames, batch.toSeq, None, fkCheck)
           count += batch.size
         CopyResult(count)
 
