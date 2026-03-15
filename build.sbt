@@ -109,6 +109,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .nativeSettings(
     libraryDependencies += "org.scala-js"      %% "scalajs-stubs" % "1.1.0" % "provided",
     libraryDependencies += "io.github.edadma" %%% "libuuid"       % "0.0.1",
+    nativeConfig ~= { _.withBuildTarget(scalanative.build.BuildTarget.libraryDynamic) },
   )
   .jsSettings(
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
