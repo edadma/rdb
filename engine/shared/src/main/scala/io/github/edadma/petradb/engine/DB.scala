@@ -617,7 +617,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   def insert(row: Map[String, Value], returning: Option[Seq[String]]): Map[String, Value] =
     val (keys, values) = row.toSeq.unzip
 
-    bulkInsert(keys, Seq(values), returning)
+    bulkInsert(keys, Seq(values), returning).headOption.getOrElse(Map.empty)
 
   protected def addRow(row: Seq[Value]): Unit
 
@@ -629,7 +629,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
   private lazy val generatedSet: Set[String] =
     columns.filter(_.generated.isDefined).map(_.name).toSet
 
-  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Map[String, Value] =
+  def bulkInsert(header: Seq[String], rows: Seq[Seq[Value]], returning: Option[Seq[String]], fkCheck: Option[IndexedSeq[Value] => Unit] = None): Seq[Map[String, Value]] =
     val headerSet = header.toSet
     val columnSet = columnMap.keySet
 
@@ -658,7 +658,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
     val autos                      = autoSet intersect missingSet map (c => (c, columnMap(c)))
     val mapping                    = header map (h => meta.columnMap(h)._1)
     val specs                      = header map (h => columns(columnMap(h)))
-    var result: Map[String, Value] = Map.empty
+    val resultRows = scala.collection.mutable.ArrayBuffer[Map[String, Value]]()
 
     for (r <- rows)
       val arr = new Array[Value](meta.width)
@@ -680,7 +680,7 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
             arr(i) = v
             c -> v
 
-      result = newAutos.toMap
+      var rowResult: Map[String, Value] = newAutos.toMap
 
       // Compute generated columns using current row values
       if generatedColumns.nonEmpty then
@@ -709,16 +709,17 @@ abstract class Table(var name: String, specs: Seq[Spec]) extends Process:
         if retCols.isEmpty then
           // RETURNING * — include all columns
           for col <- columns do
-            result += (col.name -> arr(columnMap(col.name)))
+            rowResult += (col.name -> arr(columnMap(col.name)))
         else
           for col <- retCols do
             val idx = columnMap.getOrElse(col, sys.error(s"column '$col' not found"))
-            result += (col -> arr(idx))
+            rowResult += (col -> arr(idx))
 
+      resultRows += rowResult
       fkCheck.foreach(_(arr.toIndexedSeq))
       addRow(arr to immutable.ArraySeq)
 
-    result
+    resultRows.toSeq
 
 case class PreparedStatement(name: String, commands: Seq[Command]):
   def execute(params: Value*)(using session: Session): Seq[Result] =

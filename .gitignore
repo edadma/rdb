@@ -36,6 +36,7 @@ node_modules/
 */npm/dist/
 knex/dist/
 lucid/dist/
+quarry/dist/
 
 # C test binary
 engine/native/test-c/test_petradb

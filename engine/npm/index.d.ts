@@ -166,6 +166,7 @@ export interface PreparedStatement {
 export class Session {
     constructor(options?: SessionOptions);
     execute(sql: string, options?: ExecuteOptions): Promise<ExecuteResult[]>;
+    executeAST(ast: any, options?: ExecuteOptions): Promise<ExecuteResult[]>;
     prepare(sql: string): PreparedStatement;
     close(): Promise<void>;
 }

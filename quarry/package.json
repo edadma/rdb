@@ -1,0 +1,36 @@
+{
+  "name": "@petradb/quarry",
+  "version": "1.5.0",
+  "description": "Type-safe query builder for PetraDB — generates AST, not SQL strings",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "node --test test/integration.mjs test/operators.mjs test/schema-tx.mjs test/subqueries.mjs test/upsert.mjs test/aliases.mjs test/joins-aggs.mjs test/insert-select-update-from.mjs test/setops-windows-ctes.mjs",
+    "typecheck": "tsc --noEmit -p test/tsconfig.json"
+  },
+  "peerDependencies": {
+    "@petradb/engine": ">=1.3.4"
+  },
+  "devDependencies": {
+    "@petradb/engine": "file:../engine/npm",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edadma/petradb.git"
+  },
+  "keywords": ["petradb", "query-builder", "type-safe", "SQL", "database", "ast"],
+  "author": "Edward A. Maxedon, Sr.",
+  "license": "ISC",
+  "homepage": "https://petradb.dev"
+}
