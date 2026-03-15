@@ -133,6 +133,9 @@ class TextDB(val path: String) extends MemoryDB:
     for (_, sp) <- storedProcedures.toSeq.sortBy(_._1) do
       sb.append(s"-- ROUTINE: ${sp.source.replace("\n", "\\n")}\n")
 
+    for trig <- triggers do
+      sb.append(s"-- ROUTINE: ${trig.source}\n")
+
     for (eName, typ) <- types.toSeq.sortBy(_._1) do
       typ match
         case e: EnumType =>
