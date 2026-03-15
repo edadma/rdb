@@ -186,7 +186,9 @@ def petradb_column_int(cursorHandle: Int, index: Int): Int = withError(0) {
   _cursors.get(cursorHandle) match
     case Some(cursor) =>
       if cursor.columnIsNull(index) then 0
-      else cursor.columnInt(index)
+      else cursor.columnValue(index) match
+        case BooleanValue(b) => if b then 1 else 0
+        case v               => v.intValue
     case None =>
       _lastError = "invalid cursor handle"
       0
