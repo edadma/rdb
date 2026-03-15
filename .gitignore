@@ -39,3 +39,4 @@ lucid/dist/
 
 # C test binary
 engine/native/test-c/test_petradb
+engine/native/test-rust/target/
