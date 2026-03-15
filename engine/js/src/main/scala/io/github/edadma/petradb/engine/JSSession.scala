@@ -165,6 +165,22 @@ class JSSession(options: js.UndefOr[js.Dynamic] = js.undefined):
         js.Dynamic.literal(command = "create sequence", sequence = name)
       case DropSequenceResult(name) =>
         js.Dynamic.literal(command = "drop sequence", sequence = name)
+      case DoBlockResult =>
+        js.Dynamic.literal(command = "do")
+      case CreateFunctionResult(name) =>
+        js.Dynamic.literal(command = "create function", function = name)
+      case DropFunctionResult(name) =>
+        js.Dynamic.literal(command = "drop function", function = name)
+      case CreateProcedureResult(name) =>
+        js.Dynamic.literal(command = "create procedure", procedure = name)
+      case DropProcedureResult(name) =>
+        js.Dynamic.literal(command = "drop procedure", procedure = name)
+      case CreateTriggerResult(name) =>
+        js.Dynamic.literal(command = "create trigger", trigger = name)
+      case DropTriggerResult(name) =>
+        js.Dynamic.literal(command = "drop trigger", trigger = name)
+      case CallResult =>
+        js.Dynamic.literal(command = "call")
 
   @JSExport
   def executeAST(ast: js.Dynamic, options: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Array[js.Any]] =

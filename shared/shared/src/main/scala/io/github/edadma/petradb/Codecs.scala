@@ -220,6 +220,15 @@ object Codecs:
     case BeginResult              => ujson.Obj("cmd" -> ujson.Str("begin"))
     case CommitResult             => ujson.Obj("cmd" -> ujson.Str("commit"))
     case RollbackResult           => ujson.Obj("cmd" -> ujson.Str("rollback"))
+    case DoBlockResult            => ujson.Obj("cmd" -> ujson.Str("do"))
+    case CreateFunctionResult(n)  => ujson.Obj("cmd" -> ujson.Str("create function"), "function" -> ujson.Str(n))
+    case DropFunctionResult(n)    => ujson.Obj("cmd" -> ujson.Str("drop function"), "function" -> ujson.Str(n))
+    case CreateProcedureResult(n) => ujson.Obj("cmd" -> ujson.Str("create procedure"), "procedure" -> ujson.Str(n))
+    case DropProcedureResult(n)   => ujson.Obj("cmd" -> ujson.Str("drop procedure"), "procedure" -> ujson.Str(n))
+    case CreateTriggerResult(n)   => ujson.Obj("cmd" -> ujson.Str("create trigger"), "trigger" -> ujson.Str(n))
+    case DropTriggerResult(n)     => ujson.Obj("cmd" -> ujson.Str("drop trigger"), "trigger" -> ujson.Str(n))
+    case CallResult               => ujson.Obj("cmd" -> ujson.Str("call"))
+    case CreateSchemaResult(n)    => ujson.Obj("cmd" -> ujson.Str("create schema"), "schema" -> ujson.Str(n))
 
   private def decodeResult(j: ujson.Value): Result =
     val obj = j.obj
@@ -248,7 +257,16 @@ object Codecs:
       case "begin"         => BeginResult
       case "commit"        => CommitResult
       case "rollback"      => RollbackResult
-      case cmd             => sys.error(s"Unknown result command: $cmd")
+      case "do"              => DoBlockResult
+      case "create function" => CreateFunctionResult(obj("function").str)
+      case "drop function"   => DropFunctionResult(obj("function").str)
+      case "create procedure" => CreateProcedureResult(obj("procedure").str)
+      case "drop procedure"  => DropProcedureResult(obj("procedure").str)
+      case "create trigger"  => CreateTriggerResult(obj("trigger").str)
+      case "drop trigger"    => DropTriggerResult(obj("trigger").str)
+      case "call"            => CallResult
+      case "create schema"   => CreateSchemaResult(obj("schema").str)
+      case cmd               => sys.error(s"Unknown result command: $cmd")
 
   // ── Public ReadWriter instances ──────────────────────────────────────
 
