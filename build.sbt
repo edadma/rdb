@@ -45,12 +45,12 @@ lazy val commonScalacOptions = Seq(
   "-language:dynamics",
 )
 
-// ── shared: result/value/type types + uPack codecs ──────────────────
+// ── common: result/value/type types + uPack codecs ──────────────────
 
-lazy val shared = crossProject(JSPlatform, JVMPlatform, NativePlatform)
-  .in(file("shared"))
+lazy val common = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("common"))
   .settings(
-    name    := "petradb-shared",
+    name    := "petradb-common",
     version := "1.4.2",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
@@ -80,7 +80,7 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("engine"))
-  .dependsOn(shared)
+  .dependsOn(common)
   .settings(
     name    := "petradb-engine",
     version := "1.4.9",
@@ -125,7 +125,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 
 lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("client"))
-  .dependsOn(shared)
+  .dependsOn(common)
   .settings(
     name    := "petradb-client",
     version := "1.4.2",
@@ -180,7 +180,7 @@ lazy val cli = crossProject(JSPlatform, NativePlatform)
 
 lazy val server = crossProject(JVMPlatform, JSPlatform)
   .in(file("server"))
-  .dependsOn(engine, shared)
+  .dependsOn(engine, common)
   .settings(
     name    := "petradb-server",
     version := "1.4.2",
@@ -265,7 +265,7 @@ lazy val integration = crossProject(JVMPlatform, JSPlatform)
 lazy val root = project
   .in(file("."))
   .aggregate(
-    shared.js, shared.jvm, shared.native,
+    common.js, common.jvm, common.native,
     engine.js, engine.jvm, engine.native,
     client.js, client.jvm, client.native,
     cli.js, cli.native,
