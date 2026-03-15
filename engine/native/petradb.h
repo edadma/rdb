@@ -95,6 +95,13 @@ double petradb_column_double(int cursor, int index);
 /** Column value as text. Do NOT free. Returns NULL for SQL NULL. */
 const char *petradb_column_text(int cursor, int index);
 
+/** Column value as blob. Do NOT free. Returns NULL for SQL NULL.
+  * Use petradb_column_bytes() for the length. */
+const void *petradb_column_blob(int cursor, int index);
+
+/** Byte length of column value as text/blob. Returns 0 for NULL. */
+int petradb_column_bytes(int cursor, int index);
+
 /** Returns 1 if column is NULL, 0 if not, -1 on error. */
 int petradb_column_is_null(int cursor, int index);
 

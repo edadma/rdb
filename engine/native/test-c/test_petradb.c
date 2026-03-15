@@ -137,6 +137,7 @@ void test_null_handling(void) {
     ASSERT_EQ_INT(petradb_column_type(cur, 0), PETRADB_NULL, "type is NULL");
     ASSERT_EQ_INT(petradb_column_int(cur, 0), 0, "int value of NULL is 0");
     ASSERT(petradb_column_text(cur, 0) == NULL, "text value of NULL is NULL pointer");
+    ASSERT_EQ_INT(petradb_column_bytes(cur, 0), 0, "bytes of NULL is 0");
 
     petradb_finalize(cur);
     petradb_close(db);
@@ -158,6 +159,7 @@ void test_column_types(void) {
 
     ASSERT_EQ_INT(petradb_column_type(cur, 2), PETRADB_TEXT, "text column type");
     ASSERT_EQ_STR(petradb_column_text(cur, 2), "hello", "text value");
+    ASSERT_EQ_INT(petradb_column_bytes(cur, 2), 5, "bytes of 'hello' is 5");
 
     ASSERT_EQ_INT(petradb_column_type(cur, 3), PETRADB_INTEGER, "boolean maps to integer type");
     ASSERT_EQ_INT(petradb_column_int(cur, 3), 1, "true is 1");
@@ -261,6 +263,40 @@ void test_update_delete(void) {
     petradb_close(db);
 }
 
+void test_blob(void) {
+    printf("test_blob\n");
+    int db = petradb_open();
+    int conn = petradb_connect(db);
+
+    petradb_exec(conn, "CREATE TABLE t (id INT, data BYTEA);");
+    petradb_exec(conn, "INSERT INTO t VALUES (1, ARRAY[72, 101, 108, 108, 111]);");
+
+    int cur = petradb_prepare(conn, "SELECT data FROM t");
+    petradb_step(cur);
+
+    int len = petradb_column_bytes(cur, 0);
+    ASSERT_EQ_INT(len, 5, "blob length is 5");
+
+    ASSERT_EQ_INT(petradb_column_type(cur, 0), PETRADB_BLOB, "blob column type");
+
+    const unsigned char *blob = (const unsigned char *)petradb_column_blob(cur, 0);
+    ASSERT(blob != NULL, "blob pointer is not NULL");
+    ASSERT_EQ_INT(blob[0], 72, "blob byte 0 is 'H'");
+    ASSERT_EQ_INT(blob[1], 101, "blob byte 1 is 'e'");
+    ASSERT_EQ_INT(blob[4], 111, "blob byte 4 is 'o'");
+
+    /* NULL blob */
+    petradb_exec(conn, "INSERT INTO t VALUES (2, NULL);");
+    int cur2 = petradb_prepare(conn, "SELECT data FROM t WHERE id = 2");
+    petradb_step(cur2);
+    ASSERT(petradb_column_blob(cur2, 0) == NULL, "NULL blob returns NULL pointer");
+    ASSERT_EQ_INT(petradb_column_bytes(cur2, 0), 0, "NULL blob bytes is 0");
+
+    petradb_finalize(cur);
+    petradb_finalize(cur2);
+    petradb_close(db);
+}
+
 int main(void) {
     printf("PetraDB C API Tests\n");
     printf("====================\n\n");
@@ -275,6 +311,7 @@ int main(void) {
     test_error_reporting();
     test_multiple_cursors();
     test_update_delete();
+    test_blob();
 
     printf("\n====================\n");
     printf("%d/%d tests passed\n", tests_passed, tests_run);

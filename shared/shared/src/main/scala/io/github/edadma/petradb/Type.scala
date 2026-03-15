@@ -278,6 +278,8 @@ case object ByteaType extends Type("bytea"):
     v match
       case _ if v.isNull => v
       case b: ByteaValue => b
+      case ArrayValue(data) =>
+        ByteaValue(data.map(_.intValue.toByte).toArray)
       case _ =>
         val s = v.toText.s
         if s.startsWith("\\x") || s.startsWith("\\X") then

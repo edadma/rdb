@@ -175,6 +175,8 @@ def petradb_column_type(cursorHandle: Int, index: Int): Int = withError(0) {
         case _: NumberValue  => 1
         case _: TextValue    => 3
         case _: BooleanValue => 1
+        case _: ByteaValue   => 4
+        case _: ArrayValue   => 3
         case _               => 3
     case None =>
       _lastError = "invalid cursor handle"
@@ -225,6 +227,42 @@ def petradb_column_text(cursorHandle: Int, index: Int): CString = withError(null
     case None =>
       _lastError = "invalid cursor handle"
       null
+}
+
+@exported("petradb_column_blob")
+def petradb_column_blob(cursorHandle: Int, index: Int): Ptr[Byte] = withError(null) {
+  _cursors.get(cursorHandle) match
+    case Some(cursor) =>
+      if cursor.columnIsNull(index) then null
+      else cursor.columnValue(index) match
+        case ByteaValue(data) =>
+          _lastReturnedString = data
+          data.at(0)
+        case ArrayValue(data) =>
+          val bytes = data.map(_.intValue.toByte).toArray
+          _lastReturnedString = bytes
+          bytes.at(0)
+        case v =>
+          val bytes = v.string.getBytes("UTF-8")
+          _lastReturnedString = bytes
+          bytes.at(0)
+    case None =>
+      _lastError = "invalid cursor handle"
+      null
+}
+
+@exported("petradb_column_bytes")
+def petradb_column_bytes(cursorHandle: Int, index: Int): Int = withError(0) {
+  _cursors.get(cursorHandle) match
+    case Some(cursor) =>
+      if cursor.columnIsNull(index) then 0
+      else cursor.columnValue(index) match
+        case ByteaValue(data) => data.length
+        case ArrayValue(data) => data.length
+        case v                => v.string.getBytes("UTF-8").length
+    case None =>
+      _lastError = "invalid cursor handle"
+      0
 }
 
 @exported("petradb_column_is_null")
