@@ -8,7 +8,7 @@ Quarry es un constructor de consultas con seguridad de tipos para PetraDB que ge
 ## Instalacion
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## Configuracion

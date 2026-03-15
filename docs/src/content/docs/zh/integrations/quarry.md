@@ -8,7 +8,7 @@ Quarry 是 PetraDB 的类型安全查询构建器，它生成 AST 对象而非 S
 ## 安装
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## 设置

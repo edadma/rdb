@@ -5,7 +5,7 @@ Type-safe query builder for PetraDB that generates AST objects instead of SQL st
 ## Install
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## Quick Start

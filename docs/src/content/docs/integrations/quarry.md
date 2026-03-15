@@ -8,7 +8,7 @@ Quarry is a type-safe query builder for PetraDB that generates AST objects inste
 ## Install
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## Setup

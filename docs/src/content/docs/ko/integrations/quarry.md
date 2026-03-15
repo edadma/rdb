@@ -8,7 +8,7 @@ Quarry는 SQL 문자열 대신 AST 객체를 생성하는 PetraDB용 타입 안�
 ## 설치
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## 설정

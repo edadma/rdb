@@ -8,7 +8,7 @@ Quarryは、SQL文字列の代わりにASTオブジェクトを生成するPetra
 ## インストール
 
 ```bash
-npm install @petradb/quarry @petradb/engine
+npm install @petradb/quarry
 ```
 
 ## セットアップ
