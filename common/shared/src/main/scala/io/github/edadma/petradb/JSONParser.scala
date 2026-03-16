@@ -77,7 +77,7 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
 
   lazy val pos: P[Position] = positioned(success(new Positional {})) ^^ (_.pos)
 
-  lazy val json: P[Value] = arrayValue | objectValue
+  lazy val json: P[Value] = value
 
   lazy val value: P[Value] = arrayValue | objectValue | numberValue | stringValue | nullValue | booleanValue
 
