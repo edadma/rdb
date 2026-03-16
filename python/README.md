@@ -10,7 +10,7 @@ Wraps the PetraDB native shared library via ctypes. No compilation needed — ju
 pip install petradb
 ```
 
-Requires `libpetradb-engine.so` (Linux) or `.dylib` (macOS). Download from [GitHub Releases](https://github.com/edadma/petradb/releases) and place in `/usr/local/lib`, or set `PETRADB_LIB_PATH`.
+The native library is bundled in the wheel. Currently supports **Linux x86_64** only. macOS and ARM support coming soon.
 
 ## Quick Start
 
