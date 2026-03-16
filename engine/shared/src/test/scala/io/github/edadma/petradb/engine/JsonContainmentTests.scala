@@ -55,6 +55,17 @@ class JsonContainmentTests extends AnyFreeSpec with Matchers with Testing {
       table.data should have length 1
       table.data(0).data(0).string shouldBe "object"
     }
+
+    "exact match is contained" in {
+      val table = query(s"""$setup SELECT label FROM jsonb_ops WHERE '{"role": "admin", "prefs": {"theme": "dark"}}' <@ data""")
+      table.data should have length 1
+      table.data(0).data(0).string shouldBe "object"
+    }
+
+    "non-matching value is not contained" in {
+      val table = query(s"""$setup SELECT label FROM jsonb_ops WHERE '{"role":"user"}' <@ data""")
+      table.data shouldBe empty
+    }
   }
 
   "@> with inline JSON (no table)" - {
