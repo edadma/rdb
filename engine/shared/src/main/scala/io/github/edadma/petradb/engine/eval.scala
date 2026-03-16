@@ -154,7 +154,12 @@ def eval(expr: Expr, ctx: Seq[Row]): Value =
       val l = eval(left, ctx)
       val path = eval(right, ctx) match
         case ArrayValue(elems) => elems.map(_.string)
-        case other             => throw TypeException(right.pos, s"path operator requires array, got ${other.vtyp.name}")
+        case TextValue(s) if s.startsWith("{") && s.endsWith("}") =>
+          // Parse PostgreSQL array literal syntax: '{a,b,c}'
+          val inner = s.substring(1, s.length - 1).trim
+          if inner.isEmpty then IndexedSeq.empty
+          else inner.split(",").map(_.trim).toIndexedSeq
+        case other => throw TypeException(right.pos, s"path operator requires array, got ${other.vtyp.name}")
 
       @tailrec
       def navigate(v: Value, keys: Seq[String]): Value =
