@@ -284,9 +284,15 @@ case class ObjectValue(properties: Seq[(String, Value)]) extends Value(ObjectTyp
   def string: String = properties.map({ case (k, v) => s"\"$k\": ${v.render}" }).mkString("{", ", ", "}")
 
 def jsonContains(left: Value, right: Value): Boolean =
+  jsonContainsInner(
+    left match { case TextValue(s) => JSONParser.parseJSON(s); case v => v },
+    right match { case TextValue(s) => JSONParser.parseJSON(s); case v => v },
+  )
+
+private def jsonContainsInner(left: Value, right: Value): Boolean =
   (left, right) match
     case (ObjectValue(lp), ObjectValue(rp)) =>
-      rp.forall { case (k, rv) => lp.exists { case (lk, lv) => lk == k && jsonContains(lv, rv) } }
+      rp.forall { case (k, rv) => lp.exists { case (lk, lv) => lk == k && jsonContainsInner(lv, rv) } }
     case (ArrayValue(ld), ArrayValue(rd)) =>
-      rd.forall(rv => ld.exists(lv => jsonContains(lv, rv)))
+      rd.forall(rv => ld.exists(lv => jsonContainsInner(lv, rv)))
     case (l, r) => l == r
