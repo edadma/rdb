@@ -24,7 +24,22 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
       override def toString: String = chars
     }
 
-    override def token: Parser[Token] = decimalToken | super.token
+    // Override string handling to support JSON backslash escapes (\" \\ \/ \b \f \n \r \t \uXXXX)
+    private def jsonStringChar: Parser[Char] =
+      ('\\' ~ 'n' ^^^ '\n'
+        | '\\' ~ 'r' ^^^ '\r'
+        | '\\' ~ 't' ^^^ '\t'
+        | '\\' ~ 'b' ^^^ '\b'
+        | '\\' ~ 'f' ^^^ '\f'
+        | '\\' ~ '\\' ^^^ '\\'
+        | '\\' ~ '/' ^^^ '/'
+        | '\\' ~ '"' ^^^ '"'
+        | chrExcept('"', '\n', scala.util.parsing.input.CharSequenceReader.EofCh))
+
+    private def jsonString: Parser[Token] =
+      '"' ~> rep(jsonStringChar) <~ '"' ^^ (chars => StringLit(chars.mkString))
+
+    override def token: Parser[Token] = jsonString | decimalToken | super.token
 
     private def decimalToken: Parser[Token] =
       digits ~ '.' ~ digits ~ optExponent ^^ { case intPart ~ _ ~ fracPart ~ exp =>
