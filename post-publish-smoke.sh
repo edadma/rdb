@@ -378,7 +378,77 @@ OUT=$(cd "$QUARRY_DIR" && run_node smoke.mjs)
 check_output "Schema, insert, select, where, aggregate, update, delete" "OK" "$OUT"
 
 
-# ── 6. Scala: Embedded engine (renumbered from 5) ───────────────────────────────────────────────────
+# ── 6. Python: pip install petradb ────────────────────────────────────────────
+
+PYTHON_NPM_VERSION=$(node -p "require('./python/pyproject.toml', 'utf8')" 2>/dev/null || true)
+# Parse version from pyproject.toml
+PYTHON_PKG_VERSION=$(grep '^version' python/pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+header "Python: petradb@${PYTHON_PKG_VERSION}"
+
+PYTHON_DIR="$WORK/python"
+mkdir -p "$PYTHON_DIR"
+
+info "Creating venv and installing petradb@${PYTHON_PKG_VERSION} from PyPI..."
+python3 -m venv "$PYTHON_DIR/venv"
+"$PYTHON_DIR/venv/bin/pip" install --quiet "petradb==${PYTHON_PKG_VERSION}" 2>&1 || { fail "pip install petradb"; }
+
+cat > "$PYTHON_DIR/smoke.py" <<'PYTHON'
+import os
+from petradb import Database
+
+DB_PATH = "mydata.db"
+
+# Clean up from any previous run
+if os.path.exists(DB_PATH):
+    os.unlink(DB_PATH)
+
+# Create and populate
+db = Database(DB_PATH)
+db.execute("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, age INT)")
+db.execute("INSERT INTO users (name, age) VALUES ('Alice', 30)")
+db.execute("INSERT INTO users (name, age) VALUES ('Bob', 25)")
+db.execute("INSERT INTO users (name, age) VALUES ('Carol', 35)")
+
+rows = db.query("SELECT name, age FROM users ORDER BY name")
+assert len(rows) == 3, f"Expected 3 rows, got {len(rows)}"
+assert rows[0].name == 'Alice', f"Expected Alice, got {rows[0].name}"
+assert rows[0].age == 30, f"Expected 30, got {rows[0].age}"
+
+# Aggregate
+row = db.query_one("SELECT COUNT(*) AS cnt, SUM(age) AS total FROM users")
+assert row.cnt == 3, f"Expected count 3, got {row.cnt}"
+assert row.total == 90, f"Expected sum 90, got {row.total}"
+
+# Update
+rc = db.execute("UPDATE users SET age = 31 WHERE name = 'Alice'")
+assert rc == 1, f"Expected 1 updated, got {rc}"
+
+# Delete
+rc = db.execute("DELETE FROM users WHERE name = 'Bob'")
+assert rc == 1, f"Expected 1 deleted, got {rc}"
+
+db.close()
+
+# Reopen persistent database and verify data survived
+db2 = Database(DB_PATH)
+rows = db2.query("SELECT name, age FROM users ORDER BY name")
+assert len(rows) == 2, f"Expected 2 rows after reopen, got {len(rows)}"
+assert rows[0].name == 'Alice', f"Expected Alice, got {rows[0].name}"
+assert rows[0].age == 31, f"Expected age 31, got {rows[0].age}"
+assert rows[1].name == 'Carol', f"Expected Carol, got {rows[1].name}"
+db2.close()
+
+# Clean up
+os.unlink(DB_PATH)
+print("OK")
+PYTHON
+
+OUT=$(cd "$PYTHON_DIR" && "$PYTHON_DIR/venv/bin/python3" smoke.py 2>&1 || true)
+check_output "In-memory + persistent (mydata.db) + reopen" "OK" "$OUT"
+
+
+# ── 7. Scala: Embedded engine ───────────────────────────────────────────────────
 
 header "Scala: Embedded engine (petradb-engine:${ENGINE_SCALA_VERSION})"
 
