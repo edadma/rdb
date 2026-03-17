@@ -452,6 +452,47 @@ describe("@petradb/drizzle", () => {
       assert.equal(typeof count, "number");
       assert.ok(count > 0);
     });
+
+    it("counts with a filter matching zero rows", async () => {
+      const count = await db.$count(users, gt(users.age, 9999));
+      assert.equal(count, 0);
+    });
+  });
+
+  describe("empty table select", () => {
+    before(async () => {
+      await session.execute(`
+        CREATE TABLE empty_table (
+          id SERIAL PRIMARY KEY,
+          value TEXT
+        )
+      `);
+    });
+
+    const emptyTable = pgTable("empty_table", {
+      id: serial("id").primaryKey(),
+      value: text("value"),
+    });
+
+    it("returns empty array from table with no rows", async () => {
+      const rows = await db.select().from(emptyTable);
+      assert.ok(Array.isArray(rows));
+      assert.equal(rows.length, 0);
+    });
+  });
+
+  describe("multiple orderBy columns", () => {
+    it("orders by two columns", async () => {
+      const rows = await db
+        .select()
+        .from(products)
+        .orderBy(asc(products.quantity), asc(products.name));
+
+      // quantity: Cherry=5, Apple=10, Banana=20
+      assert.equal(rows[0].name, "Cherry");
+      assert.equal(rows[1].name, "Apple");
+      assert.equal(rows[2].name, "Banana");
+    });
   });
 
   describe("numeric type mapping", () => {

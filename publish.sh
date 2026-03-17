@@ -53,8 +53,10 @@ case "$1" in
 esac
 
 if [ "$TS_ONLY" = "true" ]; then
-  echo "==> Building TypeScript..."
+  echo "==> Installing dependencies..."
   cd "$PKG_DIR"
+  npm install
+  echo "==> Building TypeScript..."
   npx -p typescript tsc
 else
   LINK_TASK="${LINK_TASK:-fullLinkJS}"
