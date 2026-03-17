@@ -55,7 +55,7 @@ esac
 if [ "$TS_ONLY" = "true" ]; then
   echo "==> Building TypeScript..."
   cd "$PKG_DIR"
-  npx tsc
+  npx -p typescript tsc
 else
   LINK_TASK="${LINK_TASK:-fullLinkJS}"
   echo "==> Building ${MODULE}/${LINK_TASK}..."
