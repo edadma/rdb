@@ -160,7 +160,7 @@ lazy val cli = crossProject(JSPlatform, NativePlatform)
   .dependsOn(engine, client)
   .settings(
     name    := "petradb-cli",
-    version := "1.5.0",
+    version := "1.5.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies += "com.lihaoyi" %%% "mainargs" % "0.7.8",
     publish / skip      := true,
@@ -183,7 +183,7 @@ lazy val server = crossProject(JVMPlatform, JSPlatform)
   .dependsOn(engine, common)
   .settings(
     name    := "petradb-server",
-    version := "1.5.0",
+    version := "1.5.1",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "com.indoorvivants" %%% "toml"       % "0.3.0",
