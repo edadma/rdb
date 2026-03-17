@@ -1,6 +1,6 @@
 {
   "name": "@petradb/engine",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Lightweight embeddable SQL database engine for JavaScript and TypeScript",
   "type": "module",
   "exports": {
