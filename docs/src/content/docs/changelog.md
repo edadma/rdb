@@ -2,6 +2,52 @@
 title: Changelog
 ---
 
+## v1.5-20260317
+
+### Bug Fixes
+
+- **JSON parser escape sequences** — fixed backslash escape handling (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) in JSON string values
+- **JSON top-level values** — the JSON parser now accepts all JSON value types (strings, numbers, booleans, null) at the top level, not just objects and arrays
+- **JSON path operators** — `#>` and `#>>` now correctly handle text array literals as path arguments
+- **JSON containment operators** — `@>` and `<@` now work correctly with text JSON literals (not just parsed JSON objects)
+- **Persistent DB auto-create** — `petradb_open_persistent` (C API) now auto-creates new databases instead of failing
+
+### Python Package
+
+- New `petradb` Python package with bundled native library (Linux x86_64)
+- SQLite-style API: `Database`, `Cursor`, context managers, parameterized queries
+- Persistent and in-memory modes
+- Published to PyPI
+
+### FFI Tests
+
+- Go FFI test suite for the C library
+- Python FFI test suite for the C library
+
+### Tooling
+
+- Quarry smoke test added to post-publish verification
+- Internationalization: 5 languages + Korean translations for docs site
+- `publish.sh` fix: uses `npx -p typescript tsc` to avoid wrong `tsc` package
+
+### Version Bumps
+
+All components bumped to 1.5.1 (Python to 1.5.2):
+
+| Component | Maven Central | npm | PyPI |
+|-----------|---------------|-----|------|
+| common | 1.5.1 | — | — |
+| engine | 1.5.1 | @petradb/engine 1.5.1 | — |
+| client | 1.5.1 | @petradb/client 1.5.1 | — |
+| server | — | @petradb/server 1.5.1 | — |
+| cli | — | @petradb/cli 1.5.1 | — |
+| jdbc | 1.5.1 | — | — |
+| drizzle | — | @petradb/drizzle 1.5.1 | — |
+| knex | — | @petradb/knex 1.5.1 | — |
+| lucid | — | @petradb/lucid 1.5.1 | — |
+| quarry | — | @petradb/quarry 1.5.1 | — |
+| python | — | — | petradb 1.5.2 |
+
 ## v1.5-20260315
 
 ### PL/pgSQL — Stored Procedures, Functions, and Triggers
