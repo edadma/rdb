@@ -18,7 +18,6 @@ import {
   TableName,
   Columns,
   OriginalName,
-  ToCreateAST,
 } from '../dist/index.js'
 
 // ── Schema ──
@@ -99,11 +98,6 @@ describe('table aliases', () => {
       assert.equal(e.name.kind, 'column')
       assert.equal(e.name.table, 'e')
       assert.equal(e.name.name, 'name')
-    })
-
-    it('throws on ToCreateAST for aliased table', () => {
-      const e = tableAs(employees, 'e')
-      assert.throws(() => e[ToCreateAST](), /Cannot create table from an alias/)
     })
 
     it('re-aliasing works correctly', () => {

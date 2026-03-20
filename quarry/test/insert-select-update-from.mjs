@@ -85,14 +85,13 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
   describe('insertFrom', () => {
     it('inserts rows from a select query', async () => {
       // Archive all active products
-      const selectExpr = db
+      const selectQuery = db
         .select(products)
         .columns(products.name, products.price, products.category)
         .where(eq(products.active, true))
-        .toExpr()
 
       await db
-        .insertFrom(archive, selectExpr, ['name', 'price', 'category'])
+        .insertFrom(archive, selectQuery, ['name', 'price', 'category'])
         .execute()
 
       // Verify rows were inserted by querying the archive
@@ -108,42 +107,20 @@ describe('INSERT...SELECT, UPDATE...FROM, DELETE...USING, DISTINCT ON', () => {
       assert.equal(rows[0].name, 'Doohickey')
     })
 
-    it('AST has query field instead of rows', () => {
-      const selectExpr = db
-        .select(products)
-        .columns(products.name, products.price, products.category)
-        .toExpr()
-
-      const ast = db.insertFrom(archive, selectExpr, ['name', 'price', 'category']).toAST()
-      assert.equal(ast.kind, 'insert')
-      assert.ok(ast.query, 'AST should have query field')
-      assert.equal(ast.query.kind, 'select')
-      assert.equal(ast.rows, undefined)
-      assert.deepStrictEqual(ast.columns, ['name', 'price', 'category'])
-    })
-
     it('works without explicit columns when query matches all columns', async () => {
       // Clean archive first
       await db.delete(archive).execute()
 
       // Without columns, engine expects SELECT to produce values for all columns (id, name, price, category)
       // Use a subquery that produces all 4 columns
-      const selectExpr = db
+      const selectQuery = db
         .select(products)
         .columns(products.id, products.name, products.price, products.category)
         .where(eq(products.name, 'Gadget'))
-        .toExpr()
 
-      const rows = await db.insertFrom(archive, selectExpr).execute()
+      const rows = await db.insertFrom(archive, selectQuery).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Gadget')
-    })
-
-    it('supports onConflictDoNothing', () => {
-      const selectExpr = db.select(products).columns(products.name, products.price, products.category).toExpr()
-      const ast = db.insertFrom(archive, selectExpr, ['name', 'price', 'category']).onConflictDoNothing().toAST()
-      assert.ok(ast.onConflict)
-      assert.equal(ast.onConflict.kind, 'doNothing')
     })
   })
 

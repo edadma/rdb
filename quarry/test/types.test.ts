@@ -484,9 +484,7 @@ const _case3: ASTExpr = caseWhen([{ when: gt(users.age, 30), then: literal('old'
 const _cast1: ASTCast = cast(users.age, 'text')
 const _cast2: ASTExpr = cast(users.age, 'double')
 
-// exists returns ASTExists
-const _exists1: ASTExists = exists({ kind: 'select', exprs: [{ kind: 'star' }], from: [{ kind: 'table', name: 'users' }] })
-const _exists2: ASTExpr = exists({ kind: 'select', exprs: [{ kind: 'star' }], from: [{ kind: 'table', name: 'users' }] })
+// exists type checks are below (after db is declared) since exists() now takes QueryBuilder
 
 // All usable as where conditions
 const _whereCase: ASTExpr = eq(_case3, 'old')
@@ -498,6 +496,11 @@ const _whereCast: ASTExpr = gt(_cast2, 30)
 
 declare const mockSession: QuarrySession
 const db = quarry(mockSession)
+
+// -- exists returns ASTExists — accepts a QueryBuilder (e.g. SelectBuilder) --
+
+const _exists1: ASTExists = exists(db.select(users))
+const _exists2: ASTExpr = exists(db.select(users))
 
 // -- Select returns array of InferSelect --
 
@@ -693,42 +696,25 @@ const _mockSatisfies: QuarrySession = {
 import type { ASTSubquery, ASTInQuery, ASTSelect } from '@petradb/quarry'
 import { subquery, inSubquery, notInSubquery } from '@petradb/quarry'
 
-// -- SelectBuilder.toExpr() returns ASTExpr (specifically ASTSelect) --
+// -- subquery() accepts QueryBuilder and returns ASTSubquery --
 
-const selectExpr = db.select(users).columns(users.id).toExpr()
-const _seKind: typeof selectExpr.kind = 'select'
-const _seAssign: ASTExpr = selectExpr
+const selectBuilder = db.select(users).columns(users.id)
 
-// toExpr preserves clauses
-const selectExprFull = db
-  .select(users)
-  .columns(users.id)
-  .where(gt(users.age, 20))
-  .limit(10)
-  .toExpr()
-const _sefAssign: ASTExpr = selectExprFull
-
-// toAST wraps in ASTQueryCommand — different from toExpr
-const selectAST = db.select(users).toAST()
-const _saKind: typeof selectAST.kind = 'query'
-
-// -- subquery() returns ASTSubquery --
-
-const subq = subquery(selectExpr)
+const subq = subquery(selectBuilder)
 const _subqType: ASTSubquery = subq
 const _subqExpr: ASTExpr = subq // ASTSubquery is ASTExpr
 const _subqKind: typeof subq.kind = 'subquery'
 
-// -- inSubquery() returns ASTInQuery --
+// -- inSubquery() accepts QueryBuilder and returns ASTInQuery --
 
-const inSubq = inSubquery(users.id, selectExpr)
+const inSubq = inSubquery(users.id, selectBuilder)
 const _inSubqType: ASTInQuery = inSubq
 const _inSubqExpr: ASTExpr = inSubq // ASTInQuery is ASTExpr
 const _inSubqKind: typeof inSubq.kind = 'inQuery'
 
-// -- notInSubquery() returns ASTInQuery --
+// -- notInSubquery() accepts QueryBuilder and returns ASTInQuery --
 
-const notInSubq = notInSubquery(users.id, selectExpr)
+const notInSubq = notInSubquery(users.id, selectBuilder)
 const _notInSubqType: ASTInQuery = notInSubq
 const _notInSubqExpr: ASTExpr = notInSubq
 const _notInSubqKind: typeof notInSubq.kind = 'inQuery'
@@ -737,24 +723,24 @@ const _notInSubqKind: typeof notInSubq.kind = 'inQuery'
 
 const _subqWhere: ASTExpr = gt(users.age, subq)
 const _inSubqWhere: ASTExpr = and(inSubq, gt(users.age, 20))
-const _existsSubq: ASTExpr = exists(selectExpr)
+const _existsSubq: ASTExpr = exists(selectBuilder)
 
 // -- Subquery can be aliased --
 
 const _aliasedSubq: ASTExpr = alias(subq, 'max_val')
 
-// -- Negative: subquery() requires ASTExpr, not random objects --
+// -- Negative: subquery() requires QueryBuilder, not random objects --
 
-// @ts-expect-error — subquery requires ASTExpr, not a string
+// @ts-expect-error — subquery requires QueryBuilder, not a string
 const _badSubq1 = subquery('SELECT 1')
 
-// @ts-expect-error — inSubquery requires ASTExpr for both args
-const _badSubq2 = inSubquery('id', selectExpr)
+// @ts-expect-error — inSubquery requires ASTExpr for first arg
+const _badSubq2 = inSubquery('id', selectBuilder)
 
-// @ts-expect-error — inSubquery requires ASTExpr for query arg
+// @ts-expect-error — inSubquery requires QueryBuilder for query arg
 const _badSubq3 = inSubquery(users.id, 'SELECT id FROM users')
 
-// @ts-expect-error — notInSubquery requires ASTExpr for query arg
+// @ts-expect-error — notInSubquery requires QueryBuilder for query arg
 const _badSubq4 = notInSubquery(users.id, 42)
 
 // ══════════════════════════════════════════════════════════════════════
@@ -982,10 +968,10 @@ const _doChained = db
 // 18. INSERT...SELECT
 // ══════════════════════════════════════════════════════════════════════
 
-// insertFrom returns InsertSelectBuilder with correct table type
+// insertFrom accepts QueryBuilder and returns InsertSelectBuilder with correct table type
 const insertFromBuilder = db.insertFrom(
   users,
-  db.select(users).columns(users.name, users.email).toExpr(),
+  db.select(users).columns(users.name, users.email),
   ['name', 'email'],
 )
 const _isb: InsertSelectBuilder<typeof users> = insertFromBuilder
@@ -997,14 +983,14 @@ const _ifrCheck: InsertFromReturn = undefined as unknown as InferSelect<typeof u
 
 // insertFrom columns are type-safe
 // @ts-expect-error — 'nonexistent' is not a column key
-db.insertFrom(users, db.select(users).toExpr(), ['nonexistent'])
+db.insertFrom(users, db.select(users), ['nonexistent'])
 
 // insertFrom without columns is valid
-const _isfNoCol = db.insertFrom(users, db.select(users).toExpr())
+const _isfNoCol = db.insertFrom(users, db.select(users))
 
 // insertFrom supports chaining
 const _isfChain = db
-  .insertFrom(users, db.select(users).toExpr(), ['name', 'email'])
+  .insertFrom(users, db.select(users), ['name', 'email'])
   .onConflictDoNothing()
   .returning(users.id)
 

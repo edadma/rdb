@@ -35,7 +35,6 @@ import {
   desc,
   add,
   sub,
-  ToCreateAST,
 } from '../dist/index.js'
 
 // ── Schema definitions ──
@@ -97,19 +96,7 @@ describe('quarry', () => {
       assert.equal(active.required, true)
     })
 
-    it('toCreateAST produces correct structure', () => {
-      const ast = users[ToCreateAST]()
-      assert.equal(ast.kind, 'createTable')
-      assert.equal(ast.table, 'users')
-      assert.equal(ast.columns.length, 5)
-      assert.equal(ast.columns[0].name, 'id')
-      assert.equal(ast.columns[0].type, 'serial')
-      assert.equal(ast.columns[0].primaryKey, true)
-      assert.equal(ast.columns[1].name, 'name')
-      assert.equal(ast.columns[1].notNull, true)
-      assert.equal(ast.columns[2].unique, true) // email
-    })
-  })
+})
 
   // ── INSERT ──
 

@@ -26,7 +26,6 @@ export {
   TableName,
   Columns,
   OriginalName,
-  ToCreateAST,
   TableAs,
 } from './schema.js'
 export type { ColumnDef, TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
@@ -196,4 +195,4 @@ export {
 } from './expressions.js'
 export type { OverOptions } from './expressions.js'
 export { quarry, asc, desc, QuarryDB, SelectBuilder, SetOperationBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
-export type { QuarrySession } from './builder.js'
+export type { QuarrySession, QueryBuilder } from './builder.js'

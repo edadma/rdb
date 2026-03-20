@@ -322,14 +322,13 @@ describe('set operations, window functions, CTEs, named functions', () => {
         .select(employees)
         .columns(employees.dept, alias(sum(employees.salary), 'total'))
         .groupBy(employees.dept)
-        .toExpr()
 
-      const mainQuery = {
-        kind: 'select',
-        exprs: [{ kind: 'star' }],
-        from: [{ kind: 'table', name: 'dept_totals' }],
-        orderBy: [{ expr: { kind: 'column', name: 'total' }, direction: 'desc' }],
-      }
+      const deptTotals = table('dept_totals', {
+        dept: text('dept'),
+        total: integer('total'),
+      })
+
+      const mainQuery = db.select(deptTotals).orderBy(desc(deptTotals.total))
 
       const rows = await db.executeQuery(
         withCTE([{ name: 'dept_totals', query: cteQuery }], mainQuery),
@@ -344,13 +343,13 @@ describe('set operations, window functions, CTEs, named functions', () => {
         .select(employees)
         .columns(employees.dept, alias(count(), 'c'))
         .groupBy(employees.dept)
-        .toExpr()
 
-      const mainQuery = {
-        kind: 'select',
-        exprs: [{ kind: 'star' }],
-        from: [{ kind: 'table', name: 'dept_counts' }],
-      }
+      const deptCounts = table('dept_counts', {
+        department: text('department'),
+        headcount: integer('headcount'),
+      })
+
+      const mainQuery = db.select(deptCounts)
 
       const rows = await db.executeQuery(
         withCTE([{ name: 'dept_counts', columns: ['department', 'headcount'], query: cteQuery }], mainQuery),
@@ -358,16 +357,6 @@ describe('set operations, window functions, CTEs, named functions', () => {
       assert.equal(rows.length, 2)
       assert.ok('department' in rows[0])
       assert.ok('headcount' in rows[0])
-    })
-
-    it('AST structure is correct', () => {
-      const cteQuery = db.select(employees).toExpr()
-      const mainQuery = { kind: 'select', exprs: [{ kind: 'star' }], from: [{ kind: 'table', name: 'cte1' }] }
-      const expr = withCTE([{ name: 'cte1', query: cteQuery }], mainQuery)
-      assert.equal(expr.kind, 'with')
-      assert.equal(expr.ctes.length, 1)
-      assert.equal(expr.ctes[0].name, 'cte1')
-      assert.equal(expr.query.kind, 'select')
     })
   })
 
@@ -395,10 +384,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
       })
 
       it('trim', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: trim(literal('  hi  ')), alias: 'trimmed' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(trim(literal('  hi  ')), 'trimmed'))
+          .limit(1)
+          .execute()
         assert.equal(rows[0].trimmed, 'hi')
       })
 
@@ -439,21 +429,23 @@ describe('set operations, window functions, CTEs, named functions', () => {
       })
 
       it('repeat', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: repeat(literal('ab'), 3), alias: 'r' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(repeat(literal('ab'), 3), 'r'))
+          .limit(1)
+          .execute()
         assert.equal(rows[0].r, 'ababab')
       })
 
       it('lpad/rpad', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: lpad(literal('hi'), 5, '*'), alias: 'l' },
-            { kind: 'alias', expr: rpad(literal('hi'), 5, '*'), alias: 'r' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(lpad(literal('hi'), 5, '*'), 'l'),
+            alias(rpad(literal('hi'), 5, '*'), 'r'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].l, '***hi')
         assert.equal(rows[0].r, 'hi***')
       })
@@ -461,57 +453,62 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     describe('math', () => {
       it('abs', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: abs(literal(-42)), alias: 'v' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(abs(literal(-42)), 'v'))
+          .limit(1)
+          .execute()
         assert.equal(rows[0].v, 42)
       })
 
       it('ceil/floor', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: ceil(literal(3.2)), alias: 'c' },
-            { kind: 'alias', expr: floor(literal(3.8)), alias: 'f' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(ceil(literal(3.2)), 'c'),
+            alias(floor(literal(3.8)), 'f'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].c, 4)
         assert.equal(rows[0].f, 3)
       })
 
       it('round/trunc', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: round(literal(3.456), 2), alias: 'r' },
-            { kind: 'alias', expr: trunc(literal(3.456), 1), alias: 't' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(round(literal(3.456), 2), 'r'),
+            alias(trunc(literal(3.456), 1), 't'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].r, 3.46)
         assert.equal(rows[0].t, 3.4)
       })
 
       it('sqrt/sign', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: sqrt(literal(16)), alias: 's' },
-            { kind: 'alias', expr: sign(literal(-5)), alias: 'sg' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(sqrt(literal(16)), 's'),
+            alias(sign(literal(-5)), 'sg'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].s, 4)
         assert.equal(rows[0].sg, -1)
       })
 
       it('greatest/least', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: greatest(1, 5, 3), alias: 'g' },
-            { kind: 'alias', expr: least(1, 5, 3), alias: 'l' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(greatest(1, 5, 3), 'g'),
+            alias(least(1, 5, 3), 'l'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].g, 5)
         assert.equal(rows[0].l, 1)
       })
@@ -519,21 +516,23 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     describe('null handling', () => {
       it('coalesce returns first non-null', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: coalesce(literal(null), literal(null), 42), alias: 'v' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(coalesce(literal(null), literal(null), 42), 'v'))
+          .limit(1)
+          .execute()
         assert.equal(rows[0].v, 42)
       })
 
       it('nullif returns null when equal', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [
-            { kind: 'alias', expr: nullif(literal(1), 1), alias: 'a' },
-            { kind: 'alias', expr: nullif(literal(1), 2), alias: 'b' },
-          ],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(
+            alias(nullif(literal(1), 1), 'a'),
+            alias(nullif(literal(1), 2), 'b'),
+          )
+          .limit(1)
+          .execute()
         assert.equal(rows[0].a, null)
         assert.equal(rows[0].b, 1)
       })
@@ -541,20 +540,22 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     describe('date/time', () => {
       it('now returns a timestamp', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: now(), alias: 'ts' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(now(), 'ts'))
+          .limit(1)
+          .execute()
         assert.ok(rows[0].ts != null)
       })
     })
 
     describe('uuid', () => {
       it('genRandomUuid returns a UUID string', async () => {
-        const rows = await db.executeQuery({
-          kind: 'select',
-          exprs: [{ kind: 'alias', expr: genRandomUuid(), alias: 'u' }],
-        })
+        const rows = await db
+          .select(employees)
+          .columns(alias(genRandomUuid(), 'u'))
+          .limit(1)
+          .execute()
         assert.match(rows[0].u, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       })
     })

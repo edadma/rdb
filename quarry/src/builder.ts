@@ -12,6 +12,13 @@ import type {
 import { TableName, Columns, OriginalName, ToCreateAST } from './schema.js'
 import type { TableDef, ColumnsConfig, InferSelect, InferInsert, Nullable } from './schema.js'
 
+// ── QueryBuilder interface ──
+
+export interface QueryBuilder {
+  /** @internal */
+  toExpr(): ASTExpr
+}
+
 // ── Helpers ──
 
 function tableToExpr(table: TableDef<any, any>): ASTExpr {
@@ -52,6 +59,33 @@ export class SelectBuilder<TResult> {
   constructor(session: QuarrySession, state: SelectState) {
     this._session = session
     this._state = state
+  }
+
+  /** @internal */
+  toExpr(): ASTExpr {
+    let from: ASTExpr = this._state.tableExpr
+
+    for (const join of this._state.joins) {
+      if (join.kind === 'joinCross') {
+        from = { kind: 'joinCross', left: from, right: join.right }
+      } else {
+        from = { kind: join.kind, left: from, right: join.right, on: join.on! }
+      }
+    }
+
+    return {
+      kind: 'select',
+      exprs: this._state.columns,
+      from: [from],
+      where: this._state.where,
+      orderBy: this._state.orderBy,
+      offset: this._state.offset,
+      limit: this._state.limit,
+      groupBy: this._state.groupBy,
+      having: this._state.having,
+      distinct: this._state.distinct || undefined,
+      distinctOn: this._state.distinctOn,
+    }
   }
 
   columns(...cols: ASTExpr[]): SelectBuilder<TResult> {
@@ -154,32 +188,6 @@ export class SelectBuilder<TResult> {
     })
   }
 
-  toExpr(): ASTExpr {
-    let from: ASTExpr = this._state.tableExpr
-
-    for (const join of this._state.joins) {
-      if (join.kind === 'joinCross') {
-        from = { kind: 'joinCross', left: from, right: join.right }
-      } else {
-        from = { kind: join.kind, left: from, right: join.right, on: join.on! }
-      }
-    }
-
-    return {
-      kind: 'select',
-      exprs: this._state.columns,
-      from: [from],
-      where: this._state.where,
-      orderBy: this._state.orderBy,
-      offset: this._state.offset,
-      limit: this._state.limit,
-      groupBy: this._state.groupBy,
-      having: this._state.having,
-      distinct: this._state.distinct || undefined,
-      distinctOn: this._state.distinctOn,
-    }
-  }
-
   union<U>(other: SelectBuilder<U>): SetOperationBuilder<TResult | U> {
     return new SetOperationBuilder(this._session, 'UNION', this.toExpr(), other.toExpr())
   }
@@ -223,6 +231,7 @@ export class SetOperationBuilder<TResult> {
     this._right = right
   }
 
+  /** @internal */
   toExpr(): ASTExpr {
     return { kind: 'setOperation', op: this._op, left: this._left, right: this._right }
   }
@@ -534,7 +543,7 @@ export class QuarryDB {
 
   insertFrom<T extends TableDef<any, any>>(
     table: T,
-    query: ASTExpr,
+    query: QueryBuilder,
     columns?: (keyof T[typeof Columns] & string)[],
   ): InsertSelectBuilder<T> {
     const cols = columns
@@ -544,7 +553,7 @@ export class QuarryDB {
           return colDef._columnName
         })
       : undefined
-    return new InsertSelectBuilder(this._session, table, query, cols)
+    return new InsertSelectBuilder(this._session, table, query.toExpr(), cols)
   }
 
   update<T extends TableDef<any, any>>(table: T): UpdateBuilder<T> {
@@ -559,8 +568,8 @@ export class QuarryDB {
     await this._session.executeAST(table[ToCreateAST]())
   }
 
-  async executeQuery<T = Record<string, unknown>>(queryExpr: ASTExpr): Promise<T[]> {
-    const results = await this._session.executeAST({ kind: 'query', query: queryExpr })
+  async executeQuery<T = Record<string, unknown>>(query: QueryBuilder): Promise<T[]> {
+    const results = await this._session.executeAST({ kind: 'query', query: query.toExpr() })
     const result = results[0] as any
     return result.rows as T[]
   }

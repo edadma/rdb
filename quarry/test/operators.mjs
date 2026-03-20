@@ -452,13 +452,9 @@ describe('new operators and expressions', () => {
   // ── EXISTS expression ──
 
   describe('EXISTS expression', () => {
-    it('exists produces correct AST', () => {
-      const expr = exists({
-        kind: 'select',
-        exprs: [{ kind: 'star' }],
-        from: [{ kind: 'table', name: 'items' }],
-        where: eq(items.name, 'Widget'),
-      })
+    it('exists accepts a builder and produces correct AST', () => {
+      const subq = db.select(items).where(eq(items.name, 'Widget'))
+      const expr = exists(subq)
       assert.equal(expr.kind, 'exists')
       assert.equal(expr.subquery.kind, 'select')
     })
@@ -613,7 +609,7 @@ describe('new operators and expressions', () => {
     })
 
     it('exists creates correct AST', () => {
-      const expr = exists({ kind: 'select', exprs: [{ kind: 'star' }], from: [{ kind: 'table', name: 'items' }] })
+      const expr = exists(db.select(items))
       assert.equal(expr.kind, 'exists')
     })
   })

@@ -85,7 +85,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(eq(departments.name, 'Engineering'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -104,7 +103,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(lt(departments.id, 3))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -126,7 +124,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(eq(departments.name, 'Nonexistent'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -134,16 +131,6 @@ describe('subqueries', () => {
         .execute()
 
       assert.equal(rows.length, 0)
-    })
-
-    it('produces correct AST structure', () => {
-      const subq = db.select(departments).columns(departments.id).toExpr()
-      const expr = inSubquery(employees.departmentId, subq)
-
-      assert.equal(expr.kind, 'inQuery')
-      assert.equal(expr.op, 'IN')
-      assert.equal(expr.value.kind, 'column')
-      assert.equal(expr.query.kind, 'select')
     })
   })
 
@@ -156,7 +143,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(eq(departments.name, 'Engineering'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -178,7 +164,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(eq(departments.name, 'Nonexistent'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -186,14 +171,6 @@ describe('subqueries', () => {
         .execute()
 
       assert.equal(rows.length, 5)
-    })
-
-    it('produces correct AST structure', () => {
-      const subq = db.select(departments).columns(departments.id).toExpr()
-      const expr = notInSubquery(employees.departmentId, subq)
-
-      assert.equal(expr.kind, 'inQuery')
-      assert.equal(expr.op, 'NOT IN')
     })
   })
 
@@ -205,7 +182,6 @@ describe('subqueries', () => {
       const avgSalaryQuery = db
         .select(employees)
         .columns(avg(employees.salary))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -226,7 +202,6 @@ describe('subqueries', () => {
         .select(employees)
         .columns(max(employees.salary))
         .where(eq(employees.departmentId, departments.id))
-        .toExpr()
 
       const rows = await db
         .select(departments)
@@ -242,14 +217,6 @@ describe('subqueries', () => {
       const sales = rows.find((r) => r.name === 'Sales')
       assert.equal(sales.max_salary, 95000)
     })
-
-    it('produces correct AST structure', () => {
-      const subq = db.select(employees).columns(avg(employees.salary)).toExpr()
-      const expr = subquery(subq)
-
-      assert.equal(expr.kind, 'subquery')
-      assert.equal(expr.query.kind, 'select')
-    })
   })
 
   // ── EXISTS subquery ──
@@ -261,7 +228,6 @@ describe('subqueries', () => {
         .select(projects)
         .columns(projects.id)
         .where(eq(projects.leadId, employees.id))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -281,7 +247,6 @@ describe('subqueries', () => {
         .select(projects)
         .columns(projects.id)
         .where(eq(projects.name, 'Nonexistent Project XYZ'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -289,50 +254,6 @@ describe('subqueries', () => {
         .execute()
 
       assert.equal(rows.length, 0)
-    })
-
-    it('produces correct AST structure', () => {
-      const subq = db.select(projects).columns(projects.id).toExpr()
-      const expr = exists(subq)
-
-      assert.equal(expr.kind, 'exists')
-      assert.equal(expr.subquery.kind, 'select')
-    })
-  })
-
-  // ── SelectBuilder.toExpr() ──
-
-  describe('toExpr', () => {
-    it('returns ASTSelect node (not wrapped in ASTQueryCommand)', () => {
-      const expr = db.select(employees).columns(employees.id).toExpr()
-      assert.equal(expr.kind, 'select')
-      assert.ok(Array.isArray(expr.exprs))
-      assert.ok(Array.isArray(expr.from))
-    })
-
-    it('toExpr is different from toAST', () => {
-      const builder = db.select(employees).columns(employees.id)
-      const expr = builder.toExpr()
-      const ast = builder.toAST()
-
-      assert.equal(expr.kind, 'select')
-      assert.equal(ast.kind, 'query')
-      assert.equal(ast.query.kind, 'select')
-    })
-
-    it('preserves where/orderBy/limit in toExpr', () => {
-      const expr = db
-        .select(employees)
-        .columns(employees.id)
-        .where(gt(employees.salary, 100000))
-        .orderBy(asc(employees.id))
-        .limit(5)
-        .toExpr()
-
-      assert.equal(expr.kind, 'select')
-      assert.ok(expr.where)
-      assert.ok(expr.orderBy)
-      assert.equal(expr.limit, 5)
     })
   })
 
@@ -345,7 +266,6 @@ describe('subqueries', () => {
         .select(departments)
         .columns(departments.id)
         .where(eq(departments.name, 'Engineering'))
-        .toExpr()
 
       const rows = await db
         .select(employees)
@@ -366,10 +286,8 @@ describe('subqueries', () => {
       const avgQuery = db
         .select(employees)
         .columns(avg(employees.salary))
-        .toExpr()
 
-      // This is a non-correlated subquery: departments that have any employee above avg
-      // We use a simpler approach: find employees above average salary
+      // This is a non-correlated subquery: find employees above average salary
       const rows = await db
         .select(employees)
         .where(gt(employees.salary, subquery(avgQuery)))

@@ -1,5 +1,6 @@
 import type { ASTExpr, ASTBinary, ASTUnary, ASTIn, ASTInQuery, ASTBetween, ASTApply, ASTCase, ASTWhen, ASTCast, ASTExists, ASTSubquery, ASTWindow, ASTOrderBy, ASTFrameSpec, ASTWith, ASTCTEDef } from './ast.js'
 import type { ColumnDef, TableDef, ColumnsConfig } from './schema.js'
+import type { QueryBuilder } from './builder.js'
 
 // ── Generic operator helpers ──
 
@@ -286,20 +287,20 @@ export function cast(expr: ASTExpr, targetType: string): ASTCast {
 
 // ── Subquery expressions ──
 
-export function subquery(query: ASTExpr): ASTSubquery {
-  return { kind: 'subquery', query }
+export function subquery(query: QueryBuilder): ASTSubquery {
+  return { kind: 'subquery', query: query.toExpr() }
 }
 
-export function exists(subquery: ASTExpr): ASTExists {
-  return { kind: 'exists', subquery }
+export function exists(subquery: QueryBuilder): ASTExists {
+  return { kind: 'exists', subquery: subquery.toExpr() }
 }
 
-export function inSubquery(expr: ASTExpr, query: ASTExpr): ASTInQuery {
-  return { kind: 'inQuery', value: expr, op: 'IN', query }
+export function inSubquery(expr: ASTExpr, query: QueryBuilder): ASTInQuery {
+  return { kind: 'inQuery', value: expr, op: 'IN', query: query.toExpr() }
 }
 
-export function notInSubquery(expr: ASTExpr, query: ASTExpr): ASTInQuery {
-  return { kind: 'inQuery', value: expr, op: 'NOT IN', query }
+export function notInSubquery(expr: ASTExpr, query: QueryBuilder): ASTInQuery {
+  return { kind: 'inQuery', value: expr, op: 'NOT IN', query: query.toExpr() }
 }
 
 // ── Aggregate functions ──
@@ -487,16 +488,17 @@ export function following(n: number) { return { kind: 'following' as const, n } 
 // ── CTE helpers ──
 
 export function withCTE(
-  ctes: { name: string; columns?: string[]; query: ASTExpr }[],
-  query: ASTExpr,
+  ctes: { name: string; columns?: string[]; query: QueryBuilder }[],
+  query: QueryBuilder,
   opts?: { recursive?: boolean },
-): ASTExpr {
-  return {
+): QueryBuilder {
+  const expr: ASTWith = {
     kind: 'with',
-    ctes: ctes.map((c) => ({ name: c.name, columns: c.columns, query: c.query })),
-    query,
+    ctes: ctes.map((c) => ({ name: c.name, columns: c.columns, query: c.query.toExpr() })),
+    query: query.toExpr(),
     recursive: opts?.recursive,
   }
+  return { toExpr: () => expr }
 }
 
 // ── Named scalar function helpers ──

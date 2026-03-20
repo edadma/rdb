@@ -29,7 +29,6 @@ import {
   alias,
   fn,
   asc,
-  ToCreateAST,
 } from '../dist/index.js'
 
 // ── Schema type tests ──
@@ -162,7 +161,7 @@ describe('schema column types', () => {
     assert.ok(r.i)
   })
 
-  it('column type names are correct in AST', () => {
+  it('column type names are correct after createTable', async () => {
     const t = table('t_all', {
       a: serial('a').primaryKey(),
       b: bigserial('b'),
@@ -187,19 +186,20 @@ describe('schema column types', () => {
       u: timetz('u'),
     })
 
-    const ast = t[ToCreateAST]()
-    const types = Object.fromEntries(ast.columns.map((c) => [c.name, c.type]))
+    await db.createTable(t)
+    const [res] = await session.execute('SHOW COLUMNS t_all')
+    const types = Object.fromEntries(res.rows.map((c) => [c.name, c.type]))
     assert.equal(types.a, 'serial')
     assert.equal(types.b, 'bigserial')
     assert.equal(types.c, 'text')
-    assert.equal(types.d, 'varchar(100)')
-    assert.equal(types.e, 'char(10)')
+    assert.equal(types.d, 'varchar:100')
+    assert.equal(types.e, 'char:10')
     assert.equal(types.f, 'integer')
     assert.equal(types.g, 'smallint')
     assert.equal(types.h, 'bigint')
     assert.equal(types.i, 'double')
-    assert.equal(types.j, 'real')
-    assert.equal(types.k, 'numeric(10,2)')
+    assert.equal(types.j, 'double') // engine normalizes real → double
+    assert.equal(types.k, 'numeric:10:2')
     assert.equal(types.l, 'boolean')
     assert.equal(types.m, 'uuid')
     assert.equal(types.n, 'timestamp')
