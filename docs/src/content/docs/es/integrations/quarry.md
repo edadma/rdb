@@ -178,15 +178,14 @@ Insertar filas desde una consulta en lugar de valores literales:
 ```typescript
 // Archivar todos los usuarios activos
 const query = db
-  .select(users)
-  .columns(users.name, users.email)
-  .where(eq(users.active, true))
-  .toExpr();
+  .select(users.name, users.email)
+  .from(users)
+  .where(eq(users.active, true));
 
 await db.insertFrom(archive, query, ["name", "email"]).execute();
 ```
 
-El segundo argumento es la consulta select (usa `.toExpr()`). El tercer argumento opcional especifica que columnas destino llenar — si se omite, el motor espera que la consulta produzca valores para todas las columnas.
+El segundo argumento es un select builder. El tercer argumento opcional especifica que columnas destino llenar — si se omite, el motor espera que la consulta produzca valores para todas las columnas.
 
 ```typescript
 // Sin lista de columnas (la consulta debe coincidir con todas las columnas destino)
@@ -201,24 +200,24 @@ await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().exe
 ```typescript
 import { eq, gt, asc, desc } from "@petradb/quarry";
 
-// Todas las filas
-const allUsers = await db.select(users).execute();
+// Todas las filas (SELECT *)
+const allUsers = await db.from(users).execute();
 
 // Clausula where
 const alice = await db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .execute();
 
 // Columnas especificas
 const names = await db
-  .select(users)
-  .columns(users.name, users.email)
+  .select(users.name, users.email)
+  .from(users)
   .execute();
 
 // Orden, limite, desplazamiento
 const page = await db
-  .select(users)
+  .from(users)
   .orderBy(asc(users.name))
   .limit(10)
   .offset(20)
@@ -226,14 +225,14 @@ const page = await db
 
 // Distinct
 const statuses = await db
-  .select(users)
-  .columns(users.active)
+  .select(users.active)
+  .from(users)
   .distinct()
   .execute();
 
 // Distinct on — una fila por valor distinto de las columnas dadas
 const perCategory = await db
-  .select(products)
+  .from(products)
   .distinctOn(products.category)
   .orderBy(asc(products.category), asc(products.price))
   .execute();
@@ -441,21 +440,21 @@ import { stringAgg, arrayAgg, boolAnd, boolOr, jsonAgg, jsonObjectAgg } from "@p
 
 // Contar todas las filas
 const [{ total }] = await db
-  .select(users)
-  .columns(alias(count(), "total"))
+  .select(alias(count(), "total"))
+  .from(users)
   .execute();
 
 // Agrupar por con agregado
 const stats = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .execute();
 
 // Having
 const popular = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .having(gt(alias(count(), "cnt"), 5))
   .execute();
@@ -522,12 +521,12 @@ Ejemplo con multiples agregados filtrados:
 
 ```typescript
 const [row] = await db
-  .select(employees)
-  .columns(
+  .select(
     alias(count(), "total"),
     alias(filter(count(), gt(employees.salary, 100)), "high_earners"),
     alias(filter(sum(employees.salary), eq(employees.active, true)), "active_payroll"),
   )
+  .from(employees)
   .execute();
 ```
 
@@ -563,7 +562,7 @@ const posts = table("posts", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .where(eq(users.name, "Alice"))
   .execute();
@@ -580,7 +579,7 @@ Las columnas de la tabla unida se vuelven todas anulables, ya que las filas sin 
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .leftJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -596,7 +595,7 @@ Las columnas de la tabla base se vuelven anulables, las columnas de la tabla uni
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .rightJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -611,7 +610,7 @@ Ambos lados se vuelven anulables:
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .fullJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -626,7 +625,7 @@ Produce el producto cartesiano de ambas tablas — sin condicion `on`:
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .crossJoin(posts)
   .execute();
 
@@ -646,7 +645,7 @@ const comments = table("comments", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .leftJoin(comments, eq(posts.id, comments.postId))
   .execute();
@@ -661,8 +660,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, posts.title)
+  .select(users.name, posts.title)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .execute();
 ```
@@ -671,8 +670,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, alias(count(), "post_count"))
+  .select(users.name, alias(count(), "post_count"))
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .groupBy(users.name)
   .orderBy(desc(alias(count(), "post_count")))
@@ -690,11 +689,11 @@ const mgr = tableAs(employees, "mgr");
 const emp = tableAs(employees, "emp");
 
 const rows = await db
-  .select(emp)
-  .columns(
+  .select(
     alias(emp.name, "employee"),
     alias(mgr.name, "manager"),
   )
+  .from(emp)
   .leftJoin(mgr, eq(emp.managerId, mgr.id))
   .execute();
 ```
@@ -710,23 +709,17 @@ import { inSubquery, notInSubquery } from "@petradb/quarry";
 
 // Usuarios que tienen al menos un post
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    inSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    inSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 
 // Usuarios que NO tienen posts
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    notInSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    notInSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 ```
@@ -737,14 +730,10 @@ const rows = await db
 import { exists } from "@petradb/quarry";
 
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
     exists(
-      db
-        .select(posts)
-        .columns(literal(1))
-        .where(eq(posts.userId, users.id))
-        .toExpr(),
+      db.select(literal(1)).from(posts).where(eq(posts.userId, users.id)),
     ),
   )
   .execute();
@@ -759,19 +748,14 @@ import { subquery } from "@petradb/quarry";
 
 // Usuarios mayores que la edad promedio
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    gt(
-      users.age,
-      subquery(db.select(users).columns(avg(users.age)).toExpr()),
-    ),
+    gt(users.age, subquery(db.select(avg(users.age)).from(users))),
   )
   .execute();
 ```
 
-:::note
-Usa `.toExpr()` (no `.toAST()`) cuando incrustes un select como subconsulta. `.toExpr()` retorna el nodo `ASTSelect` sin envolver, mientras que `.toAST()` lo envuelve en un `QueryCommand`.
-:::
+Las funciones de subconsulta (`subquery`, `exists`, `inSubquery`, `notInSubquery`) aceptan cualquier query builder directamente — no se necesita conversion intermedia.
 
 ## Ordenamiento
 
@@ -779,15 +763,15 @@ Usa `.toExpr()` (no `.toAST()`) cuando incrustes un select como subconsulta. `.t
 import { asc, desc } from "@petradb/quarry";
 
 // Ordenamiento basico
-db.select(users).orderBy(asc(users.name))
-db.select(users).orderBy(desc(users.age))
+db.from(users).orderBy(asc(users.name))
+db.from(users).orderBy(desc(users.age))
 
 // Multiples columnas
-db.select(users).orderBy(asc(users.name), desc(users.age))
+db.from(users).orderBy(asc(users.name), desc(users.age))
 
 // NULLS FIRST / NULLS LAST
-db.select(users).orderBy(asc(users.age, { nulls: "first" }))
-db.select(users).orderBy(desc(users.age, { nulls: "last" }))
+db.from(users).orderBy(asc(users.age, { nulls: "first" }))
+db.from(users).orderBy(desc(users.age, { nulls: "last" }))
 ```
 
 Cuando `nulls` no se especifica, el motor usa el comportamiento por defecto (los nulos se ordenan al final en orden ascendente, primero en orden descendente).
@@ -921,7 +905,7 @@ Cada builder tiene un metodo `.toAST()` que retorna el objeto AST sin ejecutarlo
 
 ```typescript
 const ast = db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .orderBy(asc(users.id))
   .limit(10)

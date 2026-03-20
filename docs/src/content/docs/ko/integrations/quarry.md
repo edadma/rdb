@@ -178,15 +178,14 @@ await db
 ```typescript
 // 모든 활성 사용자를 아카이브
 const query = db
-  .select(users)
-  .columns(users.name, users.email)
-  .where(eq(users.active, true))
-  .toExpr();
+  .select(users.name, users.email)
+  .from(users)
+  .where(eq(users.active, true));
 
 await db.insertFrom(archive, query, ["name", "email"]).execute();
 ```
 
-두 번째 인수는 select 쿼리입니다(`.toExpr()` 사용). 선택적 세 번째 인수는 채울 대상 컬럼을 지정합니다 — 생략하면 엔진은 쿼리가 모든 컬럼의 값을 생성할 것으로 기대합니다.
+두 번째 인수는 select 빌더입니다. 선택적 세 번째 인수는 채울 대상 컬럼을 지정합니다 — 생략하면 엔진은 쿼리가 모든 컬럼의 값을 생성할 것으로 기대합니다.
 
 ```typescript
 // 컬럼 목록 없이 (쿼리가 모든 대상 컬럼과 일치해야 함)
@@ -201,24 +200,24 @@ await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().exe
 ```typescript
 import { eq, gt, asc, desc } from "@petradb/quarry";
 
-// 모든 행
-const allUsers = await db.select(users).execute();
+// 모든 행 (SELECT *)
+const allUsers = await db.from(users).execute();
 
 // WHERE 절
 const alice = await db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .execute();
 
 // 특정 컬럼
 const names = await db
-  .select(users)
-  .columns(users.name, users.email)
+  .select(users.name, users.email)
+  .from(users)
   .execute();
 
 // 정렬, limit, offset
 const page = await db
-  .select(users)
+  .from(users)
   .orderBy(asc(users.name))
   .limit(10)
   .offset(20)
@@ -226,14 +225,14 @@ const page = await db
 
 // Distinct
 const statuses = await db
-  .select(users)
-  .columns(users.active)
+  .select(users.active)
+  .from(users)
   .distinct()
   .execute();
 
 // Distinct on — 주어진 컬럼의 고유값당 하나의 행
 const perCategory = await db
-  .select(products)
+  .from(products)
   .distinctOn(products.category)
   .orderBy(asc(products.category), asc(products.price))
   .execute();
@@ -441,21 +440,21 @@ import { stringAgg, arrayAgg, boolAnd, boolOr, jsonAgg, jsonObjectAgg } from "@p
 
 // 모든 행 수 세기
 const [{ total }] = await db
-  .select(users)
-  .columns(alias(count(), "total"))
+  .select(alias(count(), "total"))
+  .from(users)
   .execute();
 
 // 집계와 함께 그룹화
 const stats = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .execute();
 
 // Having
 const popular = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .having(gt(alias(count(), "cnt"), 5))
   .execute();
@@ -522,12 +521,12 @@ filter(sum(emp.salary), eq(emp.active, true))
 
 ```typescript
 const [row] = await db
-  .select(employees)
-  .columns(
+  .select(
     alias(count(), "total"),
     alias(filter(count(), gt(employees.salary, 100)), "high_earners"),
     alias(filter(sum(employees.salary), eq(employees.active, true)), "active_payroll"),
   )
+  .from(employees)
   .execute();
 ```
 
@@ -563,7 +562,7 @@ const posts = table("posts", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .where(eq(users.name, "Alice"))
   .execute();
@@ -580,7 +579,7 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .leftJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -596,7 +595,7 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .rightJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -611,7 +610,7 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .fullJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -626,7 +625,7 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .crossJoin(posts)
   .execute();
 
@@ -646,7 +645,7 @@ const comments = table("comments", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .leftJoin(comments, eq(posts.id, comments.postId))
   .execute();
@@ -661,8 +660,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, posts.title)
+  .select(users.name, posts.title)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .execute();
 ```
@@ -671,8 +670,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, alias(count(), "post_count"))
+  .select(users.name, alias(count(), "post_count"))
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .groupBy(users.name)
   .orderBy(desc(alias(count(), "post_count")))
@@ -690,11 +689,11 @@ const mgr = tableAs(employees, "mgr");
 const emp = tableAs(employees, "emp");
 
 const rows = await db
-  .select(emp)
-  .columns(
+  .select(
     alias(emp.name, "employee"),
     alias(mgr.name, "manager"),
   )
+  .from(emp)
   .leftJoin(mgr, eq(emp.managerId, mgr.id))
   .execute();
 ```
@@ -710,23 +709,17 @@ import { inSubquery, notInSubquery } from "@petradb/quarry";
 
 // 게시물이 하나 이상 있는 사용자
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    inSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    inSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 
 // 게시물이 없는 사용자
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    notInSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    notInSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 ```
@@ -737,14 +730,10 @@ const rows = await db
 import { exists } from "@petradb/quarry";
 
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
     exists(
-      db
-        .select(posts)
-        .columns(literal(1))
-        .where(eq(posts.userId, users.id))
-        .toExpr(),
+      db.select(literal(1)).from(posts).where(eq(posts.userId, users.id)),
     ),
   )
   .execute();
@@ -759,19 +748,14 @@ import { subquery } from "@petradb/quarry";
 
 // 평균 나이보다 나이가 많은 사용자
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    gt(
-      users.age,
-      subquery(db.select(users).columns(avg(users.age)).toExpr()),
-    ),
+    gt(users.age, subquery(db.select(avg(users.age)).from(users))),
   )
   .execute();
 ```
 
-:::note
-서브쿼리로 select를 임베딩할 때는 `.toAST()`가 아닌 `.toExpr()`을 사용합니다. `.toExpr()`은 원시 `ASTSelect` 노드를 반환하고, `.toAST()`는 이를 `QueryCommand`로 래핑합니다.
-:::
+서브쿼리 함수(`subquery`, `exists`, `inSubquery`, `notInSubquery`)는 어떤 쿼리 빌더든 직접 받습니다 — 중간 변환이 필요 없습니다.
 
 ## 정렬
 
@@ -779,15 +763,15 @@ const rows = await db
 import { asc, desc } from "@petradb/quarry";
 
 // 기본 정렬
-db.select(users).orderBy(asc(users.name))
-db.select(users).orderBy(desc(users.age))
+db.from(users).orderBy(asc(users.name))
+db.from(users).orderBy(desc(users.age))
 
 // 여러 컬럼
-db.select(users).orderBy(asc(users.name), desc(users.age))
+db.from(users).orderBy(asc(users.name), desc(users.age))
 
 // NULLS FIRST / NULLS LAST
-db.select(users).orderBy(asc(users.age, { nulls: "first" }))
-db.select(users).orderBy(desc(users.age, { nulls: "last" }))
+db.from(users).orderBy(asc(users.age, { nulls: "first" }))
+db.from(users).orderBy(desc(users.age, { nulls: "last" }))
 ```
 
 `nulls`를 지정하지 않으면 엔진이 기본 동작을 사용합니다(오름차순에서 null이 마지막, 내림차순에서 null이 처음).
@@ -921,7 +905,7 @@ const result = await db.transaction(async (tx) => {
 
 ```typescript
 const ast = db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .orderBy(asc(users.id))
   .limit(10)

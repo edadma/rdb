@@ -178,15 +178,14 @@ Insert rows from a query instead of literal values:
 ```typescript
 // Archive all active users
 const query = db
-  .select(users)
-  .columns(users.name, users.email)
-  .where(eq(users.active, true))
-  .toExpr();
+  .select(users.name, users.email)
+  .from(users)
+  .where(eq(users.active, true));
 
 await db.insertFrom(archive, query, ["name", "email"]).execute();
 ```
 
-The second argument is the select query (use `.toExpr()`). The optional third argument specifies which target columns to populate — if omitted, the engine expects the query to produce values for all columns.
+The second argument is a select builder. The optional third argument specifies which target columns to populate — if omitted, the engine expects the query to produce values for all columns.
 
 ```typescript
 // Without column list (query must match all target columns)
@@ -198,27 +197,29 @@ await db.insertFrom(archive, query, ["name", "email"]).onConflictDoNothing().exe
 
 ## Select
 
+Quarry's select API reads like SQL — `db.select(columns).from(table)` for specific columns, or `db.from(table)` for `SELECT *`:
+
 ```typescript
 import { eq, gt, asc, desc } from "@petradb/quarry";
 
-// All rows
-const allUsers = await db.select(users).execute();
+// All rows (SELECT *)
+const allUsers = await db.from(users).execute();
 
 // Where clause
 const alice = await db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .execute();
 
 // Specific columns
 const names = await db
-  .select(users)
-  .columns(users.name, users.email)
+  .select(users.name, users.email)
+  .from(users)
   .execute();
 
 // Order, limit, offset
 const page = await db
-  .select(users)
+  .from(users)
   .orderBy(asc(users.name))
   .limit(10)
   .offset(20)
@@ -226,19 +227,21 @@ const page = await db
 
 // Distinct
 const statuses = await db
-  .select(users)
-  .columns(users.active)
+  .select(users.active)
+  .from(users)
   .distinct()
   .execute();
 
 // Distinct on — one row per distinct value of the given columns
 const perCategory = await db
-  .select(products)
+  .from(products)
   .distinctOn(products.category)
   .orderBy(asc(products.category), asc(products.price))
   .execute();
 // Returns the cheapest product in each category
 ```
+
+`db.select().from(table)` is equivalent to `db.from(table)` — both produce `SELECT *`.
 
 ### Column references
 
@@ -441,21 +444,21 @@ import { stringAgg, arrayAgg, boolAnd, boolOr, jsonAgg, jsonObjectAgg } from "@p
 
 // Count all rows
 const [{ total }] = await db
-  .select(users)
-  .columns(alias(count(), "total"))
+  .select(alias(count(), "total"))
+  .from(users)
   .execute();
 
 // Group by with aggregate
 const stats = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .execute();
 
 // Having
 const popular = await db
-  .select(users)
-  .columns(users.active, alias(count(), "cnt"))
+  .select(users.active, alias(count(), "cnt"))
+  .from(users)
   .groupBy(users.active)
   .having(gt(alias(count(), "cnt"), 5))
   .execute();
@@ -522,12 +525,12 @@ Example with multiple filtered aggregates:
 
 ```typescript
 const [row] = await db
-  .select(employees)
-  .columns(
+  .select(
     alias(count(), "total"),
     alias(filter(count(), gt(employees.salary, 100)), "high_earners"),
     alias(filter(sum(employees.salary), eq(employees.active, true)), "active_payroll"),
   )
+  .from(employees)
   .execute();
 ```
 
@@ -563,7 +566,7 @@ const posts = table("posts", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .where(eq(users.name, "Alice"))
   .execute();
@@ -580,7 +583,7 @@ The joined table's columns all become nullable, since unmatched rows produce `nu
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .leftJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -596,7 +599,7 @@ The base table's columns become nullable, the joined table's columns preserve th
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .rightJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -611,7 +614,7 @@ Both sides become nullable:
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .fullJoin(posts, eq(users.id, posts.userId))
   .execute();
 
@@ -626,7 +629,7 @@ Produces the cartesian product of both tables — no `on` condition:
 
 ```typescript
 const rows = await db
-  .select(users)
+  .from(users)
   .crossJoin(posts)
   .execute();
 
@@ -646,7 +649,7 @@ const comments = table("comments", {
 });
 
 const rows = await db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .leftJoin(comments, eq(posts.id, comments.postId))
   .execute();
@@ -661,8 +664,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, posts.title)
+  .select(users.name, posts.title)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .execute();
 ```
@@ -671,8 +674,8 @@ const rows = await db
 
 ```typescript
 const rows = await db
-  .select(users)
-  .columns(users.name, alias(count(), "post_count"))
+  .select(users.name, alias(count(), "post_count"))
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .groupBy(users.name)
   .orderBy(desc(alias(count(), "post_count")))
@@ -690,11 +693,11 @@ const mgr = tableAs(employees, "mgr");
 const emp = tableAs(employees, "emp");
 
 const rows = await db
-  .select(emp)
-  .columns(
+  .select(
     alias(emp.name, "employee"),
     alias(mgr.name, "manager"),
   )
+  .from(emp)
   .leftJoin(mgr, eq(emp.managerId, mgr.id))
   .execute();
 ```
@@ -710,23 +713,17 @@ import { inSubquery, notInSubquery } from "@petradb/quarry";
 
 // Users who have at least one post
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    inSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    inSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 
 // Users who have NO posts
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    notInSubquery(
-      users.id,
-      db.select(posts).columns(posts.userId).toExpr(),
-    ),
+    notInSubquery(users.id, db.select(posts.userId).from(posts)),
   )
   .execute();
 ```
@@ -737,14 +734,10 @@ const rows = await db
 import { exists } from "@petradb/quarry";
 
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
     exists(
-      db
-        .select(posts)
-        .columns(literal(1))
-        .where(eq(posts.userId, users.id))
-        .toExpr(),
+      db.select(literal(1)).from(posts).where(eq(posts.userId, users.id)),
     ),
   )
   .execute();
@@ -759,19 +752,14 @@ import { subquery } from "@petradb/quarry";
 
 // Users older than the average age
 const rows = await db
-  .select(users)
+  .from(users)
   .where(
-    gt(
-      users.age,
-      subquery(db.select(users).columns(avg(users.age)).toExpr()),
-    ),
+    gt(users.age, subquery(db.select(avg(users.age)).from(users))),
   )
   .execute();
 ```
 
-:::note
-Use `.toExpr()` (not `.toAST()`) when embedding a select as a subquery. `.toExpr()` returns the raw `ASTSelect` node, while `.toAST()` wraps it in a `QueryCommand`.
-:::
+Subquery functions (`subquery`, `exists`, `inSubquery`, `notInSubquery`) accept any query builder directly — no intermediate conversion needed.
 
 ## Ordering
 
@@ -779,15 +767,15 @@ Use `.toExpr()` (not `.toAST()`) when embedding a select as a subquery. `.toExpr
 import { asc, desc } from "@petradb/quarry";
 
 // Basic ordering
-db.select(users).orderBy(asc(users.name))
-db.select(users).orderBy(desc(users.age))
+db.from(users).orderBy(asc(users.name))
+db.from(users).orderBy(desc(users.age))
 
 // Multiple columns
-db.select(users).orderBy(asc(users.name), desc(users.age))
+db.from(users).orderBy(asc(users.name), desc(users.age))
 
 // NULLS FIRST / NULLS LAST
-db.select(users).orderBy(asc(users.age, { nulls: "first" }))
-db.select(users).orderBy(desc(users.age, { nulls: "last" }))
+db.from(users).orderBy(asc(users.age, { nulls: "first" }))
+db.from(users).orderBy(desc(users.age, { nulls: "last" }))
 ```
 
 When `nulls` is not specified, the engine uses the default behavior (nulls sort last in ascending order, first in descending order).
@@ -921,7 +909,7 @@ Every builder has a `.toAST()` method that returns the raw AST object without ex
 
 ```typescript
 const ast = db
-  .select(users)
+  .from(users)
   .where(eq(users.name, "Alice"))
   .orderBy(asc(users.id))
   .limit(10)
