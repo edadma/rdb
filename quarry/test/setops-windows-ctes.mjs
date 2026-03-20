@@ -115,8 +115,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
   describe('set operations', () => {
     it('UNION removes duplicates', async () => {
-      const empNames = db.select(employees).columns(employees.name)
-      const conNames = db.select(contractors).columns(contractors.name)
+      const empNames = db.select(employees.name).from(employees)
+      const conNames = db.select(contractors.name).from(contractors)
       const rows = await empNames.union(conNames).execute()
       const names = rows.map((r) => r.name).sort()
       // Bob appears in both but UNION deduplicates
@@ -127,16 +127,16 @@ describe('set operations, window functions, CTEs, named functions', () => {
     })
 
     it('UNION ALL keeps duplicates', async () => {
-      const empNames = db.select(employees).columns(employees.name)
-      const conNames = db.select(contractors).columns(contractors.name)
+      const empNames = db.select(employees.name).from(employees)
+      const conNames = db.select(contractors.name).from(contractors)
       const rows = await empNames.unionAll(conNames).execute()
       // 5 employees + 2 contractors = 7
       assert.equal(rows.length, 7)
     })
 
     it('INTERSECT returns common rows', async () => {
-      const empNameDept = db.select(employees).columns(employees.name, employees.dept)
-      const conNameDept = db.select(contractors).columns(contractors.name, contractors.dept)
+      const empNameDept = db.select(employees.name, employees.dept).from(employees)
+      const conNameDept = db.select(contractors.name, contractors.dept).from(contractors)
       const rows = await empNameDept.intersect(conNameDept).execute()
       // Only Bob in eng appears in both
       assert.equal(rows.length, 1)
@@ -144,8 +144,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     })
 
     it('EXCEPT returns rows in first but not second', async () => {
-      const empNameDept = db.select(employees).columns(employees.name, employees.dept)
-      const conNameDept = db.select(contractors).columns(contractors.name, contractors.dept)
+      const empNameDept = db.select(employees.name, employees.dept).from(employees)
+      const conNameDept = db.select(contractors.name, contractors.dept).from(contractors)
       const rows = await empNameDept.except(conNameDept).execute()
       // All employees except Bob
       assert.equal(rows.length, 4)
@@ -154,8 +154,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     })
 
     it('AST structure is correct', () => {
-      const q1 = db.select(employees).columns(employees.name)
-      const q2 = db.select(contractors).columns(contractors.name)
+      const q1 = db.select(employees.name).from(employees)
+      const q2 = db.select(contractors.name).from(contractors)
       const ast = q1.union(q2).toAST()
       assert.equal(ast.query.kind, 'setOperation')
       assert.equal(ast.query.op, 'UNION')
@@ -169,11 +169,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
   describe('window functions', () => {
     it('rowNumber assigns sequential numbers', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           alias(rowNumber({ orderBy: [asc(employees.salary)] }), 'rn'),
         )
+        .from(employees)
         .orderBy(asc(employees.salary))
         .execute()
       assert.equal(rows[0].rn, 1)
@@ -183,12 +183,12 @@ describe('set operations, window functions, CTEs, named functions', () => {
     it('rank with ties', async () => {
       // Add a tie scenario via the existing data
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           employees.salary,
           alias(rank({ orderBy: [desc(employees.salary)] }), 'r'),
         )
+        .from(employees)
         .orderBy(desc(employees.salary))
         .execute()
       assert.equal(rows[0].r, 1) // Alice 120
@@ -197,11 +197,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('denseRank', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           alias(denseRank({ orderBy: [desc(employees.salary)] }), 'dr'),
         )
+        .from(employees)
         .orderBy(desc(employees.salary))
         .execute()
       assert.equal(rows[0].dr, 1)
@@ -209,12 +209,12 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('rowNumber with partitionBy', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           employees.dept,
           alias(rowNumber({ partitionBy: [employees.dept], orderBy: [asc(employees.salary)] }), 'rn'),
         )
+        .from(employees)
         .orderBy(asc(employees.dept), asc(employees.salary))
         .execute()
 
@@ -231,12 +231,12 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('lag returns previous row value', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           employees.salary,
           alias(lag(employees.salary, 1, 0, { orderBy: [asc(employees.salary)] }), 'prev_salary'),
         )
+        .from(employees)
         .orderBy(asc(employees.salary))
         .execute()
       assert.equal(rows[0].prev_salary, 0) // first row, no previous → default 0
@@ -245,12 +245,12 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('lead returns next row value', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           employees.salary,
           alias(lead(employees.salary, 1, 0, { orderBy: [asc(employees.salary)] }), 'next_salary'),
         )
+        .from(employees)
         .orderBy(asc(employees.salary))
         .execute()
       assert.equal(rows[rows.length - 1].next_salary, 0) // last row → default 0
@@ -259,11 +259,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('ntile distributes into buckets', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           alias(ntile(2, { orderBy: [asc(employees.salary)] }), 'bucket'),
         )
+        .from(employees)
         .orderBy(asc(employees.salary))
         .execute()
       // 5 rows into 2 buckets: 3 in bucket 1, 2 in bucket 2
@@ -275,11 +275,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('firstValue returns first in window', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           alias(firstValue(employees.name, { partitionBy: [employees.dept], orderBy: [asc(employees.salary)] }), 'cheapest'),
         )
+        .from(employees)
         .orderBy(asc(employees.dept), asc(employees.salary))
         .execute()
       const eng = rows.filter((r) => r.dept === 'eng')
@@ -290,12 +290,12 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('over wraps any aggregate as window function', async () => {
       const rows = await db
-        .select(employees)
-        .columns(
+        .select(
           employees.name,
           employees.salary,
           alias(over(sum(employees.salary), { partitionBy: [employees.dept] }), 'dept_total'),
         )
+        .from(employees)
         .orderBy(asc(employees.name))
         .execute()
       const alice = rows.find((r) => r.name === 'Alice')
@@ -319,8 +319,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
   describe('CTEs', () => {
     it('basic CTE', async () => {
       const cteQuery = db
-        .select(employees)
-        .columns(employees.dept, alias(sum(employees.salary), 'total'))
+        .select(employees.dept, alias(sum(employees.salary), 'total'))
+        .from(employees)
         .groupBy(employees.dept)
 
       const deptTotals = table('dept_totals', {
@@ -328,7 +328,7 @@ describe('set operations, window functions, CTEs, named functions', () => {
         total: integer('total'),
       })
 
-      const mainQuery = db.select(deptTotals).orderBy(desc(deptTotals.total))
+      const mainQuery = db.from(deptTotals).orderBy(desc(deptTotals.total))
 
       const rows = await db.executeQuery(
         withCTE([{ name: 'dept_totals', query: cteQuery }], mainQuery),
@@ -340,8 +340,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
     it('CTE with column aliases', async () => {
       const cteQuery = db
-        .select(employees)
-        .columns(employees.dept, alias(count(), 'c'))
+        .select(employees.dept, alias(count(), 'c'))
+        .from(employees)
         .groupBy(employees.dept)
 
       const deptCounts = table('dept_counts', {
@@ -349,7 +349,7 @@ describe('set operations, window functions, CTEs, named functions', () => {
         headcount: integer('headcount'),
       })
 
-      const mainQuery = db.select(deptCounts)
+      const mainQuery = db.from(deptCounts)
 
       const rows = await db.executeQuery(
         withCTE([{ name: 'dept_counts', columns: ['department', 'headcount'], query: cteQuery }], mainQuery),
@@ -366,8 +366,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     describe('string', () => {
       it('lower/upper', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(lower(employees.name), 'lo'), alias(upper(employees.name), 'up'))
+          .select(alias(lower(employees.name), 'lo'), alias(upper(employees.name), 'up'))
+          .from(employees)
           .where(eq(employees.name, 'Alice'))
           .execute()
         assert.equal(rows[0].lo, 'alice')
@@ -376,8 +376,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('length', async () => {
         const rows = await db
-          .select(employees)
-          .columns(employees.name, alias(length(employees.name), 'len'))
+          .select(employees.name, alias(length(employees.name), 'len'))
+          .from(employees)
           .where(eq(employees.name, 'Alice'))
           .execute()
         assert.equal(rows[0].len, 5)
@@ -385,8 +385,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('trim', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(trim(literal('  hi  ')), 'trimmed'))
+          .select(alias(trim(literal('  hi  ')), 'trimmed'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].trimmed, 'hi')
@@ -394,8 +394,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('substring', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(substring(employees.name, 1, 3), 'sub'))
+          .select(alias(substring(employees.name, 1, 3), 'sub'))
+          .from(employees)
           .where(eq(employees.name, 'Alice'))
           .execute()
         assert.equal(rows[0].sub, 'Ali')
@@ -403,8 +403,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('replace', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(replace(employees.name, 'Ali', 'Mal'), 'replaced'))
+          .select(alias(replace(employees.name, 'Ali', 'Mal'), 'replaced'))
+          .from(employees)
           .where(eq(employees.name, 'Alice'))
           .execute()
         assert.equal(rows[0].replaced, 'Malce')
@@ -412,8 +412,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('concatWs', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(concatWs('-', employees.name, employees.dept), 'combined'))
+          .select(alias(concatWs('-', employees.name, employees.dept), 'combined'))
+          .from(employees)
           .where(eq(employees.name, 'Alice'))
           .execute()
         assert.equal(rows[0].combined, 'Alice-eng')
@@ -421,8 +421,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('reverse', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(reverse(employees.name), 'rev'))
+          .select(alias(reverse(employees.name), 'rev'))
+          .from(employees)
           .where(eq(employees.name, 'Bob'))
           .execute()
         assert.equal(rows[0].rev, 'boB')
@@ -430,8 +430,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('repeat', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(repeat(literal('ab'), 3), 'r'))
+          .select(alias(repeat(literal('ab'), 3), 'r'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].r, 'ababab')
@@ -439,11 +439,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('lpad/rpad', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(lpad(literal('hi'), 5, '*'), 'l'),
             alias(rpad(literal('hi'), 5, '*'), 'r'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].l, '***hi')
@@ -454,8 +454,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     describe('math', () => {
       it('abs', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(abs(literal(-42)), 'v'))
+          .select(alias(abs(literal(-42)), 'v'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].v, 42)
@@ -463,11 +463,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('ceil/floor', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(ceil(literal(3.2)), 'c'),
             alias(floor(literal(3.8)), 'f'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].c, 4)
@@ -476,11 +476,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('round/trunc', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(round(literal(3.456), 2), 'r'),
             alias(trunc(literal(3.456), 1), 't'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].r, 3.46)
@@ -489,11 +489,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('sqrt/sign', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(sqrt(literal(16)), 's'),
             alias(sign(literal(-5)), 'sg'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].s, 4)
@@ -502,11 +502,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('greatest/least', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(greatest(1, 5, 3), 'g'),
             alias(least(1, 5, 3), 'l'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].g, 5)
@@ -517,8 +517,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     describe('null handling', () => {
       it('coalesce returns first non-null', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(coalesce(literal(null), literal(null), 42), 'v'))
+          .select(alias(coalesce(literal(null), literal(null), 42), 'v'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].v, 42)
@@ -526,11 +526,11 @@ describe('set operations, window functions, CTEs, named functions', () => {
 
       it('nullif returns null when equal', async () => {
         const rows = await db
-          .select(employees)
-          .columns(
+          .select(
             alias(nullif(literal(1), 1), 'a'),
             alias(nullif(literal(1), 2), 'b'),
           )
+          .from(employees)
           .limit(1)
           .execute()
         assert.equal(rows[0].a, null)
@@ -541,8 +541,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     describe('date/time', () => {
       it('now returns a timestamp', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(now(), 'ts'))
+          .select(alias(now(), 'ts'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.ok(rows[0].ts != null)
@@ -552,8 +552,8 @@ describe('set operations, window functions, CTEs, named functions', () => {
     describe('uuid', () => {
       it('genRandomUuid returns a UUID string', async () => {
         const rows = await db
-          .select(employees)
-          .columns(alias(genRandomUuid(), 'u'))
+          .select(alias(genRandomUuid(), 'u'))
+          .from(employees)
           .limit(1)
           .execute()
         assert.match(rows[0].u, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)

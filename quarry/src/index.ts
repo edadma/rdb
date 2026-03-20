@@ -194,5 +194,5 @@ export {
   literal,
 } from './expressions.js'
 export type { OverOptions } from './expressions.js'
-export { quarry, asc, desc, QuarryDB, SelectBuilder, SetOperationBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
+export { quarry, asc, desc, QuarryDB, FromableBuilder, SelectBuilder, SetOperationBuilder, InsertBuilder, InsertSelectBuilder, UpdateBuilder, DeleteBuilder } from './builder.js'
 export type { QuarrySession, QueryBuilder } from './builder.js'

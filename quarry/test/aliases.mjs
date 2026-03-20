@@ -130,7 +130,7 @@ describe('table aliases', () => {
 
     it('works in expressions without col()', async () => {
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(eq(employees.name, 'Alice'))
         .execute()
       assert.equal(rows.length, 1)
@@ -143,7 +143,7 @@ describe('table aliases', () => {
   describe('AST structure', () => {
     it('aliased table in FROM generates aliasRelation node', () => {
       const e = tableAs(employees, 'e')
-      const ast = db.select(e).toAST()
+      const ast = db.from(e).toAST()
       const from = ast.query.from[0]
       assert.equal(from.kind, 'aliasRelation')
       assert.equal(from.relation.kind, 'table')
@@ -152,7 +152,7 @@ describe('table aliases', () => {
     })
 
     it('non-aliased table in FROM generates plain table node', () => {
-      const ast = db.select(employees).toAST()
+      const ast = db.from(employees).toAST()
       const from = ast.query.from[0]
       assert.equal(from.kind, 'table')
       assert.equal(from.name, 'employees')
@@ -162,7 +162,7 @@ describe('table aliases', () => {
       const e1 = tableAs(employees, 'e1')
       const e2 = tableAs(employees, 'e2')
       const ast = db
-        .select(e1)
+        .from(e1)
         .innerJoin(e2, eq(e1.managerId, e2.id))
         .toAST()
 
@@ -183,11 +183,11 @@ describe('table aliases', () => {
       const m = tableAs(employees, 'm')
 
       const rows = await db
-        .select(e)
-        .columns(
+        .select(
           alias(e.name, 'employee_name'),
           alias(m.name, 'manager_name'),
         )
+        .from(e)
         .innerJoin(m, eq(e.managerId, m.id))
         .orderBy(asc(e.name))
         .execute()
@@ -209,11 +209,11 @@ describe('table aliases', () => {
       const m = tableAs(employees, 'm')
 
       const rows = await db
-        .select(e)
-        .columns(
+        .select(
           alias(e.name, 'employee_name'),
           alias(m.name, 'manager_name'),
         )
+        .from(e)
         .leftJoin(m, eq(e.managerId, m.id))
         .orderBy(asc(e.name))
         .execute()
@@ -230,8 +230,8 @@ describe('table aliases', () => {
 
       // Find employees whose manager earns more than 130000
       const rows = await db
-        .select(e)
-        .columns(alias(e.name, 'employee_name'))
+        .select(alias(e.name, 'employee_name'))
+        .from(e)
         .innerJoin(m, eq(e.managerId, m.id))
         .where(gt(m.salary, 130000))
         .execute()
@@ -247,11 +247,11 @@ describe('table aliases', () => {
       const m = tableAs(employees, 'm')
 
       const rows = await db
-        .select(m)
-        .columns(
+        .select(
           alias(m.name, 'manager_name'),
           alias(count(), 'report_count'),
         )
+        .from(m)
         .innerJoin(e, eq(e.managerId, m.id))
         .groupBy(m.name)
         .orderBy(desc(alias(count(), 'report_count')))
@@ -272,11 +272,11 @@ describe('table aliases', () => {
       const e = tableAs(employees, 'e')
 
       const rows = await db
-        .select(e)
-        .columns(
+        .select(
           alias(e.name, 'employee_name'),
           alias(departments.name, 'dept_name'),
         )
+        .from(e)
         .innerJoin(departments, eq(e.departmentId, departments.id))
         .where(eq(e.name, 'Alice'))
         .execute()
@@ -292,12 +292,12 @@ describe('table aliases', () => {
 
       // Employee name, manager name, department name
       const rows = await db
-        .select(e)
-        .columns(
+        .select(
           alias(e.name, 'employee_name'),
           alias(m.name, 'manager_name'),
           alias(departments.name, 'dept_name'),
         )
+        .from(e)
         .innerJoin(m, eq(e.managerId, m.id))
         .innerJoin(departments, eq(e.departmentId, departments.id))
         .where(eq(e.name, 'Dave'))
@@ -316,7 +316,7 @@ describe('table aliases', () => {
     it('selects from aliased table', async () => {
       const e = tableAs(employees, 'e')
       const rows = await db
-        .select(e)
+        .from(e)
         .where(eq(e.name, 'Alice'))
         .execute()
 
@@ -327,7 +327,7 @@ describe('table aliases', () => {
     it('orderBy on aliased columns works', async () => {
       const e = tableAs(employees, 'e')
       const rows = await db
-        .select(e)
+        .from(e)
         .orderBy(desc(e.salary))
         .limit(3)
         .execute()

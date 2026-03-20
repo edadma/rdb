@@ -82,12 +82,12 @@ describe('subqueries', () => {
     it('filters rows whose column matches subquery results', async () => {
       // Employees in Engineering department
       const engDeptQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Engineering'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(inSubquery(employees.departmentId, engDeptQuery))
         .orderBy(asc(employees.name))
         .execute()
@@ -100,12 +100,12 @@ describe('subqueries', () => {
     it('works with multi-value subquery', async () => {
       // Employees in Engineering OR Marketing
       const deptQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(lt(departments.id, 3))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(inSubquery(employees.departmentId, deptQuery))
         .orderBy(asc(employees.name))
         .execute()
@@ -121,12 +121,12 @@ describe('subqueries', () => {
 
     it('returns empty when subquery matches nothing', async () => {
       const emptyQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Nonexistent'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(inSubquery(employees.departmentId, emptyQuery))
         .execute()
 
@@ -140,12 +140,12 @@ describe('subqueries', () => {
     it('filters rows whose column does NOT match subquery results', async () => {
       // Employees NOT in Engineering
       const engDeptQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Engineering'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(notInSubquery(employees.departmentId, engDeptQuery))
         .orderBy(asc(employees.name))
         .execute()
@@ -161,12 +161,12 @@ describe('subqueries', () => {
 
     it('returns all rows when subquery matches nothing', async () => {
       const emptyQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Nonexistent'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(notInSubquery(employees.departmentId, emptyQuery))
         .execute()
 
@@ -180,11 +180,11 @@ describe('subqueries', () => {
     it('compares column to scalar subquery result', async () => {
       // Employees earning above average
       const avgSalaryQuery = db
-        .select(employees)
-        .columns(avg(employees.salary))
+        .select(avg(employees.salary))
+        .from(employees)
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(gt(employees.salary, subquery(avgSalaryQuery)))
         .orderBy(asc(employees.name))
         .execute()
@@ -199,13 +199,13 @@ describe('subqueries', () => {
     it('scalar subquery as selected column', async () => {
       // Select each department with its max salary
       const maxSalQuery = db
-        .select(employees)
-        .columns(max(employees.salary))
+        .select(max(employees.salary))
+        .from(employees)
         .where(eq(employees.departmentId, departments.id))
 
       const rows = await db
-        .select(departments)
-        .columns(departments.name, alias(subquery(maxSalQuery), 'max_salary'))
+        .select(departments.name, alias(subquery(maxSalQuery), 'max_salary'))
+        .from(departments)
         .orderBy(asc(departments.name))
         .execute()
 
@@ -225,12 +225,12 @@ describe('subqueries', () => {
     it('returns rows where correlated subquery has results', async () => {
       // Employees who lead a project
       const projectQuery = db
-        .select(projects)
-        .columns(projects.id)
+        .select(projects.id)
+        .from(projects)
         .where(eq(projects.leadId, employees.id))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(exists(projectQuery))
         .orderBy(asc(employees.name))
         .execute()
@@ -244,12 +244,12 @@ describe('subqueries', () => {
     it('returns no rows when subquery matches nothing', async () => {
       // EXISTS with impossible condition
       const impossibleQuery = db
-        .select(projects)
-        .columns(projects.id)
+        .select(projects.id)
+        .from(projects)
         .where(eq(projects.name, 'Nonexistent Project XYZ'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(exists(impossibleQuery))
         .execute()
 
@@ -263,12 +263,12 @@ describe('subqueries', () => {
     it('IN subquery combined with other WHERE conditions', async () => {
       // Employees in Engineering AND salary > 110000
       const engQuery = db
-        .select(departments)
-        .columns(departments.id)
+        .select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Engineering'))
 
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(
           and(
             inSubquery(employees.departmentId, engQuery),
@@ -284,12 +284,12 @@ describe('subqueries', () => {
     it('nested subquery (subquery within subquery)', async () => {
       // Employees whose department has employees earning above overall average
       const avgQuery = db
-        .select(employees)
-        .columns(avg(employees.salary))
+        .select(avg(employees.salary))
+        .from(employees)
 
       // This is a non-correlated subquery: find employees above average salary
       const rows = await db
-        .select(employees)
+        .from(employees)
         .where(gt(employees.salary, subquery(avgQuery)))
         .orderBy(asc(employees.salary))
         .execute()

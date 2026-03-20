@@ -499,12 +499,12 @@ const db = quarry(mockSession)
 
 // -- exists returns ASTExists — accepts a QueryBuilder (e.g. SelectBuilder) --
 
-const _exists1: ASTExists = exists(db.select(users))
-const _exists2: ASTExpr = exists(db.select(users))
+const _exists1: ASTExists = exists(db.from(users))
+const _exists2: ASTExpr = exists(db.from(users))
 
 // -- Select returns array of InferSelect --
 
-const selectResult = db.select(users).execute()
+const selectResult = db.from(users).execute()
 type SelectReturn = Awaited<typeof selectResult>
 const _sr: SelectReturn = undefined as unknown as UserSelect[]
 
@@ -535,7 +535,7 @@ const _drRows: InferSelect<typeof users>[] = _dr.rows
 // -- Transaction returns the callback's return type --
 
 const txResult1 = db.transaction(async (tx) => {
-  const rows = await tx.select(users).execute()
+  const rows = await tx.from(users).execute()
   return rows.length
 })
 type TxReturn1 = Awaited<typeof txResult1>
@@ -553,7 +553,7 @@ const _tx2: InferSelect<typeof users> = undefined as unknown as TxReturn2
 // ══════════════════════════════════════════════════════════════════════
 
 // Inner join: result is intersection
-const innerJoinQuery = db.select(users).innerJoin(posts, eq(users.id, posts.userId))
+const innerJoinQuery = db.from(users).innerJoin(posts, eq(users.id, posts.userId))
 type InnerJoinResult = Awaited<ReturnType<typeof innerJoinQuery.execute>>[number]
 
 const ijRow: InnerJoinResult = {
@@ -570,7 +570,7 @@ const _badIjTitle: InnerJoinResult['title'] = null as null
 const _badIjName: InnerJoinResult['name'] = null as null
 
 // Left join: joined table columns become nullable
-const leftJoinQuery = db.select(users).leftJoin(posts, eq(users.id, posts.userId))
+const leftJoinQuery = db.from(users).leftJoin(posts, eq(users.id, posts.userId))
 type LeftJoinResult = Awaited<ReturnType<typeof leftJoinQuery.execute>>[number]
 
 const ljRowNulls: LeftJoinResult = {
@@ -584,7 +584,7 @@ const _badLjName: LeftJoinResult['name'] = null as null
 
 // Multi-join: inner + left
 const multiJoinQuery = db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .leftJoin(comments, eq(posts.id, comments.postId))
 type MultiJoinResult = Awaited<ReturnType<typeof multiJoinQuery.execute>>[number]
@@ -606,7 +606,7 @@ const _badMjTitle: MultiJoinResult['title'] = null as null
 
 // Chaining preserves types
 const chainedQuery = db
-  .select(users)
+  .from(users)
   .innerJoin(posts, eq(users.id, posts.userId))
   .where(eq(users.name, 'Alice'))
   .orderBy(asc(posts.title))
@@ -621,7 +621,7 @@ const np: NullablePosts = { id: null, userId: null, title: null, body: null }
 
 // Double left join
 const doubleLeftQuery = db
-  .select(users)
+  .from(users)
   .leftJoin(posts, eq(users.id, posts.userId))
   .leftJoin(comments, eq(posts.id, comments.postId))
 type DoubleLeftResult = Awaited<ReturnType<typeof doubleLeftQuery.execute>>[number]
@@ -698,7 +698,7 @@ import { subquery, inSubquery, notInSubquery } from '@petradb/quarry'
 
 // -- subquery() accepts QueryBuilder and returns ASTSubquery --
 
-const selectBuilder = db.select(users).columns(users.id)
+const selectBuilder = db.select(users.id).from(users)
 
 const subq = subquery(selectBuilder)
 const _subqType: ASTSubquery = subq
@@ -832,13 +832,13 @@ const _u2NameCheck: U2Name = 'u2'
 
 // -- Aliased table works with select --
 
-const aliasedSelect = db.select(u1).execute()
+const aliasedSelect = db.from(u1).execute()
 type AliasedSelectResult = Awaited<typeof aliasedSelect>
 const _asrCheck: AliasedSelectResult = undefined as unknown as InferSelect<typeof u1>[]
 
 // -- Self-join preserves both aliases' types --
 
-const selfJoinQuery = db.select(u1).innerJoin(u2, eq(u1.id, u2.id))
+const selfJoinQuery = db.from(u1).innerJoin(u2, eq(u1.id, u2.id))
 type SelfJoinResult = Awaited<ReturnType<typeof selfJoinQuery.execute>>[number]
 // Both aliases have InferSelect<users> shape
 const _sjName: string = undefined as unknown as SelfJoinResult['name']
@@ -846,7 +846,7 @@ const _sjAge: number | null = undefined as unknown as SelfJoinResult['age']
 
 // -- Left join with alias makes joined columns nullable --
 
-const leftAliasQuery = db.select(u1).leftJoin(u2, eq(u1.id, u2.id))
+const leftAliasQuery = db.from(u1).leftJoin(u2, eq(u1.id, u2.id))
 type LeftAliasResult = Awaited<ReturnType<typeof leftAliasQuery.execute>>[number]
 const _laName: string | null = undefined as unknown as LeftAliasResult['name'] // nullable from left join
 
@@ -865,7 +865,7 @@ const _u3NameCheck: U3Name = 'u3'
 // ══════════════════════════════════════════════════════════════════════
 
 // Right join: base table columns become nullable, joined table columns are not
-const rightJoinQuery = db.select(users).rightJoin(posts, eq(users.id, posts.userId))
+const rightJoinQuery = db.from(users).rightJoin(posts, eq(users.id, posts.userId))
 type RightJoinResult = Awaited<ReturnType<typeof rightJoinQuery.execute>>[number]
 
 // Base table (users) becomes nullable after right join
@@ -878,7 +878,7 @@ const _rjTitle: string = undefined as unknown as RightJoinResult['title']
 const _badRjTitle: RightJoinResult['title'] = null as null
 
 // Full join: both sides become nullable
-const fullJoinQuery = db.select(users).fullJoin(posts, eq(users.id, posts.userId))
+const fullJoinQuery = db.from(users).fullJoin(posts, eq(users.id, posts.userId))
 type FullJoinResult = Awaited<ReturnType<typeof fullJoinQuery.execute>>[number]
 
 // Both sides become nullable
@@ -887,7 +887,7 @@ const _fjTitle: string | null = undefined as unknown as FullJoinResult['title']
 const _fjUserId: number | null = undefined as unknown as FullJoinResult['userId']
 
 // Cross join: no nullability change
-const crossJoinQuery = db.select(users).crossJoin(posts)
+const crossJoinQuery = db.from(users).crossJoin(posts)
 type CrossJoinResult = Awaited<ReturnType<typeof crossJoinQuery.execute>>[number]
 
 const _cjName: string = undefined as unknown as CrossJoinResult['name']
@@ -899,7 +899,7 @@ const _badCjTitle: CrossJoinResult['title'] = null as null
 
 // Cross join takes no on argument
 // @ts-expect-error — crossJoin only takes a table, not an on condition
-db.select(users).crossJoin(posts, eq(users.id, posts.userId))
+db.from(users).crossJoin(posts, eq(users.id, posts.userId))
 
 // ══════════════════════════════════════════════════════════════════════
 // 15. NULLS FIRST / LAST
@@ -949,17 +949,17 @@ const _filteredFilter: ASTExpr | undefined = _filtered.filter
 // ══════════════════════════════════════════════════════════════════════
 
 // distinctOn returns SelectBuilder with same result type
-const distinctOnQuery = db.select(users).distinctOn(users.name)
+const distinctOnQuery = db.from(users).distinctOn(users.name)
 type DistinctOnResult = Awaited<ReturnType<typeof distinctOnQuery.execute>>[number]
 const _doName: string = undefined as unknown as DistinctOnResult['name']
 const _doAge: number | null = undefined as unknown as DistinctOnResult['age']
 
 // distinctOn accepts multiple expressions
-const _doMulti = db.select(users).distinctOn(users.name, users.active)
+const _doMulti = db.from(users).distinctOn(users.name, users.active)
 
 // distinctOn is chainable with other clauses
 const _doChained = db
-  .select(users)
+  .from(users)
   .distinctOn(users.name)
   .orderBy(asc(users.name))
   .limit(10)
@@ -971,7 +971,7 @@ const _doChained = db
 // insertFrom accepts QueryBuilder and returns InsertSelectBuilder with correct table type
 const insertFromBuilder = db.insertFrom(
   users,
-  db.select(users).columns(users.name, users.email),
+  db.select(users.name, users.email).from(users),
   ['name', 'email'],
 )
 const _isb: InsertSelectBuilder<typeof users> = insertFromBuilder
@@ -983,14 +983,14 @@ const _ifrCheck: InsertFromReturn = undefined as unknown as InferSelect<typeof u
 
 // insertFrom columns are type-safe
 // @ts-expect-error — 'nonexistent' is not a column key
-db.insertFrom(users, db.select(users), ['nonexistent'])
+db.insertFrom(users, db.from(users), ['nonexistent'])
 
 // insertFrom without columns is valid
-const _isfNoCol = db.insertFrom(users, db.select(users))
+const _isfNoCol = db.insertFrom(users, db.from(users))
 
 // insertFrom supports chaining
 const _isfChain = db
-  .insertFrom(users, db.select(users), ['name', 'email'])
+  .insertFrom(users, db.from(users), ['name', 'email'])
   .onConflictDoNothing()
   .returning(users.id)
 
@@ -1060,8 +1060,8 @@ const _directGt: ASTExpr = gt(users.age, 21)
 const _directAnd: ASTExpr = and(eq(users.active, true), gt(users.age, 18))
 
 // Direct access works in builders
-const _directSelect = db.select(users).where(eq(users.name, 'Alice')).columns(users.name, users.email)
-const _directOrderBy = db.select(users).orderBy(asc(users.name))
+const _directSelect = db.select(users.name, users.email).from(users).where(eq(users.name, 'Alice'))
+const _directOrderBy = db.from(users).orderBy(asc(users.name))
 
 // @ts-expect-error — 'nonexistent' is not a column
 const _badDirect = users.nonexistent
@@ -1088,8 +1088,8 @@ const _u1Eq: ASTExpr = eq(u1.name, 'Alice')
 
 // Self-join with direct access
 const sjDirect = db
-  .select(u1)
-  .columns(u1.name, u2.name)
+  .select(u1.name, u2.name)
+  .from(u1)
   .innerJoin(u2, eq(u1.id, u2.id))
 
 // ══════════════════════════════════════════════════════════════════════

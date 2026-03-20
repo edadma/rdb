@@ -519,6 +519,28 @@ export class DeleteBuilder<T extends TableDef<any, any>> {
   }
 }
 
+// ── Fromable builder (intermediate — needs .from() to become a SelectBuilder) ──
+
+export class FromableBuilder {
+  private _session: QuarrySession
+  private _exprs: ASTExpr[]
+
+  /** @internal */
+  constructor(session: QuarrySession, exprs: ASTExpr[]) {
+    this._session = session
+    this._exprs = exprs
+  }
+
+  from<T extends TableDef<any, any>>(table: T): SelectBuilder<InferSelect<T>> {
+    return new SelectBuilder<InferSelect<T>>(this._session, {
+      tableExpr: tableToExpr(table),
+      columns: this._exprs.length > 0 ? this._exprs : [{ kind: 'star' }],
+      distinct: false,
+      joins: [],
+    })
+  }
+}
+
 // ── Quarry DB entry point ──
 
 export class QuarryDB {
@@ -528,7 +550,11 @@ export class QuarryDB {
     this._session = session
   }
 
-  select<T extends TableDef<any, any>>(table: T): SelectBuilder<InferSelect<T>> {
+  select(...exprs: ASTExpr[]): FromableBuilder {
+    return new FromableBuilder(this._session, exprs)
+  }
+
+  from<T extends TableDef<any, any>>(table: T): SelectBuilder<InferSelect<T>> {
     return new SelectBuilder<InferSelect<T>>(this._session, {
       tableExpr: tableToExpr(table),
       columns: [{ kind: 'star' }],

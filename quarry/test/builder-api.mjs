@@ -109,11 +109,11 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('inSubquery', () => {
     it('accepts a SelectBuilder directly', async () => {
-      const engDepts = db.select(departments)
-        .columns(departments.id)
+      const engDepts = db.select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Engineering'))
 
-      const rows = await db.select(employees)
+      const rows = await db.from(employees)
         .where(inSubquery(employees.departmentId, engDepts))
         .orderBy(asc(employees.name))
         .execute()
@@ -124,11 +124,11 @@ describe('builder-based API (no raw AST)', () => {
     })
 
     it('works with multi-value subquery builder', async () => {
-      const deptQuery = db.select(departments)
-        .columns(departments.id)
+      const deptQuery = db.select(departments.id)
+        .from(departments)
         .where(gt(departments.id, 1))
 
-      const rows = await db.select(employees)
+      const rows = await db.from(employees)
         .where(inSubquery(employees.departmentId, deptQuery))
         .orderBy(asc(employees.name))
         .execute()
@@ -141,11 +141,11 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('notInSubquery', () => {
     it('accepts a SelectBuilder directly', async () => {
-      const engDepts = db.select(departments)
-        .columns(departments.id)
+      const engDepts = db.select(departments.id)
+        .from(departments)
         .where(eq(departments.name, 'Engineering'))
 
-      const rows = await db.select(employees)
+      const rows = await db.from(employees)
         .where(notInSubquery(employees.departmentId, engDepts))
         .orderBy(asc(employees.name))
         .execute()
@@ -161,9 +161,9 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('subquery', () => {
     it('accepts a SelectBuilder for scalar comparison', async () => {
-      const avgSalary = db.select(employees).columns(avg(employees.salary))
+      const avgSalary = db.select(avg(employees.salary)).from(employees)
 
-      const rows = await db.select(employees)
+      const rows = await db.from(employees)
         .where(gt(employees.salary, subquery(avgSalary)))
         .orderBy(asc(employees.name))
         .execute()
@@ -175,12 +175,12 @@ describe('builder-based API (no raw AST)', () => {
     })
 
     it('accepts a SelectBuilder as selected column', async () => {
-      const maxSal = db.select(employees)
-        .columns(max(employees.salary))
+      const maxSal = db.select(max(employees.salary))
+        .from(employees)
         .where(eq(employees.departmentId, departments.id))
 
-      const rows = await db.select(departments)
-        .columns(departments.name, alias(subquery(maxSal), 'max_salary'))
+      const rows = await db.select(departments.name, alias(subquery(maxSal), 'max_salary'))
+        .from(departments)
         .orderBy(asc(departments.name))
         .execute()
 
@@ -194,11 +194,11 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('exists', () => {
     it('accepts a SelectBuilder directly', async () => {
-      const leadsProject = db.select(projects)
-        .columns(projects.id)
+      const leadsProject = db.select(projects.id)
+        .from(projects)
         .where(eq(projects.leadId, employees.id))
 
-      const rows = await db.select(employees)
+      const rows = await db.from(employees)
         .where(exists(leadsProject))
         .orderBy(asc(employees.name))
         .execute()
@@ -213,13 +213,13 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('insertFrom', () => {
     it('accepts a SelectBuilder directly', async () => {
-      const activeProducts = db.select(products)
-        .columns(products.name, products.price, products.category)
+      const activeProducts = db.select(products.name, products.price, products.category)
+        .from(products)
         .where(eq(products.active, true))
 
       await db.insertFrom(archive, activeProducts, ['name', 'price', 'category']).execute()
 
-      const archived = await db.select(archive).orderBy(asc(archive.name)).execute()
+      const archived = await db.from(archive).orderBy(asc(archive.name)).execute()
       assert.equal(archived.length, 2)
       const names = archived.map((r) => r.name).sort()
       assert.deepStrictEqual(names, ['Gadget', 'Widget'])
@@ -230,8 +230,8 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('executeQuery', () => {
     it('accepts a SelectBuilder directly', async () => {
-      const query = db.select(employees)
-        .columns(employees.name)
+      const query = db.select(employees.name)
+        .from(employees)
         .orderBy(asc(employees.name))
         .limit(2)
 
@@ -242,11 +242,11 @@ describe('builder-based API (no raw AST)', () => {
     })
 
     it('accepts a SetOperationBuilder directly', async () => {
-      const eng = db.select(employees)
-        .columns(employees.name)
+      const eng = db.select(employees.name)
+        .from(employees)
         .where(eq(employees.departmentId, 1))
-      const sales = db.select(employees)
-        .columns(employees.name)
+      const sales = db.select(employees.name)
+        .from(employees)
         .where(eq(employees.departmentId, 3))
 
       const rows = await db.executeQuery(eng.union(sales))
@@ -258,8 +258,8 @@ describe('builder-based API (no raw AST)', () => {
 
   describe('withCTE', () => {
     it('accepts SelectBuilder for CTE queries and main query', async () => {
-      const cteQuery = db.select(employees)
-        .columns(employees.departmentId, alias(sum(employees.salary), 'total'))
+      const cteQuery = db.select(employees.departmentId, alias(sum(employees.salary), 'total'))
+        .from(employees)
         .groupBy(employees.departmentId)
 
       const deptTotals = table('dept_totals', {
@@ -267,7 +267,7 @@ describe('builder-based API (no raw AST)', () => {
         total: integer('total'),
       })
 
-      const mainQuery = db.select(deptTotals).orderBy(desc(deptTotals.total))
+      const mainQuery = db.from(deptTotals).orderBy(desc(deptTotals.total))
 
       const rows = await db.executeQuery(
         withCTE([{ name: 'dept_totals', query: cteQuery }], mainQuery),
@@ -277,8 +277,8 @@ describe('builder-based API (no raw AST)', () => {
     })
 
     it('CTE with column aliases and builder queries', async () => {
-      const cteQuery = db.select(employees)
-        .columns(employees.departmentId, alias(count(), 'c'))
+      const cteQuery = db.select(employees.departmentId, alias(count(), 'c'))
+        .from(employees)
         .groupBy(employees.departmentId)
 
       const deptCounts = table('dept_counts', {
@@ -286,7 +286,7 @@ describe('builder-based API (no raw AST)', () => {
         headcount: integer('headcount'),
       })
 
-      const mainQuery = db.select(deptCounts)
+      const mainQuery = db.from(deptCounts)
 
       const rows = await db.executeQuery(
         withCTE(

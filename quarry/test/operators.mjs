@@ -124,7 +124,7 @@ describe('new operators and expressions', () => {
     })
 
     it('op() executes with a custom operator', async () => {
-      const rows = await db.select(items).where(op(items.price, '>=', 100)).execute()
+      const rows = await db.from(items).where(op(items.price, '>=', 100)).execute()
       assert.ok(rows.length >= 2) // Widget(100), Gadget(250)
     })
 
@@ -139,20 +139,20 @@ describe('new operators and expressions', () => {
 
   describe('pattern matching', () => {
     it('notLike excludes matching patterns', async () => {
-      const rows = await db.select(items).where(notLike(items.name, 'G%')).execute()
+      const rows = await db.from(items).where(notLike(items.name, 'G%')).execute()
       for (const row of rows) {
         assert.ok(!row.name.startsWith('G'))
       }
     })
 
     it('ilike matches case-insensitively', async () => {
-      const rows = await db.select(items).where(ilike(items.name, 'widget')).execute()
+      const rows = await db.from(items).where(ilike(items.name, 'widget')).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Widget')
     })
 
     it('notIlike excludes case-insensitive matches', async () => {
-      const rows = await db.select(items).where(notIlike(items.name, 'widget')).execute()
+      const rows = await db.from(items).where(notIlike(items.name, 'widget')).execute()
       for (const row of rows) {
         assert.notEqual(row.name.toLowerCase(), 'widget')
       }
@@ -164,14 +164,14 @@ describe('new operators and expressions', () => {
   describe('IS DISTINCT FROM', () => {
     it('isDistinctFrom treats null as a regular value', async () => {
       // null IS DISTINCT FROM null => false, null IS DISTINCT FROM 100 => true
-      const rows = await db.select(items).where(isDistinctFrom(items.price, null)).execute()
+      const rows = await db.from(items).where(isDistinctFrom(items.price, null)).execute()
       for (const row of rows) {
         assert.notEqual(row.price, null)
       }
     })
 
     it('isNotDistinctFrom matches null with null', async () => {
-      const rows = await db.select(items).where(isNotDistinctFrom(items.price, null)).execute()
+      const rows = await db.from(items).where(isNotDistinctFrom(items.price, null)).execute()
       assert.equal(rows.length, 1)
       assert.equal(rows[0].name, 'Doohickey')
     })
@@ -181,28 +181,28 @@ describe('new operators and expressions', () => {
 
   describe('boolean tests', () => {
     it('isTrue filters true values', async () => {
-      const rows = await db.select(items).where(isTrue(items.active)).execute()
+      const rows = await db.from(items).where(isTrue(items.active)).execute()
       for (const row of rows) {
         assert.equal(row.active, true)
       }
     })
 
     it('isFalse filters false values', async () => {
-      const rows = await db.select(items).where(isFalse(items.active)).execute()
+      const rows = await db.from(items).where(isFalse(items.active)).execute()
       for (const row of rows) {
         assert.equal(row.active, false)
       }
     })
 
     it('isNotTrue includes false and null', async () => {
-      const rows = await db.select(items).where(isNotTrue(items.active)).execute()
+      const rows = await db.from(items).where(isNotTrue(items.active)).execute()
       for (const row of rows) {
         assert.notEqual(row.active, true)
       }
     })
 
     it('isNotFalse includes true and null', async () => {
-      const rows = await db.select(items).where(isNotFalse(items.active)).execute()
+      const rows = await db.from(items).where(isNotFalse(items.active)).execute()
       for (const row of rows) {
         assert.notEqual(row.active, false)
       }
@@ -213,7 +213,7 @@ describe('new operators and expressions', () => {
 
   describe('BETWEEN variants', () => {
     it('notBetween excludes range', async () => {
-      const rows = await db.select(items).where(notBetween(items.price, 50, 100)).execute()
+      const rows = await db.from(items).where(notBetween(items.price, 50, 100)).execute()
       for (const row of rows) {
         assert.ok(row.price < 50 || row.price > 100)
       }
@@ -221,14 +221,14 @@ describe('new operators and expressions', () => {
 
     it('betweenSymmetric works regardless of order', async () => {
       // betweenSymmetric(price, 200, 50) should match 50-200 range
-      const rows = await db.select(items).where(betweenSymmetric(items.price, 200, 50)).execute()
+      const rows = await db.from(items).where(betweenSymmetric(items.price, 200, 50)).execute()
       for (const row of rows) {
         assert.ok(row.price >= 50 && row.price <= 200)
       }
     })
 
     it('notBetweenSymmetric excludes range regardless of order', async () => {
-      const rows = await db.select(items).where(notBetweenSymmetric(items.price, 200, 50)).execute()
+      const rows = await db.from(items).where(notBetweenSymmetric(items.price, 200, 50)).execute()
       for (const row of rows) {
         assert.ok(row.price < 50 || row.price > 200)
       }
@@ -240,8 +240,8 @@ describe('new operators and expressions', () => {
   describe('arithmetic operators', () => {
     it('mod calculates remainder', async () => {
       const rows = await db
-        .select(items)
-        .columns(items.name, alias(mod(items.price, 100), 'remainder'))
+        .select(items.name, alias(mod(items.price, 100), 'remainder'))
+        .from(items)
         .where(eq(items.name, 'Gadget'))
         .execute()
       assert.equal(rows[0].remainder, 50) // 250 % 100 = 50
@@ -249,8 +249,8 @@ describe('new operators and expressions', () => {
 
     it('pow calculates exponentiation', async () => {
       const rows = await db
-        .select(items)
-        .columns(items.name, alias(pow(items.price, 2), 'squared'))
+        .select(items.name, alias(pow(items.price, 2), 'squared'))
+        .from(items)
         .where(eq(items.name, 'Gizmo'))
         .execute()
       assert.equal(rows[0].squared, 2500) // 50^2
@@ -258,8 +258,8 @@ describe('new operators and expressions', () => {
 
     it('neg negates a value', async () => {
       const rows = await db
-        .select(items)
-        .columns(items.name, alias(neg(items.price), 'neg_price'))
+        .select(items.name, alias(neg(items.price), 'neg_price'))
+        .from(items)
         .where(eq(items.name, 'Widget'))
         .execute()
       assert.equal(rows[0].neg_price, -100)
@@ -271,8 +271,8 @@ describe('new operators and expressions', () => {
   describe('string concat', () => {
     it('concat joins strings with ||', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(concat(items.name, ' item'), 'label'))
+        .select(alias(concat(items.name, ' item'), 'label'))
+        .from(items)
         .where(eq(items.name, 'Widget'))
         .execute()
       assert.equal(rows[0].label, 'Widget item')
@@ -284,8 +284,8 @@ describe('new operators and expressions', () => {
   describe('bitwise operators', () => {
     it('bitAnd computes bitwise AND', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(bitAnd(items.price, 0xFF), 'masked'))
+        .select(alias(bitAnd(items.price, 0xFF), 'masked'))
+        .from(items)
         .where(eq(items.name, 'Gadget'))
         .execute()
       assert.equal(rows[0].masked, 250 & 0xFF)
@@ -293,8 +293,8 @@ describe('new operators and expressions', () => {
 
     it('bitOr computes bitwise OR', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(bitOr(items.price, 1), 'result'))
+        .select(alias(bitOr(items.price, 1), 'result'))
+        .from(items)
         .where(eq(items.name, 'Widget'))
         .execute()
       assert.equal(rows[0].result, 100 | 1) // 101
@@ -302,8 +302,8 @@ describe('new operators and expressions', () => {
 
     it('bitXor computes bitwise XOR', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(bitXor(items.price, 0xFF), 'result'))
+        .select(alias(bitXor(items.price, 0xFF), 'result'))
+        .from(items)
         .where(eq(items.name, 'Gizmo'))
         .execute()
       assert.equal(rows[0].result, 50 ^ 0xFF)
@@ -311,8 +311,8 @@ describe('new operators and expressions', () => {
 
     it('bitNot computes bitwise NOT', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(bitNot(items.price), 'result'))
+        .select(alias(bitNot(items.price), 'result'))
+        .from(items)
         .where(eq(items.name, 'Gizmo'))
         .execute()
       assert.equal(rows[0].result, ~50)
@@ -320,8 +320,8 @@ describe('new operators and expressions', () => {
 
     it('leftShift shifts bits left', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(leftShift(items.price, 2), 'result'))
+        .select(alias(leftShift(items.price, 2), 'result'))
+        .from(items)
         .where(eq(items.name, 'Gizmo'))
         .execute()
       assert.equal(rows[0].result, 50 << 2) // 200
@@ -329,8 +329,8 @@ describe('new operators and expressions', () => {
 
     it('rightShift shifts bits right', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(rightShift(items.price, 1), 'result'))
+        .select(alias(rightShift(items.price, 1), 'result'))
+        .from(items)
         .where(eq(items.name, 'Widget'))
         .execute()
       assert.equal(rows[0].result, 100 >> 1) // 50
@@ -396,8 +396,7 @@ describe('new operators and expressions', () => {
 
     it('caseWhen executes correctly', async () => {
       const rows = await db
-        .select(items)
-        .columns(
+        .select(
           items.name,
           alias(
             caseWhen(
@@ -410,6 +409,7 @@ describe('new operators and expressions', () => {
             'tier',
           ),
         )
+        .from(items)
         .where(isNotNull(items.price))
         .orderBy(desc(items.price))
         .execute()
@@ -440,8 +440,8 @@ describe('new operators and expressions', () => {
 
     it('cast executes correctly', async () => {
       const rows = await db
-        .select(items)
-        .columns(items.name, alias(cast(items.price, 'text'), 'price_text'))
+        .select(items.name, alias(cast(items.price, 'text'), 'price_text'))
+        .from(items)
         .where(eq(items.name, 'Widget'))
         .execute()
       assert.equal(typeof rows[0].price_text, 'string')
@@ -453,7 +453,7 @@ describe('new operators and expressions', () => {
 
   describe('EXISTS expression', () => {
     it('exists accepts a builder and produces correct AST', () => {
-      const subq = db.select(items).where(eq(items.name, 'Widget'))
+      const subq = db.from(items).where(eq(items.name, 'Widget'))
       const expr = exists(subq)
       assert.equal(expr.kind, 'exists')
       assert.equal(expr.subquery.kind, 'select')
@@ -465,8 +465,8 @@ describe('new operators and expressions', () => {
   describe('aggregate functions', () => {
     it('stringAgg concatenates values', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(stringAgg(items.name, ', '), 'names'))
+        .select(alias(stringAgg(items.name, ', '), 'names'))
+        .from(items)
         .where(isNotNull(items.price))
         .execute()
       const names = rows[0].names.split(', ').sort()
@@ -475,8 +475,8 @@ describe('new operators and expressions', () => {
 
     it('arrayAgg collects values into array', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(arrayAgg(items.price), 'prices'))
+        .select(alias(arrayAgg(items.price), 'prices'))
+        .from(items)
         .where(isNotNull(items.price))
         .execute()
       const prices = rows[0].prices.sort((a, b) => a - b)
@@ -484,19 +484,19 @@ describe('new operators and expressions', () => {
     })
 
     it('boolAnd returns AND of all values', async () => {
-      const rows = await db.select(items).columns(alias(boolAnd(items.active), 'all_active')).execute()
+      const rows = await db.select(alias(boolAnd(items.active), 'all_active')).from(items).execute()
       assert.equal(rows[0].all_active, false) // one is false
     })
 
     it('boolOr returns OR of all values', async () => {
-      const rows = await db.select(items).columns(alias(boolOr(items.active), 'any_active')).execute()
+      const rows = await db.select(alias(boolOr(items.active), 'any_active')).from(items).execute()
       assert.equal(rows[0].any_active, true)
     })
 
     it('jsonAgg collects values into JSON array', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(jsonAgg(items.name), 'names'))
+        .select(alias(jsonAgg(items.name), 'names'))
+        .from(items)
         .where(inList(items.name, ['Widget', 'Gizmo']))
         .execute()
       const names = rows[0].names.sort()
@@ -505,8 +505,8 @@ describe('new operators and expressions', () => {
 
     it('jsonObjectAgg builds key-value object', async () => {
       const rows = await db
-        .select(items)
-        .columns(alias(jsonObjectAgg(items.name, items.price), 'price_map'))
+        .select(alias(jsonObjectAgg(items.name, items.price), 'price_map'))
+        .from(items)
         .where(isNotNull(items.price))
         .execute()
       const map = rows[0].price_map
@@ -609,7 +609,7 @@ describe('new operators and expressions', () => {
     })
 
     it('exists creates correct AST', () => {
-      const expr = exists(db.select(items))
+      const expr = exists(db.from(items))
       assert.equal(expr.kind, 'exists')
     })
   })

@@ -245,7 +245,7 @@ describe('transactions', () => {
       await tx.update(accounts).set({ balance: 600 }).where(eq(accounts.name, 'Bob')).execute()
     })
 
-    const rows = await db.select(accounts).orderBy(asc(accounts.name)).execute()
+    const rows = await db.from(accounts).orderBy(asc(accounts.name)).execute()
     assert.equal(rows[0].name, 'Alice')
     assert.equal(rows[0].balance, 900)
     assert.equal(rows[1].name, 'Bob')
@@ -253,7 +253,7 @@ describe('transactions', () => {
   })
 
   it('rolls back on error', async () => {
-    const aliceBefore = (await db.select(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
+    const aliceBefore = (await db.from(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
 
     await assert.rejects(async () => {
       await db.transaction(async (tx) => {
@@ -262,13 +262,13 @@ describe('transactions', () => {
       })
     }, /simulated failure/)
 
-    const aliceAfter = (await db.select(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
+    const aliceAfter = (await db.from(accounts).where(eq(accounts.name, 'Alice')).execute())[0].balance
     assert.equal(aliceAfter, aliceBefore)
   })
 
   it('returns the value from the callback', async () => {
     const result = await db.transaction(async (tx) => {
-      const rows = await tx.select(accounts).where(eq(accounts.name, 'Alice')).execute()
+      const rows = await tx.from(accounts).where(eq(accounts.name, 'Alice')).execute()
       return rows[0].balance
     })
     assert.equal(typeof result, 'number')
@@ -281,12 +281,12 @@ describe('transactions', () => {
 
       await tx.update(accounts).set({ balance: 300 }).where(eq(accounts.name, 'Charlie')).execute()
 
-      const rows = await tx.select(accounts).where(eq(accounts.name, 'Charlie')).execute()
+      const rows = await tx.from(accounts).where(eq(accounts.name, 'Charlie')).execute()
       assert.equal(rows[0].balance, 300)
     })
 
     // Verify committed
-    const rows = await db.select(accounts).where(eq(accounts.name, 'Charlie')).execute()
+    const rows = await db.from(accounts).where(eq(accounts.name, 'Charlie')).execute()
     assert.equal(rows.length, 1)
     assert.equal(rows[0].balance, 300)
   })
