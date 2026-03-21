@@ -1,6 +1,6 @@
 {
   "name": "@petradb/quarry",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Type-safe query builder for PetraDB — generates AST, not SQL strings",
   "type": "module",
   "exports": {
