@@ -328,7 +328,11 @@ info "Installing @petradb/quarry@${QUARRY_NPM_VERSION} from npm..."
 
 cat > "$QUARRY_DIR/smoke.mjs" <<'JS'
 import { Session } from '@petradb/engine';
-import { quarry, table, serial, text, integer, boolean, eq, gt, asc, count, alias } from '@petradb/quarry';
+import {
+  quarry, table, serial, text, integer, boolean,
+  eq, gt, avg, count, alias, asc,
+  inSubquery, subquery, exists, withCTE,
+} from '@petradb/quarry';
 
 const users = table('users', {
   id: serial('id').primaryKey(),
@@ -338,10 +342,17 @@ const users = table('users', {
   active: boolean('active').notNull().default(true),
 });
 
+const posts = table('posts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  title: text('title').notNull(),
+});
+
 const session = new Session();
 const db = quarry(session);
 
 await db.createTable(users);
+await db.createTable(posts);
 
 // Insert
 const [alice] = await db.insert(users).values({ name: 'Alice', email: 'alice@test.com', age: 30 }).execute();
@@ -349,15 +360,48 @@ if (alice.name !== 'Alice') throw new Error(`Expected Alice, got ${alice.name}`)
 
 await db.insert(users).values({ name: 'Bob', email: 'bob@test.com', age: 25, active: false }).execute();
 await db.insert(users).values({ name: 'Carol', email: 'carol@test.com', age: 35 }).execute();
+await db.insert(posts).values({ userId: 1, title: 'Hello' }, { userId: 3, title: 'World' }).execute();
 
-// Select with WHERE
-const active = await db.select(users).where(eq(users.active, true)).orderBy(asc(users.name)).execute();
-if (active.length !== 2) throw new Error(`Expected 2 active users, got ${active.length}`);
+// db.from (SELECT *)
+const all = await db.from(users).execute();
+if (all.length !== 3) throw new Error(`Expected 3, got ${all.length}`);
+
+// db.select(cols).from(table)
+const active = await db.select(users.name).from(users).where(eq(users.active, true)).orderBy(asc(users.name)).execute();
+if (active.length !== 2) throw new Error(`Expected 2 active, got ${active.length}`);
 if (active[0].name !== 'Alice') throw new Error(`Expected Alice first, got ${active[0].name}`);
 
-// Select with aggregate
-const rows = await db.select(users).columns(alias(count(), 'total')).execute();
+// Aggregate
+const rows = await db.select(alias(count(), 'total')).from(users).execute();
 if (rows[0].total !== 3) throw new Error(`Expected count 3, got ${rows[0].total}`);
+
+// inSubquery (builder, no .toExpr())
+const withPosts = await db.from(users)
+  .where(inSubquery(users.id, db.select(posts.userId).from(posts)))
+  .orderBy(asc(users.name))
+  .execute();
+if (withPosts.length !== 2) throw new Error(`Expected 2 users with posts, got ${withPosts.length}`);
+
+// subquery scalar (builder, no .toExpr())
+const aboveAvg = await db.from(users)
+  .where(gt(users.age, subquery(db.select(avg(users.age)).from(users))))
+  .execute();
+if (aboveAvg.length !== 1 || aboveAvg[0].name !== 'Carol') throw new Error('subquery: expected Carol');
+
+// exists (builder, no .toExpr())
+const hasPost = await db.from(users)
+  .where(exists(db.select(posts.id).from(posts).where(eq(posts.userId, users.id))))
+  .orderBy(asc(users.name))
+  .execute();
+if (hasPost.length !== 2) throw new Error(`exists: expected 2, got ${hasPost.length}`);
+
+// withCTE + executeQuery (both accept builders)
+const cteDef = table('user_counts', { active: boolean('active'), cnt: integer('cnt') });
+const cteQuery = db.select(users.active, alias(count(), 'cnt')).from(users).groupBy(users.active);
+const cteResult = await db.executeQuery(
+  withCTE([{ name: 'user_counts', query: cteQuery }], db.from(cteDef)),
+);
+if (cteResult.length !== 2) throw new Error(`CTE: expected 2 groups, got ${cteResult.length}`);
 
 // Update
 const updated = await db.update(users).set({ age: 31 }).where(eq(users.name, 'Alice')).execute();
@@ -368,7 +412,7 @@ const deleted = await db.delete(users).where(eq(users.name, 'Bob')).execute();
 if (deleted.rowCount !== 1) throw new Error(`Expected 1 deleted, got ${deleted.rowCount}`);
 
 // Verify final state
-const remaining = await db.select(users).orderBy(asc(users.name)).execute();
+const remaining = await db.from(users).orderBy(asc(users.name)).execute();
 if (remaining.length !== 2) throw new Error(`Expected 2 remaining, got ${remaining.length}`);
 if (remaining[0].age !== 31) throw new Error(`Expected Alice age 31, got ${remaining[0].age}`);
 
@@ -376,7 +420,7 @@ console.log('OK');
 JS
 
 OUT=$(cd "$QUARRY_DIR" && run_node smoke.mjs)
-check_output "Schema, insert, select, where, aggregate, update, delete" "OK" "$OUT"
+check_output "Schema, CRUD, db.from, db.select().from, subqueries, CTE" "OK" "$OUT"
 
 
 # ── 6. Python: pip install petradb ────────────────────────────────────────────
