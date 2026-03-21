@@ -2,6 +2,49 @@
 title: Changelog
 ---
 
+## v1.5-20260320
+
+### Quarry — API Redesign
+
+**Select API** — reads like SQL now:
+
+```typescript
+// Old
+db.select(users).columns(users.name).where(eq(users.name, "Alice"))
+
+// New
+db.select(users.name).from(users).where(eq(users.name, "Alice"))
+db.from(users).where(eq(users.name, "Alice"))  // SELECT *
+```
+
+- `db.select(...exprs)` takes column expressions, returns `FromableBuilder`
+- `.from(table)` provides the table and returns `SelectBuilder`
+- `db.from(table)` is shorthand for `db.select().from(table)` (SELECT \*)
+- Old `db.select(table).columns(...)` pattern removed
+
+**Builder-based subqueries** — no more raw AST:
+
+```typescript
+// Old — required .toExpr() to extract raw AST
+const sub = db.select(posts).columns(posts.userId).toExpr()
+inSubquery(users.id, sub)
+
+// New — pass builders directly
+inSubquery(users.id, db.select(posts.userId).from(posts))
+```
+
+- `subquery()`, `exists()`, `inSubquery()`, `notInSubquery()` accept `QueryBuilder` (SelectBuilder or SetOperationBuilder)
+- `withCTE()` accepts builders for CTE queries and main query, returns `QueryBuilder`
+- `insertFrom()` and `executeQuery()` accept builders directly
+- `toExpr()` marked `@internal` — no longer part of the public API
+- `ToCreateAST` removed from public exports
+
+### Version Bumps
+
+| Component | Version |
+|-----------|---------|
+| quarry | @petradb/quarry 1.5.2 |
+
 ## v1.5-20260317
 
 ### Bug Fixes
