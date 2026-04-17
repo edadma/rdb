@@ -2,51 +2,161 @@
 title: 変更履歴
 ---
 
+## v1.5-20260417
+
+### SQL Compatibility Fixes
+
+Four fixes to improve PostgreSQL compatibility:
+
+- **`type` as column name** — removed `type` from the reserved words list so it can be used as an unquoted column name, matching PostgreSQL behavior
+- **Self-referential foreign keys** — `CREATE TABLE` with a column that `REFERENCES` the same table no longer fails; FK validation is deferred until after the table is created
+- **Text-to-timestamp coercion** — text values (e.g., ISO-8601 strings from query parameters) can now be compared to `TIMESTAMP`, `TIMESTAMPTZ`, and `DATE` columns without explicit casts
+- **Scalar subquery expressions** — parenthesized subqueries like `(SELECT count(*) FROM ...) = 0` now work in `WHERE` clauses and other expression positions
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.2 | — |
+| engine | 1.5.2 | @petradb/engine 1.5.2 |
+| cli | — | @petradb/cli 1.5.2 |
+| server | — | @petradb/server 1.5.2 |
+| jdbc | 1.5.2 | — |
+
+## v1.5-20260320
+
+### Quarry — API Redesign
+
+**Select API** — reads like SQL now:
+
+```typescript
+// Old
+db.select(users).columns(users.name).where(eq(users.name, "Alice"))
+
+// New
+db.select(users.name).from(users).where(eq(users.name, "Alice"))
+db.from(users).where(eq(users.name, "Alice"))  // SELECT *
+```
+
+- `db.select(...exprs)` takes column expressions, returns `FromableBuilder`
+- `.from(table)` provides the table and returns `SelectBuilder`
+- `db.from(table)` is shorthand for `db.select().from(table)` (SELECT \*)
+- Old `db.select(table).columns(...)` pattern removed
+
+**Builder-based subqueries** — no more raw AST:
+
+```typescript
+// Old — required .toExpr() to extract raw AST
+const sub = db.select(posts).columns(posts.userId).toExpr()
+inSubquery(users.id, sub)
+
+// New — pass builders directly
+inSubquery(users.id, db.select(posts.userId).from(posts))
+```
+
+- `subquery()`, `exists()`, `inSubquery()`, `notInSubquery()` accept `QueryBuilder` (SelectBuilder or SetOperationBuilder)
+- `withCTE()` accepts builders for CTE queries and main query, returns `QueryBuilder`
+- `insertFrom()` and `executeQuery()` accept builders directly
+- `toExpr()` marked `@internal` — no longer part of the public API
+- `ToCreateAST` removed from public exports
+
+### Version Bumps
+
+| Component | Version |
+|-----------|---------|
+| quarry | @petradb/quarry 1.5.2 |
+
+## v1.5-20260317
+
+### Bug Fixes
+
+- **JSON parser escape sequences** — fixed backslash escape handling (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) in JSON string values
+- **JSON top-level values** — the JSON parser now accepts all JSON value types (strings, numbers, booleans, null) at the top level, not just objects and arrays
+- **JSON path operators** — `#>` and `#>>` now correctly handle text array literals as path arguments
+- **JSON containment operators** — `@>` and `<@` now work correctly with text JSON literals (not just parsed JSON objects)
+- **Persistent DB auto-create** — `petradb_open_persistent` (C API) now auto-creates new databases instead of failing
+
+### Python Package
+
+- New `petradb` Python package with bundled native library (Linux x86_64)
+- SQLite-style API: `Database`, `Cursor`, context managers, parameterized queries
+- Persistent and in-memory modes
+- Published to PyPI
+
+### FFI Tests
+
+- Go FFI test suite for the C library
+- Python FFI test suite for the C library
+
+### Tooling
+
+- Quarry smoke test added to post-publish verification
+- Internationalization: 5 languages + Korean translations for docs site
+- `publish.sh` fix: uses `npx -p typescript tsc` to avoid wrong `tsc` package
+
+### Version Bumps
+
+All components bumped to 1.5.1 (Python to 1.5.2):
+
+| Component | Maven Central | npm | PyPI |
+|-----------|---------------|-----|------|
+| common | 1.5.1 | — | — |
+| engine | 1.5.1 | @petradb/engine 1.5.1 | — |
+| client | 1.5.1 | @petradb/client 1.5.1 | — |
+| server | — | @petradb/server 1.5.1 | — |
+| cli | — | @petradb/cli 1.5.1 | — |
+| jdbc | 1.5.1 | — | — |
+| drizzle | — | @petradb/drizzle 1.5.1 | — |
+| knex | — | @petradb/knex 1.5.1 | — |
+| lucid | — | @petradb/lucid 1.5.1 | — |
+| quarry | — | @petradb/quarry 1.5.1 | — |
+| python | — | — | petradb 1.5.2 |
+
 ## v1.5-20260315
 
-### PL/pgSQL — ストアドプロシージャ、関数、トリガー
+### PL/pgSQL — Stored Procedures, Functions, and Triggers
 
-DOブロック、ストアド関数、ストアドプロシージャにおける完全な手続き型言語サポートです。
+Full procedural language support in DO blocks, stored functions, and stored procedures:
 
-- **DOブロック** — DECLARE、BEGIN...ENDを持つ匿名PL/pgSQLブロック
-- **ストアド関数** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`、任意のSQL式で呼び出し可能
-- **ストアドプロシージャ** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`、`CALL`で呼び出し
-- **トリガー** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
-  - BEFOREトリガーはNULLを返すことで操作をキャンセルできます
-  - AFTERトリガーは操作の後に実行されます
-  - トリガーはINSERT、UPDATE、DELETE、COPY FROMで発火します
-  - TG_OP、TG_TABLE_NAME、OLD、NEW変数が利用可能です
-- **制御フロー** — IF/ELSIF/ELSE、WHILE LOOP、FORレンジ/クエリLOOP、RETURN、RAISE NOTICE/EXCEPTION、PERFORM、EXCEPTION WHEN
-- **永続化** — 関数、プロシージャ、トリガーはPersistentDBおよびTextDBでclose/reopenしても保持されます
-- **OR REPLACE** — 既存の関数やプロシージャを上書きできます
+- **DO blocks** — anonymous PL/pgSQL blocks with DECLARE, BEGIN...END
+- **Stored functions** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, callable in any SQL expression
+- **Stored procedures** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invoked with `CALL`
+- **Triggers** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
+  - BEFORE triggers can cancel operations by returning NULL
+  - AFTER triggers fire after the operation
+  - Triggers fire for INSERT, UPDATE, DELETE, and COPY FROM
+  - TG_OP, TG_TABLE_NAME, OLD, NEW variables available
+- **Control flow** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
+- **Persistence** — functions, procedures, and triggers survive close/reopen on PersistentDB and TextDB
+- **OR REPLACE** — overwrite existing functions and procedures
 
-### ユーザー定義ネイティブ関数
+### User-Defined Native Functions
 
-ホスト言語のコールバックをSQL関数として登録し、クエリ、トリガー、プロシージャから呼び出せます。
+Register host-language callbacks as SQL functions, callable from queries, triggers, and procedures:
 
 - **Scala** — `db.registerScalarFunction("name", { args => result })`
 - **JavaScript** — `session.registerFunction("name", (args) => result)`
-- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` SQLiteスタイルの型付きvalue/context API
+- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` with SQLite-style typed value/context API
 
-### Cライブラリとカーソル API
+### C Library and Cursor API
 
-- **ネイティブ共有ライブラリ** — Scala Nativeの`@exported`でC呼び出し可能な関数を持つ`libpetradb-engine.so`
-- **SQLiteスタイルのC API** — `petradb_open`、`petradb_exec`、`petradb_prepare/step/finalize`、型付きカラムアクセサ
-- **ユーザー定義関数** — `petradb_value_int/double/text`、`petradb_result_int/double/text/null/error`、`petradb_user_data`
-- **カーソルAPI** — `session.openCursor(sql)`による遅延行単位イテレーション、`step()`、型付きカラムアクセサ、`fetch(n)`、`move(n)`、パラメータ化クエリ
-- **Cヘッダー** — 完全なAPIドキュメント付きの`petradb.h`
-- **Cテストスイート** — 67テスト
-- **Rust FFIテスト** — 38テストで言語間相互運用を実証
+- **Native shared library** — `libpetradb-engine.so` via Scala Native with `@exported` C-callable functions
+- **SQLite-style C API** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, typed column accessors
+- **User-defined functions** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
+- **Cursor API** — `session.openCursor(sql)` for lazy row-by-row iteration with `step()`, typed column accessors, `fetch(n)`, `move(n)`, parameterized queries
+- **C header** — `petradb.h` with full API documentation
+- **C test suite** — 67 tests
+- **Rust FFI test** — 38 tests proving cross-language interop
 
-### 仮想テーブル
+### Virtual Tables
 
-- **拡張可能なフレームワーク** — `CREATE VIRTUAL TABLE name USING module(args)`、読み取り専用、SHOW TABLESに表示
-- **組み込みCSVモジュール** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` ヘッダー/デリミタオプション付き
-- **カスタムモジュール** — Scala APIの`db.registerVirtualTableModule("name", module)`
+- **Extensible framework** — `CREATE VIRTUAL TABLE name USING module(args)`, read-only, appears in SHOW TABLES
+- **Built-in CSV module** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` with header/delimiter options
+- **Custom modules** — `db.registerVirtualTableModule("name", module)` in Scala API
 
-### csv_file()テーブル関数
+### csv_file() Table Function
 
-インポートなしでCSVファイルを直接クエリできます。
+Query CSV files directly without importing:
 
 ```sql
 SELECT * FROM csv_file('data.csv');
@@ -54,67 +164,67 @@ SELECT e.name, d.dept FROM csv_file('employees.csv') e
   JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
 ```
 
-### 高度なインデックス
+### Advanced Indexes
 
-- **部分インデックス** — `CREATE INDEX ... WHERE condition` — 述語に一致する行のみをインデックス化
-- **式インデックス** — `CREATE INDEX ... ON table ((expr))` — `lower(email)`のような計算値をインデックス化
-- **組み合わせ** — 部分インデックスと式インデックスを併用可能
+- **Partial indexes** — `CREATE INDEX ... WHERE condition` — only index rows matching the predicate
+- **Expression indexes** — `CREATE INDEX ... ON table ((expr))` — index computed values like `lower(email)`
+- **Combined** — partial + expression indexes work together
 
-### ウィンドウ関数
+### Window Functions
 
-- **FIRST_VALUE(expr)** — ウィンドウフレームの最初の行の値
-- **LAST_VALUE(expr)** — ウィンドウフレームの最後の行の値
-- **NTH_VALUE(expr, n)** — フレームのn番目の行の値
+- **FIRST_VALUE(expr)** — value at the first row of the window frame
+- **LAST_VALUE(expr)** — value at the last row of the window frame
+- **NTH_VALUE(expr, n)** — value at the nth row of the frame
 
 ### DELETE ... USING
 
-PostgreSQL構文に準拠した複数テーブルの削除です。
+Multi-table deletes matching PostgreSQL syntax:
 
 ```sql
 DELETE FROM orders USING customers
 WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 ```
 
-### Quarry — 型安全なASTクエリビルダー
+### Quarry — Type-Safe AST Query Builder
 
-新しい`@petradb/quarry`パッケージ：SQL文字列ではなくASTオブジェクトを生成する型安全なクエリビルダーです。
+New `@petradb/quarry` package: type-safe query builder that generates AST objects (not SQL strings):
 
-- 21のカラム型によるスキーマ定義
-- 完全なCRUD：型安全なカラム参照によるselect、insert、update、delete
-- ジョイン：inner、left、right、full outer、cross（型付き結果）
-- 式：50以上の演算子、集計、CASE/CAST/EXISTS、サブクエリ
-- Upsert：`onConflictDoNothing()`、`onConflictDoUpdate()`
-- セルフジョイン用のテーブルエイリアス
-- トランザクション、RETURNING、DISTINCT ON
-- すべての機能に対するコンパイル時型テスト
-- 集合演算：UNION、INTERSECT、EXCEPT
-- ウィンドウ関数、CTE、名前付きスカラーヘルパー
+- Schema definition with 21 column types
+- Full CRUD: select, insert, update, delete with type-safe column references
+- Joins: inner, left, right, full outer, cross with typed results
+- Expressions: 50+ operators, aggregates, CASE/CAST/EXISTS, subqueries
+- Upsert: `onConflictDoNothing()`, `onConflictDoUpdate()`
+- Table aliases for self-joins
+- Transactions, RETURNING, DISTINCT ON
+- Compile-time type tests for all features
+- Set operations: UNION, INTERSECT, EXCEPT
+- Window functions, CTEs, named scalar helpers
 
-### バグ修正
+### Bug Fixes
 
-- **ByteaValue** — BYTEAカラムへの`ARRAY[...]`が`ArrayValue`ではなく正しく`ByteaValue`を生成するようになりました
-- **JS/Clientの結果型** — 非網羅的マッチによるクラッシュを防ぐため、欠落していたPL/pgSQL結果型ハンドラー（DoBlockResult、CreateFunctionResultなど）を追加しました
-- **コーデック** — クライアント/サーバー通信用のすべての新しい結果型のシリアライゼーションを追加しました
-- **llms.txt** — `type`フィールドを`command`フィールドに修正し、すべての結果型と機能を更新しました
+- **ByteaValue** — `ARRAY[...]` into BYTEA columns now correctly produces `ByteaValue` instead of `ArrayValue`
+- **JS/Client result types** — added missing PL/pgSQL result type handlers (DoBlockResult, CreateFunctionResult, etc.) to prevent non-exhaustive match crashes
+- **Codecs** — added serialization for all new result types for client/server communication
+- **llms.txt** — fixed `type` field to `command` field, updated all result types and features
 
-### モジュール名変更
+### Module Rename
 
-- **shared → common** — 共有型モジュールを`petradb-shared`から`petradb-common`に名称変更しました
+- **shared → common** — renamed the shared types module from `petradb-shared` to `petradb-common`
 
-### ドキュメント
+### Documentation
 
-- 新しい**PL/pgSQL**リファレンスページ（トリガー、関数、プロシージャ、制御フロー）
-- 新しい**C API**リファレンスページ（完全なSQLiteスタイルインターフェース）
-- JavaおよびCの新しい**はじめに**ガイド
-- DDLドキュメント更新：部分/式インデックス、CHECK制約、トリガー、ストアドルーチン
-- DMLドキュメント更新：DELETE...USING、csv_file()、仮想テーブル
-- JS/Scala APIドキュメント更新：registerFunction、結果型
-- ランディングページ：4つのはじめにボタン（JS、Java、Scala、C）
-- すべての現在の機能を含むllms.txtの書き換え
+- New **PL/pgSQL** reference page (triggers, functions, procedures, control flow)
+- New **C API** reference page (full SQLite-style interface)
+- New **Getting Started** guides for Java (JDBC) and C
+- Updated DDL docs: partial/expression indexes, CHECK constraints, triggers, stored routines
+- Updated DML docs: DELETE...USING, csv_file(), virtual tables
+- Updated JS/Scala API docs: registerFunction, result types
+- Landing page: four getting-started buttons (JS, Java, Scala, C)
+- Rewritten llms.txt with all current features
 
-### バージョンアップ
+### Version Bumps
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | common | 1.5.0 | — |
 | engine | 1.5.0 | @petradb/engine 1.5.0 |
@@ -129,19 +239,19 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260314
 
-### バグ修正と改善
+### Bug fixes & improvements
 
-- **相関INサブクエリの修正** — インデックス付きテーブルでの相関`IN (SELECT ...)`が正しく動作するようになりました
-- **修飾カラム解決** — 複雑なジョインでの曖昧なカラム参照の修正
-- **空のIN/ANY処理** — `IN ()`および`= ANY('{}')`のエッジケースを解決
-- **外部キーCASCADEクリーンアップ** — `DROP TABLE ... CASCADE`が子テーブルのFK制約を正しく削除するようになりました
-- **DROP TABLE IF EXISTS ... CASCADE** — `IF EXISTS`と`CASCADE`の組み合わせがパースエラーを起こさなくなりました
-- **配列リテラルのキャスト** — `'{1,2,3}'::integer[]` PostgreSQL配列リテラル構文のサポート
-- **パラメータ化クエリの修正** — サブクエリと相関パスのパラメータバインディングを改善
+- **Correlated IN subquery fix** — correlated `IN (SELECT ...)` with indexed tables now works correctly
+- **Qualified column resolution** — fixes for ambiguous column references in complex joins
+- **Empty IN/ANY handling** — `IN ()` and `= ANY('{}')` edge cases resolved
+- **Foreign key CASCADE cleanup** — `DROP TABLE ... CASCADE` now properly removes FK constraints on child tables
+- **DROP TABLE IF EXISTS ... CASCADE** — combining `IF EXISTS` with `CASCADE` no longer causes a parse error
+- **Array literal casting** — support for `'{1,2,3}'::integer[]` PostgreSQL array literal syntax
+- **Parameterized query fixes** — improved parameter binding for subqueries and correlated paths
 
-### バージョンアップ
+### Version bumps
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.2 | — |
 | engine | 1.4.9 | @petradb/engine 1.4.3 |
@@ -153,11 +263,11 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260312
 
-### 共通テーブル式（CTE）
+### Common Table Expressions (CTEs)
 
-`WITH`および`WITH RECURSIVE`による完全なCTEサポートです。
+Full CTE support with `WITH` and `WITH RECURSIVE`.
 
-**非再帰CTE** — 可読性と再利用のための名前付きサブクエリです。
+**Non-recursive CTEs** — named subqueries for readability and reuse:
 
 ```sql
 WITH active_orders AS (
@@ -168,9 +278,9 @@ FROM active_orders
 GROUP BY customer_id;
 ```
 
-単一クエリ内で複数のCTEを定義でき、後のCTEは先のCTEを参照できます。カラムエイリアスがサポートされています：`WITH t(x, y) AS (...)`。CTEは同名のテーブルをシャドウします。
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
 
-**再帰CTE** — 階層データやグラフデータのための反復クエリです。
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
 
 ```sql
 WITH RECURSIVE descendants(id, name, depth) AS (
@@ -182,13 +292,13 @@ WITH RECURSIVE descendants(id, name, depth) AS (
 SELECT name, depth FROM descendants ORDER BY depth, name;
 ```
 
-`UNION ALL`（重複保持）と`UNION`（重複排除）の両方がサポートされています。安全制限として最大1000回の反復です。
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
 
-### ウィンドウ関数
+### Window functions
 
-3つのカテゴリによる完全なウィンドウ関数サポートです。
+Full window function support with three categories:
 
-**ランキング関数** — `PARTITION BY`と`ORDER BY`を使った`ROW_NUMBER()`、`RANK()`、`DENSE_RANK()`です。
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
 
 ```sql
 SELECT name, department, salary,
@@ -196,7 +306,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-**値関数** — 設定可能なオフセットとデフォルト値を持つ`LAG()`、`LEAD()`、`NTILE()`です。
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
 
 ```sql
 SELECT name, salary,
@@ -205,7 +315,7 @@ SELECT name, salary,
 FROM employees;
 ```
 
-**集約ウィンドウ関数** — フレーム指定を含む、`OVER()`付きの任意の集約関数（`SUM`、`COUNT`、`AVG`、`MIN`、`MAX`など）です。
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
 
 ```sql
 SELECT name, salary,
@@ -214,11 +324,11 @@ SELECT name, salary,
 FROM employees;
 ```
 
-フレーム境界：`UNBOUNDED PRECEDING`、`UNBOUNDED FOLLOWING`、`CURRENT ROW`、`N PRECEDING`、`N FOLLOWING`。フレーム句がない場合、集約ウィンドウ関数はパーティション全体で計算されます。
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
 
-### 集約FILTER句
+### Aggregate FILTER clause
 
-グループ化クエリとウィンドウ関数の両方で、集約関数に`FILTER (WHERE ...)`を適用できます。
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
 
 ```sql
 SELECT
@@ -229,13 +339,13 @@ SELECT
 FROM orders;
 ```
 
-### ハッシュジョイン最適化
+### Hash join optimization
 
-インデックスのない等価結合がクロス積の代わりにハッシュジョイン戦略を使用するようになり、ジョインの計算量がO(n×m)からO(n+m)に削減されました。INNER、LEFT、RIGHT、FULLジョインに適用されます。インデックスが利用可能な場合はインデックスネストループジョインが優先されます。非等価結合条件は引き続きクロス積にフォールバックします。`EXPLAIN`出力では`Hash Join`、`Hash Left Join`、`Hash Right Join`、`Hash Full Join`として表示されます。
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
 
-### 生成カラム
+### Generated columns
 
-`GENERATED ALWAYS AS (expr) STORED`による計算カラムです。
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
 
 ```sql
 CREATE TABLE products (
@@ -245,39 +355,39 @@ CREATE TABLE products (
 );
 ```
 
-生成カラムはINSERTおよびUPDATE時に再計算されます。直接設定することはできません。
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
 
-### ORDER BY NULLの順序
+### ORDER BY null ordering
 
-`ORDER BY`がSQL標準のNULL順序をデフォルトとするようになりました：`ASC` → `NULLS LAST`、`DESC` → `NULLS FIRST`。明示的な`NULLS FIRST` / `NULLS LAST`によるオーバーライドがサポートされています。
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
 
-### シーケンスサポート
+### Sequence support
 
-PostgreSQL互換の完全なシーケンスサポートです。オプション付きの`CREATE SEQUENCE`および`DROP SEQUENCE`（`INCREMENT BY`、`START WITH`、`MINVALUE`、`MAXVALUE`、`CYCLE`、`IF NOT EXISTS` / `IF EXISTS`）。シーケンス関数：`nextval()`、`currval()`、`setval()`、`lastval()`。
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
 
-`SERIAL`、`SMALLSERIAL`、`BIGSERIAL`カラムがバッキングシーケンス（`<table>_<column>_seq`という名前）を作成するようになり、PostgreSQLの動作と一致します。`DROP TABLE`は所有シーケンスのドロップにカスケードします。`TRUNCATE`はバッキングシーケンスをリセットします。シーケンスの状態は完全にトランザクショナルです — `ROLLBACK`でシーケンスカウンターが復元されます。永続データベースはシーケンスの状態をカタログにシリアライズします。
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
 
-新しいSQLコマンド：`SHOW SEQUENCES`、`SHOW INDEXES`（すべてのテーブルのすべてのインデックス）。
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
 
-CLI：新しい`\ds`（シーケンス一覧）および`\di`（インデックス一覧）メタコマンド。
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
 
-### CREATE INDEX USING句
+### CREATE INDEX USING clause
 
-`CREATE INDEX ... USING btree`構文が受け入れられるようになりました（btreeが唯一のサポートされるメソッドです）。これによりPostgrSQL生成DDLおよびORMとの互換性が向上します。
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
 
-### バグ修正
+### Bug fixes
 
-- `ORDER BY`とNULL値：比較子が両方の値がNULLの場合に0を返すようになり、複数のソートキーでの非決定的なソート結果を修正しました
-- `ORDER BY`のエイリアス解決：SELECTエイリアス（例：`SELECT x AS y ... ORDER BY y`）がウィンドウ関数の有無にかかわらず、非グループ化クエリで正しく解決されるようになりました
-- `Type.convert()`のNULL処理：型変換を通過するNULL値（例：UPDATE SETのプリペアドステートメントパラメータ経由）が型のテキスト表現に変換される代わりにNULLとして保持されるようになりました。13型で修正：TEXT、VARCHAR、CHAR、UUID、TIMESTAMP、DATE、TIME、TIMETZ、INTERVAL、TIMESTAMPTZ、BYTEA、JSON、ENUM
-- ORDER BYパーサーのnulls句における網羅的マッチ警告
-- プレイグラウンドターミナルでの同期throwのサイレントエラー
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- `ORDER BY` alias resolution: SELECT aliases (e.g. `SELECT x AS y ... ORDER BY y`) now resolve correctly in non-grouped queries, both with and without window functions
+- `Type.convert()` null handling: NULL values passed through type conversion (e.g. via prepared statement parameters in UPDATE SET) are now preserved as NULL instead of being converted to the type's text representation. Fixed in 13 types: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
 
-### バージョンアップ
+### Version bumps
 
-すべてのコンポーネントが1.4.1にアップされました。
+All components bumped to 1.4.1:
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.1 | — |
 | engine | 1.4.1 | @petradb/engine 1.4.1 |
@@ -291,17 +401,17 @@ CLI：新しい`\ds`（シーケンス一覧）および`\di`（インデック�
 
 ## v1.3-20260309
 
-### トランザクショナルDDL
+### Transactional DDL
 
-DDL文（CREATE TABLE、CREATE INDEX、DROP TABLEなど）がトランザクション内で完全にサポートされるようになり、DMLとともにアトミックにロールバックされます。DDLとDMLは単一のBEGIN/COMMITブロック内で自由にインターリーブできます。MemoryDBとPersistentDBの両方がBEGIN時に完全なカタログスナップショットをキャプチャし、ROLLBACK時に復元します。
+DDL statements (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) are now fully supported inside transactions and roll back atomically with DML. DDL and DML can be freely interleaved within a single BEGIN/COMMIT block. Both MemoryDB and PersistentDB capture a full catalog snapshot at BEGIN time and restore it on ROLLBACK.
 
-### Drizzleリレーショナルクエリ
+### Drizzle relational queries
 
-Drizzle ORMリレーショナルクエリの完全サポート（`db.query.*.findMany()`、`db.query.*.findFirst()`）。`json_build_array`および`json_build_object`スカラー関数を追加し、LATERALサブクエリでのパラメータ置換を修正しました。
+Full support for Drizzle ORM relational queries (`db.query.*.findMany()`, `db.query.*.findFirst()`). Added `json_build_array` and `json_build_object` scalar functions, and fixed parameter substitution in LATERAL subqueries.
 
-### バージョンアップ
+### Version bumps
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | engine | 1.3.1 | @petradb/engine 1.3.3 |
 | server | 1.3.1 | @petradb/server 1.3.1 |
@@ -311,9 +421,9 @@ Drizzle ORMリレーショナルクエリの完全サポート（`db.query.*.fin
 
 ## v1.3-20260308
 
-### スキーマサポート
+### Schema support
 
-PostgreSQLスタイルのスキーマ名前空間です。すべてのデータベースにデフォルトで`public`スキーマがあり、非修飾テーブル名は`public`に解決されます。スキーマ修飾名（`schema.table`）はすべてのDDLおよびDML文で機能します — CREATE TABLE、INSERT、UPDATE、DELETE、SELECT、ALTER TABLE、DROP TABLE、TRUNCATE、CREATE INDEX、COPY。
+PostgreSQL-style schema namespaces. Every database has a `public` schema by default; unqualified table names resolve to `public`. Schema-qualified names (`schema.table`) work in all DDL and DML statements — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, and COPY.
 
 ```sql
 CREATE SCHEMA inventory;
@@ -322,28 +432,28 @@ INSERT INTO inventory.products (name) VALUES ('Widget');
 SELECT * FROM inventory.products;
 ```
 
-### information_schema仮想テーブル
+### information_schema virtual tables
 
-`information_schema.schemata`、`information_schema.tables`、`information_schema.columns`がクエリ可能になりました。スキーマ修飾テーブルは正しい`table_schema`を報告します。これらのビューはデータベースメタデータから動的に生成されます。
+`information_schema.schemata`, `information_schema.tables`, and `information_schema.columns` are now queryable. Schema-qualified tables report their correct `table_schema`. These views are generated dynamically from database metadata.
 
-### Drizzle ORMマイグレーション
+### Drizzle ORM migrations
 
-`@petradb/drizzle`の新しい`migrate()`関数がDrizzle Kitマイグレーションファイルを適用します。`meta/_journal.json`を読み取り、SQLマイグレーションファイルを順番に実行し、適用されたマイグレーションを`drizzle.__drizzle_migrations`で追跡します。
+New `migrate()` function in `@petradb/drizzle` applies Drizzle Kit migration files. Reads the `meta/_journal.json` and executes SQL migration files in order, tracking applied migrations in `drizzle.__drizzle_migrations`.
 
 ```typescript
 import { migrate } from "@petradb/drizzle";
 await migrate(db, { migrationsFolder: "./drizzle" });
 ```
 
-### JDBCメタデータの改善
+### JDBC metadata improvements
 
-`DatabaseMetaData.getColumns()`がカラム型と精度/スケール宣言に基づいて正確な`COLUMN_SIZE`、`DECIMAL_DIGITS`、`CHAR_OCTET_LENGTH`値を返すようになりました。
+`DatabaseMetaData.getColumns()` now returns accurate `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` values based on column type and precision/scale declarations.
 
-### バージョンアップ
+### Version bumps
 
-すべてのコンポーネントが1.3.0にアップされました。
+All components bumped to 1.3.0:
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.3.0 | — |
 | engine | 1.3.0 | @petradb/engine 1.3.0 |
@@ -357,49 +467,49 @@ await migrate(db, { migrationsFolder: "./drizzle" });
 
 ## v1.2-20260308
 
-### Drizzle ORMドライバーの書き換え
+### Drizzle ORM driver rewrite
 
-`@petradb/drizzle`が`drizzle-orm/pg-proxy`ラッパーから、`PgSession`/`PgPreparedQuery`/`PgTransaction`を直接拡張するカスタムPostgreSQLダイアレクトドライバーに書き換えられました。これにより`drizzle-orm/node-postgres`と完全な機能パリティが実現されました。
+`@petradb/drizzle` rewritten from a `drizzle-orm/pg-proxy` wrapper to a custom PostgreSQL dialect driver extending `PgSession`/`PgPreparedQuery`/`PgTransaction` directly. This gives full feature parity with `drizzle-orm/node-postgres`:
 
-- `db.transaction()` 自動コミット/ロールバック付き
-- `tx.rollback()` 明示的ロールバック用
-- `returning()` insert/update/delete（部分カラム選択を含む）
-- リレーショナルクエリサポート（エンジンの`json_build_array`/`json_agg`サポート待ち）
+- `db.transaction()` with automatic commit/rollback
+- `tx.rollback()` for explicit rollback
+- `returning()` on insert/update/delete (including partial column selection)
+- Relational query support (pending engine support for `json_build_array`/`json_agg`)
 
-### 型変換：テキストパラメータからNUMERICカラムへ
+### Type coercion: text parameters to NUMERIC columns
 
-`NumericType.convert`が`TextValue`を受け入れ、`BigDecimal`としてパースするようになり、`IntegerType`、`BigintType`、`SmallintType`、`DoubleType`の既存の変換動作と一致しました。これにより、数値をテキストとして送信するORM経由のパラメータ化INSERT/UPDATEが修正されました（標準的なPostgreSQLワイヤプロトコルの動作）。
+`NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
 
-### 三値NULLロジック
+### Three-valued NULL logic
 
-NULL処理のための完全なSQL三値ロジックです。
+Full SQL three-valued logic for NULL handling:
 
-- 比較演算子（`=`、`!=`、`<`、`>`、`<=`、`>=`）はいずれかのオペランドがNULLの場合にNULLを返します
-- `AND`/`OR`は適切な三値真理値表を実装します（例：`FALSE AND NULL` → `FALSE`、`TRUE OR NULL` → `TRUE`）
-- `IN`/`NOT IN`はNULLを正しく伝播します（例：`3 NOT IN (1, 2, NULL)` → unknown）
-- 算術演算（`+`、`-`、`*`、`/`、`%`）および文字列連結（`||`）はNULLを伝播します
-- `LIKE`はNULLオペランドを処理します
+- Comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) return NULL when either operand is NULL
+- `AND`/`OR` implement proper three-valued truth tables (e.g., `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
+- `IN`/`NOT IN` propagate NULL correctly (e.g., `3 NOT IN (1, 2, NULL)` → unknown)
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) and string concatenation (`||`) propagate NULL
+- `LIKE` handles NULL operands
 
-### 統一式文法
+### Unified expression grammar
 
-SQLパーサーの別個の`expression`と`booleanExpression`階層が単一の式構文に統合されました。ブール演算子（`AND`、`OR`、`NOT`）は優先順位チェーン内の通常の演算子になりました。これにより、式が有効な場所であればどこでもブール式を使用できます（例：`SELECT a > 5 AND b < 10`）。
+The SQL parser's separate `expression` and `booleanExpression` hierarchies have been merged into a single expression syntax. Boolean operators (`AND`, `OR`, `NOT`) are now regular operators in the precedence chain. This allows boolean expressions anywhere an expression is valid (e.g., `SELECT a > 5 AND b < 10`).
 
-### 即時カラム参照バリデーション
+### Eager column reference validation
 
-`WHERE`、`GROUP BY`、`HAVING`、`ORDER BY`のカラム参照がクエリプラン構築時に即座にバリデーションされるようになり、空のテーブルや単一行のソートでも存在しないカラムを検出できます。以前は、不正な参照は行ごとの評価時にのみ検出されていたため、空のテーブルに対するクエリが暗黙的に成功していました。
+Column references in `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` are now validated eagerly at query plan construction time, catching nonexistent columns even on empty tables or single-row sorts. Previously, bad references were only detected at eval time per-row, so queries against empty tables silently succeeded.
 
-### バグ修正
+### Bug fixes
 
-- UPDATEでNOT NULL制約が適用されていなかった問題
-- UNIQUE制約が複数のNULLを拒否していた問題（SQL標準：NULLは区別される）
-- INSERTカラムリストの重複カラムが検出されていなかった問題
-- 空のテーブルで`SUM`/`AVG`/`MIN`/`MAX`がNULLの代わりに0を返していた問題
-- `LIKE '_'`が空文字列にマッチしていた問題
-- `LIMIT 0`がエラーを発生させていた問題
+- NOT NULL constraint not enforced on UPDATE
+- UNIQUE constraint rejected multiple NULLs (SQL standard: NULLs are distinct)
+- Duplicate columns in INSERT column list not detected
+- `SUM`/`AVG`/`MIN`/`MAX` on empty table returned 0 instead of NULL
+- `LIKE '_'` matched empty string
+- `LIMIT 0` threw an error
 
-### バージョンアップ
+### Version bumps
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.9 | @petradb/engine 1.2.16 |
@@ -413,19 +523,19 @@ SQLパーサーの別個の`expression`と`booleanExpression`階層が単一の�
 
 ## v1.2-20260307
 
-### SQL：INSERT VALUESでの`DEFAULT`キーワード
+### SQL: `DEFAULT` keyword in INSERT VALUES
 
-`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')`が動作するようになりました。SQL標準の`DEFAULT`キーワードは以前パーサーに拒否されており、シリアルやデフォルト付きカラムに対して明示的に`DEFAULT`を渡すORM生成のINSERT文が動作しませんでした。
+`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` now works. The SQL-standard `DEFAULT` keyword was previously rejected by the parser, breaking ORM-generated INSERT statements that explicitly pass `DEFAULT` for serial or defaulted columns.
 
-### Drizzle ORM統合
+### Drizzle ORM integration
 
-新しい`@petradb/drizzle`パッケージがカスタムPostgreSQLダイアレクト実装による[Drizzle ORM](https://orm.drizzle.team)ドライバーを提供します。`pgTable`によるスキーマ定義、insert/select/update/delete、returning句、自動コミット/ロールバック付き`db.transaction()`、型安全なクエリをサポートします。`drizzle-orm/node-postgres`と完全な機能パリティです。
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver with a custom PostgreSQL dialect implementation. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and type-safe queries. Full feature parity with `drizzle-orm/node-postgres`.
 
-### 依存パッケージのバージョンアップ
+### Version bumps for dependent packages
 
-DEFAULTキーワード修正を反映するため、engine、server、cli、jdbcがバージョンアップされました。
+Engine, server, cli, and jdbc bumped to pick up the DEFAULT keyword fix.
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.7 | @petradb/engine 1.2.14 |
@@ -439,26 +549,26 @@ DEFAULTキーワード修正を反映するため、engine、server、cli、jdbc
 
 ## v1.2-20260306
 
-### JS API：`close()`が`Promise<void>`を返すように変更
-`Session.close()`が`void`の代わりに`Promise<void>`を返すようになり、相互運用性のためにclientモジュールのAPIと一致しました。
+### JS API: `close()` returns `Promise<void>`
+`Session.close()` now returns `Promise<void>` instead of `void`, matching the client module's API for interchangeability.
 
-### タイムスタンプパース
-`parseTimestamp`が`Z`サフィックス、`+/-HH:MM`オフセット、ミリ秒、およびタイムゾーン情報付きのスペース区切りタイムスタンプを処理するようになりました。`TIMESTAMP`カラムではタイムゾーンを除去して`LocalDateTime`にします。
+### Timestamp parsing
+`parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
 
-### JSファサードの完全性
-`toJS`と`typeString`が`DateValue`、`TimeValue`、`TimestampTZValue`、`TimeTZValue`、`IntervalValue`、`ByteaValue`を処理するようになりました。
+### JS facade completeness
+`toJS` and `typeString` now handle `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, and `ByteaValue`.
 
-### SQL：修飾スター（`table.*`）
-`SELECT t.*`構文がジョインや混合式を含むクエリで動作するようになりました。
+### SQL: qualified star (`table.*`)
+`SELECT t.*` syntax now works in queries, including joins and mixed expressions.
 
-### 比較における型変換
-- `NumberValue`と`TextValue`が型をまたいで比較できるようになりました（テキストパラメータと数値カラム、およびその逆）
-- `TimestampValue`がテキストをタイムスタンプとしてパースすることで`TextValue`と比較できるようになりました
+### Type coercion in comparisons
+- `NumberValue` and `TextValue` can now compare across types (text parameters vs numeric columns and vice versa)
+- `TimestampValue` can now compare against `TextValue` by parsing the text as a timestamp
 
-### Knexドライバー：Dateバインディング
-`_sanitizeBindings`がJSの`Date`オブジェクトをISO文字列に変換してからエンジンに渡すようになり、`Date.toString()`フォーマットでの`DateTimeParseException`を防止します。
+### Knex driver: Date binding
+`_sanitizeBindings` converts JS `Date` objects to ISO strings before passing to the engine, preventing `DateTimeParseException` on `Date.toString()` format.
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.6 | @petradb/engine 1.2.13 |
@@ -471,25 +581,25 @@ DEFAULTキーワード修正を反映するため、engine、server、cli、jdbc
 
 ## v1.2-20260305
 
-### JDBCドライバー
-- ファットjar公開 — `io.github.edadma:petradb-jdbc`がMaven Central上の単一の自己完結型jarになりました
-- クリーンな接続URL — `jdbc:petradb:memory`、`jdbc:petradb:file:/path`、`jdbc:petradb://host:port`
-- ServiceLoader自動検出 — `Class.forName`なしで`DriverManager.getConnection()`が動作します
-- ハードコードされたメタデータバージョン文字列を修正
+### JDBC driver
+- Fat jar publishing — `io.github.edadma:petradb-jdbc` is now a single self-contained jar on Maven Central
+- Clean connection URLs — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
+- ServiceLoader auto-discovery — `DriverManager.getConnection()` works without `Class.forName`
+- Fixed hardcoded metadata version strings
 
-### JS/TSエンジン（`@petradb/engine`）
-- JSファサードに`CreateViewResult`、`DropViewResult`、`ExplainResult`、`CopyResult`を追加
-- TypeScript型定義に`ExplainResult`と`CopyResult`を追加
+### JS/TS engine (`@petradb/engine`)
+- Added `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` to JS facade
+- Added `ExplainResult` and `CopyResult` to TypeScript type definitions
 
-### ドキュメント
-- 完全な例を含む新しいKnex.jsガイド
-- JDBCドキュメント：Maven/Gradle/sbtインストールスニペットを追加、ポート番号を修正
+### Documentation
+- New Knex.js guide with full examples
+- JDBC docs: added Maven/Gradle/sbt install snippets, fixed port number
 
-### インフラストラクチャ
-- `petradb-shared`がMaven Centralに公開可能に
-- npm、Scala、JDBCアーティファクトを網羅する公開後スモークテストスクリプト
+### Infrastructure
+- `petradb-shared` now publishable to Maven Central
+- Post-publish smoke test script covering npm, Scala, and JDBC artifacts
 
-| コンポーネント | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.1 | — |
 | engine | 1.2.2 | @petradb/engine 1.2.5 |
@@ -501,86 +611,86 @@ DEFAULTキーワード修正を反映するため、engine、server、cli、jdbc
 
 ## v1.2.2
 
-### エンジンサブパッケージの再構成
-- エンジンが`io.github.edadma.petradb.engine`サブパッケージに移動
-- エンジンとクライアントの両方が拡張する新しい共有`Session`トレイト
+### Engine subpackage restructure
+- Engine moved to `io.github.edadma.petradb.engine` subpackage
+- New shared `Session` trait extended by both engine and client
 
-### CLIクライアントサポート
-- リモートPetraDBサーバーに接続：`petradb --host localhost --port 5480`
-- 認証用の`--user`と`--password`フラグ
-- メタコマンドがSQL経由でネットワーク越しに動作
+### CLI client support
+- Connect to a remote PetraDB server: `petradb --host localhost --port 5480`
+- `--user` and `--password` flags for authentication
+- Meta-commands work over the network via SQL
 
 ### SQL
-- `SHOW VIEWS`コマンドがビュー名と定義を返すように
+- `SHOW VIEWS` command returns view names and definitions
 
-### Knexダイアレクト
-- PetraDBでKnex.jsクエリビルダーを使用するための`@petradb/knex`ダイアレクトアダプター
+### Knex dialect
+- `@petradb/knex` dialect adapter for using Knex.js query builder with PetraDB
 
-### 修正
-- clientのnpm公開を修正
-- CLIのnpm公開を修正
-- ハードコードされたJDBCメタデータバージョン文字列を修正
-- JVM、JS、Nativeで1013以上のテストが合格
+### Fixes
+- Fix client npm publish
+- Fix CLI npm publish
+- Fix hardcoded JDBC metadata version strings
+- 1013+ tests passing across JVM, JS, and Native
 
 ## v1.2
 
-### JDBCドライバー
-- Maven Centralに`petradb-jdbc`として公開
-- `getGeneratedKeys()`、`addBatch()`/`executeBatch()`、DBeaver用のFK/インデックスメタデータ
-- ファイルモード（組み込み）とサーバーモード（ネットワーク）接続
+### JDBC driver
+- Published to Maven Central as `petradb-jdbc`
+- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/index metadata for DBeaver
+- File mode (embedded) and server mode (network) connections
 
-### SQLエンジン
-- CSV入出力のための`COPY FROM/TO`
-- `CREATE TEMP TABLE`、`CREATE/DROP VIEW`
-- `SHOW FOREIGN KEYS`/`SHOW INDEXES`イントロスペクション
-- 等価結合のためのインデックスネストループジョイン最適化
-- パーサーをfastparseに移行
+### SQL engine
+- `COPY FROM/TO` for CSV import/export
+- `CREATE TEMP TABLE`, `CREATE/DROP VIEW`
+- `SHOW FOREIGN KEYS`/`SHOW INDEXES` introspection
+- Index nested loop join optimization for equijoins
+- Migrated parser to fastparse
 
-### サーバー
-- TOML設定によるCORSサポート
-- 設定可能な`max_sessions`、デフォルトポート5480
-- Node.js HTTPバックエンドによるJSサーバープラットフォーム
+### Server
+- CORS support with TOML configuration
+- Configurable `max_sessions`, default port 5480
+- JS server platform with Node.js HTTP backend
 
-### クライアント
-- JSファサード付きの新しい`@petradb/client` npmパッケージ
-- Promiseを返す`connect()`/`execute()`/`close()`を持つ`Session`クラス
+### Client
+- New `@petradb/client` npm package with JS facade
+- `Session` class with `connect()`/`execute()`/`close()` returning Promises
 
 ### CLI
-- `\timing`、`\copy`コマンド
-- Nativeでの永続履歴
+- `\timing`, `\copy` commands
+- Persistent history on Native
 
-### ビルド
-- Scala 3.8.2、sbt 1.12.4
-- JVM、JS、Nativeで1000テスト合格
+### Build
+- Scala 3.8.2, sbt 1.12.4
+- 1000 tests passing across JVM, JS, and Native
 
 ## v1.1.0
 
-### TextDB — 人間が編集可能なテキストファイル永続化
-データベースを`.ptxt`テキストファイルとして永続化する新しいストレージバックエンドです。開くとメモリにロードされ、変更のたびにファイルを書き換えます。
+### TextDB — human-editable text file persistence
+A new storage backend that persists the database as a `.ptxt` text file. Loads into memory on open and rewrites the file after every change.
 
 ### Upsert — `ON CONFLICT DO UPDATE`
-`EXCLUDED`擬似テーブルによるinsert-or-updateセマンティクスです。
+Insert-or-update semantics with the `EXCLUDED` pseudo-table.
 
-### 改善された例外階層
-汎用的な`problem()`呼び出しに代わる型付き例外クラスです。
+### Improved exception hierarchy
+Typed exception classes replace generic `problem()` calls.
 
-### ALTER TABLEの集約
-`DB.alterTable()`がすべてのALTER TABLEディスパッチを集約するようになりました。
+### ALTER TABLE centralised
+`DB.alterTable()` now centralises all ALTER TABLE dispatch.
 
 ## v1.0.1
 
-- `@petradb/engine`で`ConnectSQL`を`Session`にリネーム
-- `Promise<ExecuteResult[]>`を返す非同期`execute()` API
-- ネットワーク使用のための新しい`@petradb/client`パッケージ
-- エンジンとサーバー間のレスポンスフォーマットの統一
+- Rename `ConnectSQL` to `Session` in `@petradb/engine`
+- Async `execute()` API returning `Promise<ExecuteResult[]>`
+- New `@petradb/client` package for network usage
+- Aligned response formats between engine and server
 
 ## v1.0.0
 
-最初の安定リリースです。
+First stable release.
 
-- クロスプラットフォームSQLエンジン（JVM、JavaScript、Native）
-- PostgreSQL互換構文
-- インメモリおよび永続（クラッシュセーフ）ストレージ
-- DDL、DML、ジョイン、サブクエリ、集計、トランザクション
-- JSONB演算子、配列型、CHECK制約
-- 879のテストが合格
+- Cross-platform SQL engine (JVM, JavaScript, Native)
+- PostgreSQL-compatible syntax
+- In-memory and persistent (crash-safe) storage
+- DDL, DML, joins, subqueries, aggregations, transactions
+- JSONB operators, array types, CHECK constraints
+- 879 passing tests

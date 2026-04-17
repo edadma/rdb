@@ -2,51 +2,161 @@
 title: Registro de Alteracoes
 ---
 
+## v1.5-20260417
+
+### SQL Compatibility Fixes
+
+Four fixes to improve PostgreSQL compatibility:
+
+- **`type` as column name** — removed `type` from the reserved words list so it can be used as an unquoted column name, matching PostgreSQL behavior
+- **Self-referential foreign keys** — `CREATE TABLE` with a column that `REFERENCES` the same table no longer fails; FK validation is deferred until after the table is created
+- **Text-to-timestamp coercion** — text values (e.g., ISO-8601 strings from query parameters) can now be compared to `TIMESTAMP`, `TIMESTAMPTZ`, and `DATE` columns without explicit casts
+- **Scalar subquery expressions** — parenthesized subqueries like `(SELECT count(*) FROM ...) = 0` now work in `WHERE` clauses and other expression positions
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.2 | — |
+| engine | 1.5.2 | @petradb/engine 1.5.2 |
+| cli | — | @petradb/cli 1.5.2 |
+| server | — | @petradb/server 1.5.2 |
+| jdbc | 1.5.2 | — |
+
+## v1.5-20260320
+
+### Quarry — API Redesign
+
+**Select API** — reads like SQL now:
+
+```typescript
+// Old
+db.select(users).columns(users.name).where(eq(users.name, "Alice"))
+
+// New
+db.select(users.name).from(users).where(eq(users.name, "Alice"))
+db.from(users).where(eq(users.name, "Alice"))  // SELECT *
+```
+
+- `db.select(...exprs)` takes column expressions, returns `FromableBuilder`
+- `.from(table)` provides the table and returns `SelectBuilder`
+- `db.from(table)` is shorthand for `db.select().from(table)` (SELECT \*)
+- Old `db.select(table).columns(...)` pattern removed
+
+**Builder-based subqueries** — no more raw AST:
+
+```typescript
+// Old — required .toExpr() to extract raw AST
+const sub = db.select(posts).columns(posts.userId).toExpr()
+inSubquery(users.id, sub)
+
+// New — pass builders directly
+inSubquery(users.id, db.select(posts.userId).from(posts))
+```
+
+- `subquery()`, `exists()`, `inSubquery()`, `notInSubquery()` accept `QueryBuilder` (SelectBuilder or SetOperationBuilder)
+- `withCTE()` accepts builders for CTE queries and main query, returns `QueryBuilder`
+- `insertFrom()` and `executeQuery()` accept builders directly
+- `toExpr()` marked `@internal` — no longer part of the public API
+- `ToCreateAST` removed from public exports
+
+### Version Bumps
+
+| Component | Version |
+|-----------|---------|
+| quarry | @petradb/quarry 1.5.2 |
+
+## v1.5-20260317
+
+### Bug Fixes
+
+- **JSON parser escape sequences** — fixed backslash escape handling (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) in JSON string values
+- **JSON top-level values** — the JSON parser now accepts all JSON value types (strings, numbers, booleans, null) at the top level, not just objects and arrays
+- **JSON path operators** — `#>` and `#>>` now correctly handle text array literals as path arguments
+- **JSON containment operators** — `@>` and `<@` now work correctly with text JSON literals (not just parsed JSON objects)
+- **Persistent DB auto-create** — `petradb_open_persistent` (C API) now auto-creates new databases instead of failing
+
+### Python Package
+
+- New `petradb` Python package with bundled native library (Linux x86_64)
+- SQLite-style API: `Database`, `Cursor`, context managers, parameterized queries
+- Persistent and in-memory modes
+- Published to PyPI
+
+### FFI Tests
+
+- Go FFI test suite for the C library
+- Python FFI test suite for the C library
+
+### Tooling
+
+- Quarry smoke test added to post-publish verification
+- Internationalization: 5 languages + Korean translations for docs site
+- `publish.sh` fix: uses `npx -p typescript tsc` to avoid wrong `tsc` package
+
+### Version Bumps
+
+All components bumped to 1.5.1 (Python to 1.5.2):
+
+| Component | Maven Central | npm | PyPI |
+|-----------|---------------|-----|------|
+| common | 1.5.1 | — | — |
+| engine | 1.5.1 | @petradb/engine 1.5.1 | — |
+| client | 1.5.1 | @petradb/client 1.5.1 | — |
+| server | — | @petradb/server 1.5.1 | — |
+| cli | — | @petradb/cli 1.5.1 | — |
+| jdbc | 1.5.1 | — | — |
+| drizzle | — | @petradb/drizzle 1.5.1 | — |
+| knex | — | @petradb/knex 1.5.1 | — |
+| lucid | — | @petradb/lucid 1.5.1 | — |
+| quarry | — | @petradb/quarry 1.5.1 | — |
+| python | — | — | petradb 1.5.2 |
+
 ## v1.5-20260315
 
-### PL/pgSQL — Stored Procedures, Functions e Triggers
+### PL/pgSQL — Stored Procedures, Functions, and Triggers
 
-Suporte completo a linguagem procedural em blocos DO, funcoes armazenadas e procedures armazenados:
+Full procedural language support in DO blocks, stored functions, and stored procedures:
 
-- **Blocos DO** — blocos PL/pgSQL anonimos com DECLARE, BEGIN...END
-- **Funcoes armazenadas** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, chamaveis em qualquer expressao SQL
-- **Procedures armazenados** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invocados com `CALL`
+- **DO blocks** — anonymous PL/pgSQL blocks with DECLARE, BEGIN...END
+- **Stored functions** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, callable in any SQL expression
+- **Stored procedures** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invoked with `CALL`
 - **Triggers** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
-  - Triggers BEFORE podem cancelar operacoes retornando NULL
-  - Triggers AFTER disparam apos a operacao
-  - Triggers disparam para INSERT, UPDATE, DELETE e COPY FROM
-  - Variaveis TG_OP, TG_TABLE_NAME, OLD, NEW disponiveis
-- **Fluxo de controle** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
-- **Persistencia** — funcoes, procedures e triggers sobrevivem ao fechar/reabrir em PersistentDB e TextDB
-- **OR REPLACE** — sobrescrever funcoes e procedures existentes
+  - BEFORE triggers can cancel operations by returning NULL
+  - AFTER triggers fire after the operation
+  - Triggers fire for INSERT, UPDATE, DELETE, and COPY FROM
+  - TG_OP, TG_TABLE_NAME, OLD, NEW variables available
+- **Control flow** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
+- **Persistence** — functions, procedures, and triggers survive close/reopen on PersistentDB and TextDB
+- **OR REPLACE** — overwrite existing functions and procedures
 
-### Funcoes Nativas Definidas pelo Usuario
+### User-Defined Native Functions
 
-Registre callbacks da linguagem hospedeira como funcoes SQL, chamaveis em consultas, triggers e procedures:
+Register host-language callbacks as SQL functions, callable from queries, triggers, and procedures:
 
 - **Scala** — `db.registerScalarFunction("name", { args => result })`
 - **JavaScript** — `session.registerFunction("name", (args) => result)`
-- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` com API de valor/contexto tipado estilo SQLite
+- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` with SQLite-style typed value/context API
 
-### Biblioteca C e API de Cursor
+### C Library and Cursor API
 
-- **Biblioteca nativa compartilhada** — `libpetradb-engine.so` via Scala Native com funcoes C exportadas via `@exported`
-- **API C estilo SQLite** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, acessores de coluna tipados
-- **Funcoes definidas pelo usuario** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
-- **API de Cursor** — `session.openCursor(sql)` para iteracao preguicosa linha a linha com `step()`, acessores de coluna tipados, `fetch(n)`, `move(n)`, consultas parametrizadas
-- **Header C** — `petradb.h` com documentacao completa da API
-- **Suite de testes C** — 67 testes
-- **Teste FFI Rust** — 38 testes comprovando interoperabilidade entre linguagens
+- **Native shared library** — `libpetradb-engine.so` via Scala Native with `@exported` C-callable functions
+- **SQLite-style C API** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, typed column accessors
+- **User-defined functions** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
+- **Cursor API** — `session.openCursor(sql)` for lazy row-by-row iteration with `step()`, typed column accessors, `fetch(n)`, `move(n)`, parameterized queries
+- **C header** — `petradb.h` with full API documentation
+- **C test suite** — 67 tests
+- **Rust FFI test** — 38 tests proving cross-language interop
 
-### Tabelas Virtuais
+### Virtual Tables
 
-- **Framework extensivel** — `CREATE VIRTUAL TABLE name USING module(args)`, somente leitura, aparece em SHOW TABLES
-- **Modulo CSV embutido** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` com opcoes de cabecalho/delimitador
-- **Modulos personalizados** — `db.registerVirtualTableModule("name", module)` na API Scala
+- **Extensible framework** — `CREATE VIRTUAL TABLE name USING module(args)`, read-only, appears in SHOW TABLES
+- **Built-in CSV module** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` with header/delimiter options
+- **Custom modules** — `db.registerVirtualTableModule("name", module)` in Scala API
 
-### Funcao de Tabela csv_file()
+### csv_file() Table Function
 
-Consulte arquivos CSV diretamente sem importar:
+Query CSV files directly without importing:
 
 ```sql
 SELECT * FROM csv_file('data.csv');
@@ -54,67 +164,67 @@ SELECT e.name, d.dept FROM csv_file('employees.csv') e
   JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
 ```
 
-### Indices Avancados
+### Advanced Indexes
 
-- **Indices parciais** — `CREATE INDEX ... WHERE condition` — indexa apenas linhas que correspondem ao predicado
-- **Indices de expressao** — `CREATE INDEX ... ON table ((expr))` — indexa valores computados como `lower(email)`
-- **Combinados** — indices parciais + de expressao funcionam juntos
+- **Partial indexes** — `CREATE INDEX ... WHERE condition` — only index rows matching the predicate
+- **Expression indexes** — `CREATE INDEX ... ON table ((expr))` — index computed values like `lower(email)`
+- **Combined** — partial + expression indexes work together
 
-### Funcoes de Janela
+### Window Functions
 
-- **FIRST_VALUE(expr)** — valor na primeira linha do quadro da janela
-- **LAST_VALUE(expr)** — valor na ultima linha do quadro da janela
-- **NTH_VALUE(expr, n)** — valor na enesima linha do quadro
+- **FIRST_VALUE(expr)** — value at the first row of the window frame
+- **LAST_VALUE(expr)** — value at the last row of the window frame
+- **NTH_VALUE(expr, n)** — value at the nth row of the frame
 
 ### DELETE ... USING
 
-Exclusoes multi-tabela com sintaxe PostgreSQL:
+Multi-table deletes matching PostgreSQL syntax:
 
 ```sql
 DELETE FROM orders USING customers
 WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 ```
 
-### Quarry — Construtor de Consultas Type-Safe com AST
+### Quarry — Type-Safe AST Query Builder
 
-Novo pacote `@petradb/quarry`: construtor de consultas type-safe que gera objetos AST (nao strings SQL):
+New `@petradb/quarry` package: type-safe query builder that generates AST objects (not SQL strings):
 
-- Definicao de schema com 21 tipos de coluna
-- CRUD completo: select, insert, update, delete com referencias de coluna type-safe
-- Joins: inner, left, right, full outer, cross com resultados tipados
-- Expressoes: mais de 50 operadores, agregacoes, CASE/CAST/EXISTS, subconsultas
+- Schema definition with 21 column types
+- Full CRUD: select, insert, update, delete with type-safe column references
+- Joins: inner, left, right, full outer, cross with typed results
+- Expressions: 50+ operators, aggregates, CASE/CAST/EXISTS, subqueries
 - Upsert: `onConflictDoNothing()`, `onConflictDoUpdate()`
-- Aliases de tabela para self-joins
-- Transacoes, RETURNING, DISTINCT ON
-- Testes de tipo em tempo de compilacao para todos os recursos
-- Operacoes de conjunto: UNION, INTERSECT, EXCEPT
-- Funcoes de janela, CTEs, helpers escalares nomeados
+- Table aliases for self-joins
+- Transactions, RETURNING, DISTINCT ON
+- Compile-time type tests for all features
+- Set operations: UNION, INTERSECT, EXCEPT
+- Window functions, CTEs, named scalar helpers
 
-### Correcoes de Bugs
+### Bug Fixes
 
-- **ByteaValue** — `ARRAY[...]` em colunas BYTEA agora produz corretamente `ByteaValue` em vez de `ArrayValue`
-- **Tipos de resultado JS/Client** — adicionados handlers de tipo de resultado PL/pgSQL ausentes (DoBlockResult, CreateFunctionResult, etc.) para evitar crashes de match nao exaustivo
-- **Codecs** — adicionada serializacao para todos os novos tipos de resultado para comunicacao cliente/servidor
-- **llms.txt** — corrigido campo `type` para campo `command`, atualizados todos os tipos de resultado e recursos
+- **ByteaValue** — `ARRAY[...]` into BYTEA columns now correctly produces `ByteaValue` instead of `ArrayValue`
+- **JS/Client result types** — added missing PL/pgSQL result type handlers (DoBlockResult, CreateFunctionResult, etc.) to prevent non-exhaustive match crashes
+- **Codecs** — added serialization for all new result types for client/server communication
+- **llms.txt** — fixed `type` field to `command` field, updated all result types and features
 
-### Renomeacao de Modulo
+### Module Rename
 
-- **shared -> common** — renomeado o modulo de tipos compartilhados de `petradb-shared` para `petradb-common`
+- **shared → common** — renamed the shared types module from `petradb-shared` to `petradb-common`
 
-### Documentacao
+### Documentation
 
-- Nova pagina de referencia **PL/pgSQL** (triggers, funcoes, procedures, fluxo de controle)
-- Nova pagina de referencia **API C** (interface completa estilo SQLite)
-- Novos guias de **Primeiros Passos** para Java (JDBC) e C
-- Documentacao DDL atualizada: indices parciais/de expressao, restricoes CHECK, triggers, rotinas armazenadas
-- Documentacao DML atualizada: DELETE...USING, csv_file(), tabelas virtuais
-- Documentacao API JS/Scala atualizada: registerFunction, tipos de resultado
-- Pagina inicial: quatro botoes de primeiros passos (JS, Java, Scala, C)
-- llms.txt reescrito com todos os recursos atuais
+- New **PL/pgSQL** reference page (triggers, functions, procedures, control flow)
+- New **C API** reference page (full SQLite-style interface)
+- New **Getting Started** guides for Java (JDBC) and C
+- Updated DDL docs: partial/expression indexes, CHECK constraints, triggers, stored routines
+- Updated DML docs: DELETE...USING, csv_file(), virtual tables
+- Updated JS/Scala API docs: registerFunction, result types
+- Landing page: four getting-started buttons (JS, Java, Scala, C)
+- Rewritten llms.txt with all current features
 
-### Atualizacoes de Versao
+### Version Bumps
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | common | 1.5.0 | — |
 | engine | 1.5.0 | @petradb/engine 1.5.0 |
@@ -129,19 +239,19 @@ Novo pacote `@petradb/quarry`: construtor de consultas type-safe que gera objeto
 
 ## v1.4-20260314
 
-### Correcoes de bugs e melhorias
+### Bug fixes & improvements
 
-- **Correcao de subconsulta IN correlacionada** — `IN (SELECT ...)` correlacionado com tabelas indexadas agora funciona corretamente
-- **Resolucao de coluna qualificada** — correcoes para referencias de coluna ambiguas em joins complexos
-- **Tratamento de IN/ANY vazio** — casos extremos de `IN ()` e `= ANY('{}')` resolvidos
-- **Limpeza de CASCADE em chave estrangeira** — `DROP TABLE ... CASCADE` agora remove corretamente restricoes FK em tabelas filhas
-- **DROP TABLE IF EXISTS ... CASCADE** — combinar `IF EXISTS` com `CASCADE` nao causa mais erro de parse
-- **Conversao de literal de array** — suporte para sintaxe de literal de array PostgreSQL `'{1,2,3}'::integer[]`
-- **Correcoes de consulta parametrizada** — vinculacao de parametros melhorada para subconsultas e caminhos correlacionados
+- **Correlated IN subquery fix** — correlated `IN (SELECT ...)` with indexed tables now works correctly
+- **Qualified column resolution** — fixes for ambiguous column references in complex joins
+- **Empty IN/ANY handling** — `IN ()` and `= ANY('{}')` edge cases resolved
+- **Foreign key CASCADE cleanup** — `DROP TABLE ... CASCADE` now properly removes FK constraints on child tables
+- **DROP TABLE IF EXISTS ... CASCADE** — combining `IF EXISTS` with `CASCADE` no longer causes a parse error
+- **Array literal casting** — support for `'{1,2,3}'::integer[]` PostgreSQL array literal syntax
+- **Parameterized query fixes** — improved parameter binding for subqueries and correlated paths
 
-### Atualizacoes de versao
+### Version bumps
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.2 | — |
 | engine | 1.4.9 | @petradb/engine 1.4.3 |
@@ -155,9 +265,9 @@ Novo pacote `@petradb/quarry`: construtor de consultas type-safe que gera objeto
 
 ### Common Table Expressions (CTEs)
 
-Suporte completo a CTEs com `WITH` e `WITH RECURSIVE`.
+Full CTE support with `WITH` and `WITH RECURSIVE`.
 
-**CTEs nao recursivas** — subconsultas nomeadas para legibilidade e reutilizacao:
+**Non-recursive CTEs** — named subqueries for readability and reuse:
 
 ```sql
 WITH active_orders AS (
@@ -168,9 +278,9 @@ FROM active_orders
 GROUP BY customer_id;
 ```
 
-Multiplas CTEs podem ser definidas em uma unica consulta, e CTEs posteriores podem referenciar anteriores. Aliases de coluna sao suportados: `WITH t(x, y) AS (...)`. CTEs sombreiam nomes de tabela se compartilharem o mesmo nome.
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
 
-**CTEs recursivas** — consultas iterativas para dados hierarquicos e de grafo:
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
 
 ```sql
 WITH RECURSIVE descendants(id, name, depth) AS (
@@ -182,13 +292,13 @@ WITH RECURSIVE descendants(id, name, depth) AS (
 SELECT name, depth FROM descendants ORDER BY depth, name;
 ```
 
-Tanto `UNION ALL` (manter duplicatas) quanto `UNION` (deduplicado) sao suportados. Maximo de 1000 iteracoes como limite de seguranca.
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
 
-### Funcoes de janela
+### Window functions
 
-Suporte completo a funcoes de janela com tres categorias:
+Full window function support with three categories:
 
-**Funcoes de classificacao** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` com `PARTITION BY` e `ORDER BY`:
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
 
 ```sql
 SELECT name, department, salary,
@@ -196,7 +306,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-**Funcoes de valor** — `LAG()`, `LEAD()`, `NTILE()` com offset e valores padrao configuraveis:
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
 
 ```sql
 SELECT name, salary,
@@ -205,7 +315,7 @@ SELECT name, salary,
 FROM employees;
 ```
 
-**Funcoes de janela agregadas** — qualquer funcao de agregacao (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) com `OVER()`, incluindo especificacoes de quadro:
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
 
 ```sql
 SELECT name, salary,
@@ -214,11 +324,11 @@ SELECT name, salary,
 FROM employees;
 ```
 
-Limites de quadro: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Sem clausula de quadro, funcoes de janela agregadas calculam sobre a particao inteira.
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
 
-### Clausula FILTER em agregacoes
+### Aggregate FILTER clause
 
-`FILTER (WHERE ...)` em funcoes de agregacao, tanto em consultas agrupadas quanto em funcoes de janela:
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
 
 ```sql
 SELECT
@@ -229,13 +339,13 @@ SELECT
 FROM orders;
 ```
 
-### Otimizacao de hash join
+### Hash join optimization
 
-Equijoins sem indice agora usam uma estrategia de hash join em vez de produto cartesiano, reduzindo a complexidade do join de O(n*m) para O(n+m). Aplica-se a INNER, LEFT, RIGHT e FULL joins. Index nested loop joins continuam sendo preferidos quando um indice esta disponivel. Condicoes de non-equijoin ainda recorrem ao produto cartesiano. Visivel na saida do `EXPLAIN` como `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
 
-### Colunas geradas
+### Generated columns
 
-Colunas computadas com `GENERATED ALWAYS AS (expr) STORED`:
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
 
 ```sql
 CREATE TABLE products (
@@ -245,39 +355,39 @@ CREATE TABLE products (
 );
 ```
 
-Colunas geradas sao recalculadas em INSERT e UPDATE. Elas nao podem ser definidas diretamente.
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
 
-### Ordenacao de nulos em ORDER BY
+### ORDER BY null ordering
 
-`ORDER BY` agora usa a ordenacao de nulos padrao SQL: `ASC` -> `NULLS LAST`, `DESC` -> `NULLS FIRST`. Sobrescrita explicita com `NULLS FIRST` / `NULLS LAST` e suportada.
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
 
-### Suporte a sequencias
+### Sequence support
 
-Suporte completo a sequencias compativel com PostgreSQL. `CREATE SEQUENCE` e `DROP SEQUENCE` com opcoes (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Funcoes de sequencia: `nextval()`, `currval()`, `setval()`, `lastval()`.
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
 
-Colunas `SERIAL`, `SMALLSERIAL` e `BIGSERIAL` agora criam sequencias auxiliares (nomeadas `<table>_<column>_seq`), correspondendo ao comportamento do PostgreSQL. `DROP TABLE` cascateia para remover sequencias pertencentes. `TRUNCATE` reseta sequencias auxiliares. O estado da sequencia e totalmente transacional — `ROLLBACK` restaura contadores de sequencia. Bancos de dados persistentes serializam o estado da sequencia no catalogo.
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
 
-Novos comandos SQL: `SHOW SEQUENCES`, `SHOW INDEXES` (todos os indices de todas as tabelas).
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
 
-CLI: novos meta-comandos `\ds` (listar sequencias) e `\di` (listar indices).
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
 
-### Clausula USING em CREATE INDEX
+### CREATE INDEX USING clause
 
-A sintaxe `CREATE INDEX ... USING btree` agora e aceita (btree e o unico metodo suportado). Isso melhora a compatibilidade com DDL gerado pelo PostgreSQL e ORMs.
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
 
-### Correcoes de bugs
+### Bug fixes
 
-- `ORDER BY` com valores NULL: comparadores agora retornam 0 quando ambos os valores sao NULL, corrigindo resultados de ordenacao nao deterministicos com multiplas chaves de ordenacao
-- Resolucao de alias em `ORDER BY`: aliases de SELECT (ex: `SELECT x AS y ... ORDER BY y`) agora resolvem corretamente em consultas nao agrupadas, com e sem funcoes de janela
-- Tratamento de null em `Type.convert()`: valores NULL passados por conversao de tipo (ex: via parametros de prepared statement em UPDATE SET) agora sao preservados como NULL em vez de serem convertidos para a representacao textual do tipo. Corrigido em 13 tipos: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
-- Aviso de match exaustivo no parser ORDER BY para clausula de nulos
-- Erros silenciosos no terminal do playground para throws sincronos
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- `ORDER BY` alias resolution: SELECT aliases (e.g. `SELECT x AS y ... ORDER BY y`) now resolve correctly in non-grouped queries, both with and without window functions
+- `Type.convert()` null handling: NULL values passed through type conversion (e.g. via prepared statement parameters in UPDATE SET) are now preserved as NULL instead of being converted to the type's text representation. Fixed in 13 types: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
 
-### Atualizacoes de versao
+### Version bumps
 
-Todos os componentes atualizados para 1.4.1:
+All components bumped to 1.4.1:
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.1 | — |
 | engine | 1.4.1 | @petradb/engine 1.4.1 |
@@ -291,17 +401,17 @@ Todos os componentes atualizados para 1.4.1:
 
 ## v1.3-20260309
 
-### DDL Transacional
+### Transactional DDL
 
-Comandos DDL (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) agora sao totalmente suportados dentro de transacoes e sao revertidos atomicamente com DML. DDL e DML podem ser intercalados livremente dentro de um unico bloco BEGIN/COMMIT. Tanto MemoryDB quanto PersistentDB capturam um snapshot completo do catalogo no momento do BEGIN e o restauram no ROLLBACK.
+DDL statements (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) are now fully supported inside transactions and roll back atomically with DML. DDL and DML can be freely interleaved within a single BEGIN/COMMIT block. Both MemoryDB and PersistentDB capture a full catalog snapshot at BEGIN time and restore it on ROLLBACK.
 
-### Consultas relacionais Drizzle
+### Drizzle relational queries
 
-Suporte completo para consultas relacionais do Drizzle ORM (`db.query.*.findMany()`, `db.query.*.findFirst()`). Adicionadas funcoes escalares `json_build_array` e `json_build_object`, e corrigida a substituicao de parametros em subconsultas LATERAL.
+Full support for Drizzle ORM relational queries (`db.query.*.findMany()`, `db.query.*.findFirst()`). Added `json_build_array` and `json_build_object` scalar functions, and fixed parameter substitution in LATERAL subqueries.
 
-### Atualizacoes de versao
+### Version bumps
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | engine | 1.3.1 | @petradb/engine 1.3.3 |
 | server | 1.3.1 | @petradb/server 1.3.1 |
@@ -311,9 +421,9 @@ Suporte completo para consultas relacionais do Drizzle ORM (`db.query.*.findMany
 
 ## v1.3-20260308
 
-### Suporte a schemas
+### Schema support
 
-Namespaces de schema estilo PostgreSQL. Todo banco de dados possui um schema `public` por padrao; nomes de tabela nao qualificados resolvem para `public`. Nomes qualificados por schema (`schema.table`) funcionam em todos os comandos DDL e DML — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX e COPY.
+PostgreSQL-style schema namespaces. Every database has a `public` schema by default; unqualified table names resolve to `public`. Schema-qualified names (`schema.table`) work in all DDL and DML statements — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, and COPY.
 
 ```sql
 CREATE SCHEMA inventory;
@@ -322,28 +432,28 @@ INSERT INTO inventory.products (name) VALUES ('Widget');
 SELECT * FROM inventory.products;
 ```
 
-### Tabelas virtuais information_schema
+### information_schema virtual tables
 
-`information_schema.schemata`, `information_schema.tables` e `information_schema.columns` agora sao consultaveis. Tabelas qualificadas por schema reportam seu `table_schema` correto. Essas views sao geradas dinamicamente a partir dos metadados do banco de dados.
+`information_schema.schemata`, `information_schema.tables`, and `information_schema.columns` are now queryable. Schema-qualified tables report their correct `table_schema`. These views are generated dynamically from database metadata.
 
-### Migracoes do Drizzle ORM
+### Drizzle ORM migrations
 
-Nova funcao `migrate()` em `@petradb/drizzle` aplica arquivos de migracao do Drizzle Kit. Le o `meta/_journal.json` e executa arquivos de migracao SQL em ordem, rastreando migracoes aplicadas em `drizzle.__drizzle_migrations`.
+New `migrate()` function in `@petradb/drizzle` applies Drizzle Kit migration files. Reads the `meta/_journal.json` and executes SQL migration files in order, tracking applied migrations in `drizzle.__drizzle_migrations`.
 
 ```typescript
 import { migrate } from "@petradb/drizzle";
 await migrate(db, { migrationsFolder: "./drizzle" });
 ```
 
-### Melhorias em metadados JDBC
+### JDBC metadata improvements
 
-`DatabaseMetaData.getColumns()` agora retorna valores precisos de `COLUMN_SIZE`, `DECIMAL_DIGITS` e `CHAR_OCTET_LENGTH` baseados no tipo de coluna e declaracoes de precisao/escala.
+`DatabaseMetaData.getColumns()` now returns accurate `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` values based on column type and precision/scale declarations.
 
-### Atualizacoes de versao
+### Version bumps
 
-Todos os componentes atualizados para 1.3.0:
+All components bumped to 1.3.0:
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.3.0 | — |
 | engine | 1.3.0 | @petradb/engine 1.3.0 |
@@ -357,49 +467,49 @@ Todos os componentes atualizados para 1.3.0:
 
 ## v1.2-20260308
 
-### Reescrita do driver Drizzle ORM
+### Drizzle ORM driver rewrite
 
-`@petradb/drizzle` reescrito de um wrapper `drizzle-orm/pg-proxy` para um driver de dialeto PostgreSQL personalizado estendendo `PgSession`/`PgPreparedQuery`/`PgTransaction` diretamente. Isso proporciona paridade completa de recursos com `drizzle-orm/node-postgres`:
+`@petradb/drizzle` rewritten from a `drizzle-orm/pg-proxy` wrapper to a custom PostgreSQL dialect driver extending `PgSession`/`PgPreparedQuery`/`PgTransaction` directly. This gives full feature parity with `drizzle-orm/node-postgres`:
 
-- `db.transaction()` com commit/rollback automatico
-- `tx.rollback()` para rollback explicito
-- `returning()` em insert/update/delete (incluindo selecao parcial de colunas)
-- Suporte a consultas relacionais (pendente suporte do engine para `json_build_array`/`json_agg`)
+- `db.transaction()` with automatic commit/rollback
+- `tx.rollback()` for explicit rollback
+- `returning()` on insert/update/delete (including partial column selection)
+- Relational query support (pending engine support for `json_build_array`/`json_agg`)
 
-### Coercao de tipo: parametros de texto para colunas NUMERIC
+### Type coercion: text parameters to NUMERIC columns
 
-`NumericType.convert` agora aceita `TextValue` e o analisa como `BigDecimal`, correspondendo ao comportamento de coercao existente de `IntegerType`, `BigintType`, `SmallintType` e `DoubleType`. Isso corrige INSERT/UPDATE parametrizado via ORMs que enviam valores numericos como texto (comportamento padrao do protocolo wire do PostgreSQL).
+`NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
 
-### Logica NULL de tres valores
+### Three-valued NULL logic
 
-Logica de tres valores SQL completa para tratamento de NULL:
+Full SQL three-valued logic for NULL handling:
 
-- Operadores de comparacao (`=`, `!=`, `<`, `>`, `<=`, `>=`) retornam NULL quando qualquer operando e NULL
-- `AND`/`OR` implementam tabelas verdade de tres valores (ex: `FALSE AND NULL` -> `FALSE`, `TRUE OR NULL` -> `TRUE`)
-- `IN`/`NOT IN` propagam NULL corretamente (ex: `3 NOT IN (1, 2, NULL)` -> desconhecido)
-- Aritmetica (`+`, `-`, `*`, `/`, `%`) e concatenacao de string (`||`) propagam NULL
-- `LIKE` trata operandos NULL
+- Comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) return NULL when either operand is NULL
+- `AND`/`OR` implement proper three-valued truth tables (e.g., `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
+- `IN`/`NOT IN` propagate NULL correctly (e.g., `3 NOT IN (1, 2, NULL)` → unknown)
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) and string concatenation (`||`) propagate NULL
+- `LIKE` handles NULL operands
 
-### Gramatica de expressao unificada
+### Unified expression grammar
 
-As hierarquias separadas `expression` e `booleanExpression` do parser SQL foram mescladas em uma unica sintaxe de expressao. Operadores booleanos (`AND`, `OR`, `NOT`) agora sao operadores regulares na cadeia de precedencia. Isso permite expressoes booleanas em qualquer lugar onde uma expressao e valida (ex: `SELECT a > 5 AND b < 10`).
+The SQL parser's separate `expression` and `booleanExpression` hierarchies have been merged into a single expression syntax. Boolean operators (`AND`, `OR`, `NOT`) are now regular operators in the precedence chain. This allows boolean expressions anywhere an expression is valid (e.g., `SELECT a > 5 AND b < 10`).
 
-### Validacao antecipada de referencia de coluna
+### Eager column reference validation
 
-Referencias de coluna em `WHERE`, `GROUP BY`, `HAVING` e `ORDER BY` agora sao validadas antecipadamente no momento da construcao do plano de consulta, capturando colunas inexistentes mesmo em tabelas vazias ou ordenacoes de linha unica. Anteriormente, referencias invalidas so eram detectadas no momento da avaliacao por linha, entao consultas em tabelas vazias tinham sucesso silenciosamente.
+Column references in `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` are now validated eagerly at query plan construction time, catching nonexistent columns even on empty tables or single-row sorts. Previously, bad references were only detected at eval time per-row, so queries against empty tables silently succeeded.
 
-### Correcoes de bugs
+### Bug fixes
 
-- Restricao NOT NULL nao aplicada em UPDATE
-- Restricao UNIQUE rejeitava multiplos NULLs (padrao SQL: NULLs sao distintos)
-- Colunas duplicadas na lista de colunas do INSERT nao eram detectadas
-- `SUM`/`AVG`/`MIN`/`MAX` em tabela vazia retornava 0 em vez de NULL
-- `LIKE '_'` correspondia a string vazia
-- `LIMIT 0` gerava um erro
+- NOT NULL constraint not enforced on UPDATE
+- UNIQUE constraint rejected multiple NULLs (SQL standard: NULLs are distinct)
+- Duplicate columns in INSERT column list not detected
+- `SUM`/`AVG`/`MIN`/`MAX` on empty table returned 0 instead of NULL
+- `LIKE '_'` matched empty string
+- `LIMIT 0` threw an error
 
-### Atualizacoes de versao
+### Version bumps
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.9 | @petradb/engine 1.2.16 |
@@ -413,19 +523,19 @@ Referencias de coluna em `WHERE`, `GROUP BY`, `HAVING` e `ORDER BY` agora sao va
 
 ## v1.2-20260307
 
-### SQL: Palavra-chave `DEFAULT` em INSERT VALUES
+### SQL: `DEFAULT` keyword in INSERT VALUES
 
-`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` agora funciona. A palavra-chave `DEFAULT` do padrao SQL era anteriormente rejeitada pelo parser, quebrando comandos INSERT gerados por ORMs que passam explicitamente `DEFAULT` para colunas serial ou com valores padrao.
+`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` now works. The SQL-standard `DEFAULT` keyword was previously rejected by the parser, breaking ORM-generated INSERT statements that explicitly pass `DEFAULT` for serial or defaulted columns.
 
-### Integracao com Drizzle ORM
+### Drizzle ORM integration
 
-Novo pacote `@petradb/drizzle` fornece um driver [Drizzle ORM](https://orm.drizzle.team) com uma implementacao de dialeto PostgreSQL personalizada. Suporta definicoes de schema com `pgTable`, insert/select/update/delete, clausulas returning, `db.transaction()` com commit/rollback automatico e consultas type-safe. Paridade completa de recursos com `drizzle-orm/node-postgres`.
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver with a custom PostgreSQL dialect implementation. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and type-safe queries. Full feature parity with `drizzle-orm/node-postgres`.
 
-### Atualizacoes de versao para pacotes dependentes
+### Version bumps for dependent packages
 
-Engine, server, cli e jdbc atualizados para incorporar a correcao da palavra-chave DEFAULT.
+Engine, server, cli, and jdbc bumped to pick up the DEFAULT keyword fix.
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.7 | @petradb/engine 1.2.14 |
@@ -439,26 +549,26 @@ Engine, server, cli e jdbc atualizados para incorporar a correcao da palavra-cha
 
 ## v1.2-20260306
 
-### API JS: `close()` retorna `Promise<void>`
-`Session.close()` agora retorna `Promise<void>` em vez de `void`, correspondendo a API do modulo client para intercambiabilidade.
+### JS API: `close()` returns `Promise<void>`
+`Session.close()` now returns `Promise<void>` instead of `void`, matching the client module's API for interchangeability.
 
-### Parsing de timestamp
-`parseTimestamp` agora trata sufixo `Z`, offsets `+/-HH:MM`, milissegundos e timestamps separados por espaco com informacao de fuso horario. Remove o fuso horario para `LocalDateTime` em colunas `TIMESTAMP`.
+### Timestamp parsing
+`parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
 
-### Completude da fachada JS
-`toJS` e `typeString` agora tratam `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue` e `ByteaValue`.
+### JS facade completeness
+`toJS` and `typeString` now handle `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, and `ByteaValue`.
 
-### SQL: estrela qualificada (`table.*`)
-A sintaxe `SELECT t.*` agora funciona em consultas, incluindo joins e expressoes mistas.
+### SQL: qualified star (`table.*`)
+`SELECT t.*` syntax now works in queries, including joins and mixed expressions.
 
-### Coercao de tipo em comparacoes
-- `NumberValue` e `TextValue` agora podem comparar entre tipos (parametros de texto vs colunas numericas e vice-versa)
-- `TimestampValue` agora pode comparar com `TextValue` analisando o texto como timestamp
+### Type coercion in comparisons
+- `NumberValue` and `TextValue` can now compare across types (text parameters vs numeric columns and vice versa)
+- `TimestampValue` can now compare against `TextValue` by parsing the text as a timestamp
 
-### Driver Knex: Vinculacao de Date
-`_sanitizeBindings` converte objetos JS `Date` para strings ISO antes de passar para o engine, prevenindo `DateTimeParseException` no formato `Date.toString()`.
+### Knex driver: Date binding
+`_sanitizeBindings` converts JS `Date` objects to ISO strings before passing to the engine, preventing `DateTimeParseException` on `Date.toString()` format.
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.6 | @petradb/engine 1.2.13 |
@@ -471,25 +581,25 @@ A sintaxe `SELECT t.*` agora funciona em consultas, incluindo joins e expressoes
 
 ## v1.2-20260305
 
-### Driver JDBC
-- Publicacao de fat jar — `io.github.edadma:petradb-jdbc` agora e um unico jar autocontido no Maven Central
-- URLs de conexao limpos — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
-- Auto-descoberta via ServiceLoader — `DriverManager.getConnection()` funciona sem `Class.forName`
-- Corrigidas strings de versao de metadados hardcoded
+### JDBC driver
+- Fat jar publishing — `io.github.edadma:petradb-jdbc` is now a single self-contained jar on Maven Central
+- Clean connection URLs — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
+- ServiceLoader auto-discovery — `DriverManager.getConnection()` works without `Class.forName`
+- Fixed hardcoded metadata version strings
 
-### Engine JS/TS (`@petradb/engine`)
-- Adicionados `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` a fachada JS
-- Adicionados `ExplainResult` e `CopyResult` as definicoes de tipo TypeScript
+### JS/TS engine (`@petradb/engine`)
+- Added `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` to JS facade
+- Added `ExplainResult` and `CopyResult` to TypeScript type definitions
 
-### Documentacao
-- Novo guia Knex.js com exemplos completos
-- Documentacao JDBC: adicionados trechos de instalacao Maven/Gradle/sbt, corrigido numero da porta
+### Documentation
+- New Knex.js guide with full examples
+- JDBC docs: added Maven/Gradle/sbt install snippets, fixed port number
 
-### Infraestrutura
-- `petradb-shared` agora publicavel no Maven Central
-- Script de smoke test pos-publicacao cobrindo artefatos npm, Scala e JDBC
+### Infrastructure
+- `petradb-shared` now publishable to Maven Central
+- Post-publish smoke test script covering npm, Scala, and JDBC artifacts
 
-| Componente | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.1 | — |
 | engine | 1.2.2 | @petradb/engine 1.2.5 |
@@ -501,86 +611,86 @@ A sintaxe `SELECT t.*` agora funciona em consultas, incluindo joins e expressoes
 
 ## v1.2.2
 
-### Reestruturacao de subpacote do engine
-- Engine movido para subpacote `io.github.edadma.petradb.engine`
-- Novo trait compartilhado `Session` estendido por engine e client
+### Engine subpackage restructure
+- Engine moved to `io.github.edadma.petradb.engine` subpackage
+- New shared `Session` trait extended by both engine and client
 
-### Suporte a cliente CLI
-- Conecte a um servidor PetraDB remoto: `petradb --host localhost --port 5480`
-- Flags `--user` e `--password` para autenticacao
-- Meta-comandos funcionam pela rede via SQL
+### CLI client support
+- Connect to a remote PetraDB server: `petradb --host localhost --port 5480`
+- `--user` and `--password` flags for authentication
+- Meta-commands work over the network via SQL
 
 ### SQL
-- Comando `SHOW VIEWS` retorna nomes e definicoes de views
+- `SHOW VIEWS` command returns view names and definitions
 
-### Dialeto Knex
-- Adaptador de dialeto `@petradb/knex` para usar o construtor de consultas Knex.js com PetraDB
+### Knex dialect
+- `@petradb/knex` dialect adapter for using Knex.js query builder with PetraDB
 
-### Correcoes
-- Correcao de publicacao npm do client
-- Correcao de publicacao npm do CLI
-- Corrigidas strings de versao de metadados JDBC hardcoded
-- Mais de 1013 testes passando em JVM, JS e Native
+### Fixes
+- Fix client npm publish
+- Fix CLI npm publish
+- Fix hardcoded JDBC metadata version strings
+- 1013+ tests passing across JVM, JS, and Native
 
 ## v1.2
 
-### Driver JDBC
-- Publicado no Maven Central como `petradb-jdbc`
-- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, metadados de FK/indice para DBeaver
-- Conexoes em modo arquivo (embarcado) e modo servidor (rede)
+### JDBC driver
+- Published to Maven Central as `petradb-jdbc`
+- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/index metadata for DBeaver
+- File mode (embedded) and server mode (network) connections
 
-### Engine SQL
-- `COPY FROM/TO` para importacao/exportacao CSV
+### SQL engine
+- `COPY FROM/TO` for CSV import/export
 - `CREATE TEMP TABLE`, `CREATE/DROP VIEW`
-- Introspeccao `SHOW FOREIGN KEYS`/`SHOW INDEXES`
-- Otimizacao de index nested loop join para equijoins
-- Parser migrado para fastparse
+- `SHOW FOREIGN KEYS`/`SHOW INDEXES` introspection
+- Index nested loop join optimization for equijoins
+- Migrated parser to fastparse
 
-### Servidor
-- Suporte CORS com configuracao TOML
-- `max_sessions` configuravel, porta padrao 5480
-- Plataforma de servidor JS com backend HTTP Node.js
+### Server
+- CORS support with TOML configuration
+- Configurable `max_sessions`, default port 5480
+- JS server platform with Node.js HTTP backend
 
-### Cliente
-- Novo pacote npm `@petradb/client` com fachada JS
-- Classe `Session` com `connect()`/`execute()`/`close()` retornando Promises
+### Client
+- New `@petradb/client` npm package with JS facade
+- `Session` class with `connect()`/`execute()`/`close()` returning Promises
 
 ### CLI
-- Comandos `\timing`, `\copy`
-- Historico persistente no Native
+- `\timing`, `\copy` commands
+- Persistent history on Native
 
 ### Build
 - Scala 3.8.2, sbt 1.12.4
-- 1000 testes passando em JVM, JS e Native
+- 1000 tests passing across JVM, JS, and Native
 
 ## v1.1.0
 
-### TextDB — persistencia em arquivo de texto editavel
-Um novo backend de armazenamento que persiste o banco de dados como um arquivo de texto `.ptxt`. Carrega na memoria ao abrir e reescreve o arquivo apos cada alteracao.
+### TextDB — human-editable text file persistence
+A new storage backend that persists the database as a `.ptxt` text file. Loads into memory on open and rewrites the file after every change.
 
 ### Upsert — `ON CONFLICT DO UPDATE`
-Semantica de inserir-ou-atualizar com a pseudo-tabela `EXCLUDED`.
+Insert-or-update semantics with the `EXCLUDED` pseudo-table.
 
-### Hierarquia de excecoes melhorada
-Classes de excecao tipadas substituem chamadas genericas `problem()`.
+### Improved exception hierarchy
+Typed exception classes replace generic `problem()` calls.
 
-### ALTER TABLE centralizado
-`DB.alterTable()` agora centraliza todo o despacho de ALTER TABLE.
+### ALTER TABLE centralised
+`DB.alterTable()` now centralises all ALTER TABLE dispatch.
 
 ## v1.0.1
 
-- Renomear `ConnectSQL` para `Session` em `@petradb/engine`
-- API assincrona `execute()` retornando `Promise<ExecuteResult[]>`
-- Novo pacote `@petradb/client` para uso em rede
-- Formatos de resposta alinhados entre engine e servidor
+- Rename `ConnectSQL` to `Session` in `@petradb/engine`
+- Async `execute()` API returning `Promise<ExecuteResult[]>`
+- New `@petradb/client` package for network usage
+- Aligned response formats between engine and server
 
 ## v1.0.0
 
-Primeiro lancamento estavel.
+First stable release.
 
-- Engine SQL multiplataforma (JVM, JavaScript, Native)
-- Sintaxe compativel com PostgreSQL
-- Armazenamento em memoria e persistente (seguro contra falhas)
-- DDL, DML, joins, subconsultas, agregacoes, transacoes
-- Operadores JSONB, tipos de array, restricoes CHECK
-- 879 testes passando
+- Cross-platform SQL engine (JVM, JavaScript, Native)
+- PostgreSQL-compatible syntax
+- In-memory and persistent (crash-safe) storage
+- DDL, DML, joins, subqueries, aggregations, transactions
+- JSONB operators, array types, CHECK constraints
+- 879 passing tests

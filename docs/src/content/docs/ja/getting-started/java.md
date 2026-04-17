@@ -12,13 +12,13 @@ PetraDBは標準的なJDBC 4ドライバーを提供しているので、おな�
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.2</version>
 </dependency>
 ```
 
 **Gradle:**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.5.0'
+implementation 'io.github.edadma:petradb-jdbc:1.5.2'
 ```
 
 ドライバーは自動登録されるため、`Class.forName()`は不要です。

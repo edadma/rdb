@@ -8,7 +8,7 @@ description: PetraDB의 Scala API 레퍼런스.
 `build.sbt`에 추가합니다:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.2"
 ```
 
 ## 패키지 구조

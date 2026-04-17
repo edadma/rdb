@@ -8,7 +8,7 @@ description: Scala 프로젝트에 PetraDB를 추가하고 첫 번째 SQL 쿼리
 `build.sbt`에 추가합니다:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.2"
 ```
 
 `%%%` 연산자는 플랫폼에 맞는 아티팩트를 자동으로 선택합니다 — JVM, Scala.js, 또는 Scala Native.

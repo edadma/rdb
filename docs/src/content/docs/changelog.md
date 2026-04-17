@@ -2,6 +2,27 @@
 title: Changelog
 ---
 
+## v1.5-20260417
+
+### SQL Compatibility Fixes
+
+Four fixes to improve PostgreSQL compatibility:
+
+- **`type` as column name** — removed `type` from the reserved words list so it can be used as an unquoted column name, matching PostgreSQL behavior
+- **Self-referential foreign keys** — `CREATE TABLE` with a column that `REFERENCES` the same table no longer fails; FK validation is deferred until after the table is created
+- **Text-to-timestamp coercion** — text values (e.g., ISO-8601 strings from query parameters) can now be compared to `TIMESTAMP`, `TIMESTAMPTZ`, and `DATE` columns without explicit casts
+- **Scalar subquery expressions** — parenthesized subqueries like `(SELECT count(*) FROM ...) = 0` now work in `WHERE` clauses and other expression positions
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.2 | — |
+| engine | 1.5.2 | @petradb/engine 1.5.2 |
+| cli | — | @petradb/cli 1.5.2 |
+| server | — | @petradb/server 1.5.2 |
+| jdbc | 1.5.2 | — |
+
 ## v1.5-20260320
 
 ### Quarry — API Redesign

@@ -2,51 +2,161 @@
 title: 更新日志
 ---
 
+## v1.5-20260417
+
+### SQL Compatibility Fixes
+
+Four fixes to improve PostgreSQL compatibility:
+
+- **`type` as column name** — removed `type` from the reserved words list so it can be used as an unquoted column name, matching PostgreSQL behavior
+- **Self-referential foreign keys** — `CREATE TABLE` with a column that `REFERENCES` the same table no longer fails; FK validation is deferred until after the table is created
+- **Text-to-timestamp coercion** — text values (e.g., ISO-8601 strings from query parameters) can now be compared to `TIMESTAMP`, `TIMESTAMPTZ`, and `DATE` columns without explicit casts
+- **Scalar subquery expressions** — parenthesized subqueries like `(SELECT count(*) FROM ...) = 0` now work in `WHERE` clauses and other expression positions
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.2 | — |
+| engine | 1.5.2 | @petradb/engine 1.5.2 |
+| cli | — | @petradb/cli 1.5.2 |
+| server | — | @petradb/server 1.5.2 |
+| jdbc | 1.5.2 | — |
+
+## v1.5-20260320
+
+### Quarry — API Redesign
+
+**Select API** — reads like SQL now:
+
+```typescript
+// Old
+db.select(users).columns(users.name).where(eq(users.name, "Alice"))
+
+// New
+db.select(users.name).from(users).where(eq(users.name, "Alice"))
+db.from(users).where(eq(users.name, "Alice"))  // SELECT *
+```
+
+- `db.select(...exprs)` takes column expressions, returns `FromableBuilder`
+- `.from(table)` provides the table and returns `SelectBuilder`
+- `db.from(table)` is shorthand for `db.select().from(table)` (SELECT \*)
+- Old `db.select(table).columns(...)` pattern removed
+
+**Builder-based subqueries** — no more raw AST:
+
+```typescript
+// Old — required .toExpr() to extract raw AST
+const sub = db.select(posts).columns(posts.userId).toExpr()
+inSubquery(users.id, sub)
+
+// New — pass builders directly
+inSubquery(users.id, db.select(posts.userId).from(posts))
+```
+
+- `subquery()`, `exists()`, `inSubquery()`, `notInSubquery()` accept `QueryBuilder` (SelectBuilder or SetOperationBuilder)
+- `withCTE()` accepts builders for CTE queries and main query, returns `QueryBuilder`
+- `insertFrom()` and `executeQuery()` accept builders directly
+- `toExpr()` marked `@internal` — no longer part of the public API
+- `ToCreateAST` removed from public exports
+
+### Version Bumps
+
+| Component | Version |
+|-----------|---------|
+| quarry | @petradb/quarry 1.5.2 |
+
+## v1.5-20260317
+
+### Bug Fixes
+
+- **JSON parser escape sequences** — fixed backslash escape handling (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) in JSON string values
+- **JSON top-level values** — the JSON parser now accepts all JSON value types (strings, numbers, booleans, null) at the top level, not just objects and arrays
+- **JSON path operators** — `#>` and `#>>` now correctly handle text array literals as path arguments
+- **JSON containment operators** — `@>` and `<@` now work correctly with text JSON literals (not just parsed JSON objects)
+- **Persistent DB auto-create** — `petradb_open_persistent` (C API) now auto-creates new databases instead of failing
+
+### Python Package
+
+- New `petradb` Python package with bundled native library (Linux x86_64)
+- SQLite-style API: `Database`, `Cursor`, context managers, parameterized queries
+- Persistent and in-memory modes
+- Published to PyPI
+
+### FFI Tests
+
+- Go FFI test suite for the C library
+- Python FFI test suite for the C library
+
+### Tooling
+
+- Quarry smoke test added to post-publish verification
+- Internationalization: 5 languages + Korean translations for docs site
+- `publish.sh` fix: uses `npx -p typescript tsc` to avoid wrong `tsc` package
+
+### Version Bumps
+
+All components bumped to 1.5.1 (Python to 1.5.2):
+
+| Component | Maven Central | npm | PyPI |
+|-----------|---------------|-----|------|
+| common | 1.5.1 | — | — |
+| engine | 1.5.1 | @petradb/engine 1.5.1 | — |
+| client | 1.5.1 | @petradb/client 1.5.1 | — |
+| server | — | @petradb/server 1.5.1 | — |
+| cli | — | @petradb/cli 1.5.1 | — |
+| jdbc | 1.5.1 | — | — |
+| drizzle | — | @petradb/drizzle 1.5.1 | — |
+| knex | — | @petradb/knex 1.5.1 | — |
+| lucid | — | @petradb/lucid 1.5.1 | — |
+| quarry | — | @petradb/quarry 1.5.1 | — |
+| python | — | — | petradb 1.5.2 |
+
 ## v1.5-20260315
 
-### PL/pgSQL — 存储过程、函数和触发器
+### PL/pgSQL — Stored Procedures, Functions, and Triggers
 
-完整的过程语言支持，包括 DO 块、存储函数和存储过程：
+Full procedural language support in DO blocks, stored functions, and stored procedures:
 
-- **DO 块** — 带有 DECLARE、BEGIN...END 的匿名 PL/pgSQL 块
-- **存储函数** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`，可在任何 SQL 表达式中调用
-- **存储过程** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`，通过 `CALL` 调用
-- **触发器** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
-  - BEFORE 触发器可以通过返回 NULL 取消操作
-  - AFTER 触发器在操作完成后触发
-  - 触发器可在 INSERT、UPDATE、DELETE 和 COPY FROM 时触发
-  - 可使用 TG_OP、TG_TABLE_NAME、OLD、NEW 变量
-- **控制流** — IF/ELSIF/ELSE、WHILE LOOP、FOR range/query LOOP、RETURN、RAISE NOTICE/EXCEPTION、PERFORM、EXCEPTION WHEN
-- **持久化** — 函数、过程和触发器在 PersistentDB 和 TextDB 上关闭/重新打开后仍然保留
-- **OR REPLACE** — 覆盖已有的函数和过程
+- **DO blocks** — anonymous PL/pgSQL blocks with DECLARE, BEGIN...END
+- **Stored functions** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, callable in any SQL expression
+- **Stored procedures** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invoked with `CALL`
+- **Triggers** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
+  - BEFORE triggers can cancel operations by returning NULL
+  - AFTER triggers fire after the operation
+  - Triggers fire for INSERT, UPDATE, DELETE, and COPY FROM
+  - TG_OP, TG_TABLE_NAME, OLD, NEW variables available
+- **Control flow** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
+- **Persistence** — functions, procedures, and triggers survive close/reopen on PersistentDB and TextDB
+- **OR REPLACE** — overwrite existing functions and procedures
 
-### 用户自定义原生函数
+### User-Defined Native Functions
 
-将宿主语言的回调注册为 SQL 函数，可在查询、触发器和过程中调用：
+Register host-language callbacks as SQL functions, callable from queries, triggers, and procedures:
 
 - **Scala** — `db.registerScalarFunction("name", { args => result })`
 - **JavaScript** — `session.registerFunction("name", (args) => result)`
-- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)`，配合 SQLite 风格的类型化 value/context API
+- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` with SQLite-style typed value/context API
 
-### C 库和游标 API
+### C Library and Cursor API
 
-- **原生共享库** — 通过 Scala Native 提供 `libpetradb-engine.so`，使用 `@exported` 导出 C 可调用函数
-- **SQLite 风格 C API** — `petradb_open`、`petradb_exec`、`petradb_prepare/step/finalize`，类型化列访问器
-- **用户自定义函数** — `petradb_value_int/double/text`、`petradb_result_int/double/text/null/error`、`petradb_user_data`
-- **游标 API** — `session.openCursor(sql)`，支持 `step()` 逐行惰性迭代、类型化列访问器、`fetch(n)`、`move(n)`、参数化查询
-- **C 头文件** — `petradb.h`，包含完整 API 文档
-- **C 测试套件** — 67 个测试
-- **Rust FFI 测试** — 38 个测试，验证跨语言互操作性
+- **Native shared library** — `libpetradb-engine.so` via Scala Native with `@exported` C-callable functions
+- **SQLite-style C API** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, typed column accessors
+- **User-defined functions** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
+- **Cursor API** — `session.openCursor(sql)` for lazy row-by-row iteration with `step()`, typed column accessors, `fetch(n)`, `move(n)`, parameterized queries
+- **C header** — `petradb.h` with full API documentation
+- **C test suite** — 67 tests
+- **Rust FFI test** — 38 tests proving cross-language interop
 
-### 虚拟表
+### Virtual Tables
 
-- **可扩展框架** — `CREATE VIRTUAL TABLE name USING module(args)`，只读，显示在 SHOW TABLES 中
-- **内置 CSV 模块** — `CREATE VIRTUAL TABLE t USING csv('file.csv')`，支持表头/分隔符选项
-- **自定义模块** — 通过 Scala API `db.registerVirtualTableModule("name", module)` 注册
+- **Extensible framework** — `CREATE VIRTUAL TABLE name USING module(args)`, read-only, appears in SHOW TABLES
+- **Built-in CSV module** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` with header/delimiter options
+- **Custom modules** — `db.registerVirtualTableModule("name", module)` in Scala API
 
-### csv_file() 表函数
+### csv_file() Table Function
 
-无需导入即可直接查询 CSV 文件：
+Query CSV files directly without importing:
 
 ```sql
 SELECT * FROM csv_file('data.csv');
@@ -54,67 +164,67 @@ SELECT e.name, d.dept FROM csv_file('employees.csv') e
   JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
 ```
 
-### 高级索引
+### Advanced Indexes
 
-- **部分索引** — `CREATE INDEX ... WHERE condition` — 仅索引满足谓词条件的行
-- **表达式索引** — `CREATE INDEX ... ON table ((expr))` — 索引计算值，如 `lower(email)`
-- **组合使用** — 部分索引和表达式索引可以一起使用
+- **Partial indexes** — `CREATE INDEX ... WHERE condition` — only index rows matching the predicate
+- **Expression indexes** — `CREATE INDEX ... ON table ((expr))` — index computed values like `lower(email)`
+- **Combined** — partial + expression indexes work together
 
-### 窗口函数
+### Window Functions
 
-- **FIRST_VALUE(expr)** — 窗口帧第一行的值
-- **LAST_VALUE(expr)** — 窗口帧最后一行的值
-- **NTH_VALUE(expr, n)** — 窗口帧第 n 行的值
+- **FIRST_VALUE(expr)** — value at the first row of the window frame
+- **LAST_VALUE(expr)** — value at the last row of the window frame
+- **NTH_VALUE(expr, n)** — value at the nth row of the frame
 
 ### DELETE ... USING
 
-多表删除，匹配 PostgreSQL 语法：
+Multi-table deletes matching PostgreSQL syntax:
 
 ```sql
 DELETE FROM orders USING customers
 WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 ```
 
-### Quarry — 类型安全的 AST 查询构建器
+### Quarry — Type-Safe AST Query Builder
 
-新增 `@petradb/quarry` 包：生成 AST 对象（而非 SQL 字符串）的类型安全查询构建器：
+New `@petradb/quarry` package: type-safe query builder that generates AST objects (not SQL strings):
 
-- 支持 21 种列类型的模式定义
-- 完整 CRUD：select、insert、update、delete，带类型安全的列引用
-- 连接：inner、left、right、full outer、cross，带类型化结果
-- 表达式：50+ 运算符、聚合、CASE/CAST/EXISTS、子查询
-- Upsert：`onConflictDoNothing()`、`onConflictDoUpdate()`
-- 自连接的表别名
-- 事务、RETURNING、DISTINCT ON
-- 所有功能的编译时类型测试
-- 集合运算：UNION、INTERSECT、EXCEPT
-- 窗口函数、CTE、命名标量辅助函数
+- Schema definition with 21 column types
+- Full CRUD: select, insert, update, delete with type-safe column references
+- Joins: inner, left, right, full outer, cross with typed results
+- Expressions: 50+ operators, aggregates, CASE/CAST/EXISTS, subqueries
+- Upsert: `onConflictDoNothing()`, `onConflictDoUpdate()`
+- Table aliases for self-joins
+- Transactions, RETURNING, DISTINCT ON
+- Compile-time type tests for all features
+- Set operations: UNION, INTERSECT, EXCEPT
+- Window functions, CTEs, named scalar helpers
 
-### 错误修复
+### Bug Fixes
 
-- **ByteaValue** — `ARRAY[...]` 插入 BYTEA 列现在正确产生 `ByteaValue` 而不是 `ArrayValue`
-- **JS/Client 结果类型** — 添加了缺失的 PL/pgSQL 结果类型处理器（DoBlockResult、CreateFunctionResult 等），防止非穷举匹配崩溃
-- **编解码器** — 为所有新结果类型添加了客户端/服务器通信的序列化支持
-- **llms.txt** — 将 `type` 字段修复为 `command` 字段，更新了所有结果类型和功能
+- **ByteaValue** — `ARRAY[...]` into BYTEA columns now correctly produces `ByteaValue` instead of `ArrayValue`
+- **JS/Client result types** — added missing PL/pgSQL result type handlers (DoBlockResult, CreateFunctionResult, etc.) to prevent non-exhaustive match crashes
+- **Codecs** — added serialization for all new result types for client/server communication
+- **llms.txt** — fixed `type` field to `command` field, updated all result types and features
 
-### 模块重命名
+### Module Rename
 
-- **shared → common** — 将共享类型模块从 `petradb-shared` 重命名为 `petradb-common`
+- **shared → common** — renamed the shared types module from `petradb-shared` to `petradb-common`
 
-### 文档
+### Documentation
 
-- 新增 **PL/pgSQL** 参考页面（触发器、函数、过程、控制流）
-- 新增 **C API** 参考页面（完整的 SQLite 风格接口）
-- 新增 Java (JDBC) 和 C 的**入门指南**
-- 更新 DDL 文档：部分/表达式索引、CHECK 约束、触发器、存储例程
-- 更新 DML 文档：DELETE...USING、csv_file()、虚拟表
-- 更新 JS/Scala API 文档：registerFunction、结果类型
-- 着陆页：四个入门按钮（JS、Java、Scala、C）
-- 重写 llms.txt，包含所有当前功能
+- New **PL/pgSQL** reference page (triggers, functions, procedures, control flow)
+- New **C API** reference page (full SQLite-style interface)
+- New **Getting Started** guides for Java (JDBC) and C
+- Updated DDL docs: partial/expression indexes, CHECK constraints, triggers, stored routines
+- Updated DML docs: DELETE...USING, csv_file(), virtual tables
+- Updated JS/Scala API docs: registerFunction, result types
+- Landing page: four getting-started buttons (JS, Java, Scala, C)
+- Rewritten llms.txt with all current features
 
-### 版本更新
+### Version Bumps
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | common | 1.5.0 | — |
 | engine | 1.5.0 | @petradb/engine 1.5.0 |
@@ -129,19 +239,19 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260314
 
-### 错误修复与改进
+### Bug fixes & improvements
 
-- **关联 IN 子查询修复** — 带有索引表的关联 `IN (SELECT ...)` 现在可以正确工作
-- **限定列解析** — 修复了复杂连接中的歧义列引用
-- **空 IN/ANY 处理** — 解决了 `IN ()` 和 `= ANY('{}')` 边界情况
-- **外键 CASCADE 清理** — `DROP TABLE ... CASCADE` 现在正确移除子表上的外键约束
-- **DROP TABLE IF EXISTS ... CASCADE** — `IF EXISTS` 与 `CASCADE` 组合不再导致解析错误
-- **数组字面量转换** — 支持 `'{1,2,3}'::integer[]` PostgreSQL 数组字面量语法
-- **参数化查询修复** — 改进了子查询和关联路径的参数绑定
+- **Correlated IN subquery fix** — correlated `IN (SELECT ...)` with indexed tables now works correctly
+- **Qualified column resolution** — fixes for ambiguous column references in complex joins
+- **Empty IN/ANY handling** — `IN ()` and `= ANY('{}')` edge cases resolved
+- **Foreign key CASCADE cleanup** — `DROP TABLE ... CASCADE` now properly removes FK constraints on child tables
+- **DROP TABLE IF EXISTS ... CASCADE** — combining `IF EXISTS` with `CASCADE` no longer causes a parse error
+- **Array literal casting** — support for `'{1,2,3}'::integer[]` PostgreSQL array literal syntax
+- **Parameterized query fixes** — improved parameter binding for subqueries and correlated paths
 
-### 版本更新
+### Version bumps
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.2 | — |
 | engine | 1.4.9 | @petradb/engine 1.4.3 |
@@ -153,11 +263,11 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260312
 
-### 公用表表达式（CTE）
+### Common Table Expressions (CTEs)
 
-完整的 CTE 支持，包括 `WITH` 和 `WITH RECURSIVE`。
+Full CTE support with `WITH` and `WITH RECURSIVE`.
 
-**非递归 CTE** — 提高可读性和复用性的命名子查询：
+**Non-recursive CTEs** — named subqueries for readability and reuse:
 
 ```sql
 WITH active_orders AS (
@@ -168,9 +278,9 @@ FROM active_orders
 GROUP BY customer_id;
 ```
 
-可以在单个查询中定义多个 CTE，后续 CTE 可以引用前面的 CTE。支持列别名：`WITH t(x, y) AS (...)`。如果 CTE 名称与表名相同，CTE 会遮蔽表名。
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
 
-**递归 CTE** — 用于层次结构和图数据的迭代查询：
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
 
 ```sql
 WITH RECURSIVE descendants(id, name, depth) AS (
@@ -182,13 +292,13 @@ WITH RECURSIVE descendants(id, name, depth) AS (
 SELECT name, depth FROM descendants ORDER BY depth, name;
 ```
 
-同时支持 `UNION ALL`（保留重复）和 `UNION`（去重）。安全限制最多 1000 次迭代。
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
 
-### 窗口函数
+### Window functions
 
-完整的窗口函数支持，分为三类：
+Full window function support with three categories:
 
-**排名函数** — `ROW_NUMBER()`、`RANK()`、`DENSE_RANK()`，配合 `PARTITION BY` 和 `ORDER BY`：
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
 
 ```sql
 SELECT name, department, salary,
@@ -196,7 +306,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-**值函数** — `LAG()`、`LEAD()`、`NTILE()`，支持可配置的偏移量和默认值：
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
 
 ```sql
 SELECT name, salary,
@@ -205,7 +315,7 @@ SELECT name, salary,
 FROM employees;
 ```
 
-**聚合窗口函数** — 任何聚合函数（`SUM`、`COUNT`、`AVG`、`MIN`、`MAX` 等）配合 `OVER()`，包括帧规范：
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
 
 ```sql
 SELECT name, salary,
@@ -214,11 +324,11 @@ SELECT name, salary,
 FROM employees;
 ```
 
-帧边界：`UNBOUNDED PRECEDING`、`UNBOUNDED FOLLOWING`、`CURRENT ROW`、`N PRECEDING`、`N FOLLOWING`。不指定帧子句时，聚合窗口函数在整个分区上计算。
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
 
-### 聚合 FILTER 子句
+### Aggregate FILTER clause
 
-在聚合函数上使用 `FILTER (WHERE ...)`，适用于分组查询和窗口函数：
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
 
 ```sql
 SELECT
@@ -229,13 +339,13 @@ SELECT
 FROM orders;
 ```
 
-### 哈希连接优化
+### Hash join optimization
 
-无索引的等值连接现在使用哈希连接策略，而不是笛卡尔积，将连接复杂度从 O(n×m) 降低到 O(n+m)。适用于 INNER、LEFT、RIGHT 和 FULL 连接。当索引可用时，仍优先使用索引嵌套循环连接。非等值连接条件仍回退到笛卡尔积。在 `EXPLAIN` 输出中显示为 `Hash Join`、`Hash Left Join`、`Hash Right Join`、`Hash Full Join`。
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
 
-### 生成列
+### Generated columns
 
-`GENERATED ALWAYS AS (expr) STORED` 计算列：
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
 
 ```sql
 CREATE TABLE products (
@@ -245,39 +355,39 @@ CREATE TABLE products (
 );
 ```
 
-生成列在 INSERT 和 UPDATE 时重新计算，不能直接设置。
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
 
-### ORDER BY 空值排序
+### ORDER BY null ordering
 
-`ORDER BY` 现在默认使用 SQL 标准的空值排序：`ASC` → `NULLS LAST`，`DESC` → `NULLS FIRST`。支持显式的 `NULLS FIRST` / `NULLS LAST` 覆盖。
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
 
-### 序列支持
+### Sequence support
 
-完全兼容 PostgreSQL 的序列支持。`CREATE SEQUENCE` 和 `DROP SEQUENCE` 支持选项（`INCREMENT BY`、`START WITH`、`MINVALUE`、`MAXVALUE`、`CYCLE`、`IF NOT EXISTS` / `IF EXISTS`）。序列函数：`nextval()`、`currval()`、`setval()`、`lastval()`。
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
 
-`SERIAL`、`SMALLSERIAL` 和 `BIGSERIAL` 列现在创建后备序列（名为 `<table>_<column>_seq`），匹配 PostgreSQL 行为。`DROP TABLE` 级联删除所拥有的序列。`TRUNCATE` 重置后备序列。序列状态完全支持事务 — `ROLLBACK` 恢复序列计数器。持久数据库将序列状态序列化到目录中。
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
 
-新增 SQL 命令：`SHOW SEQUENCES`、`SHOW INDEXES`（所有表的所有索引）。
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
 
-CLI：新增 `\ds`（列出序列）和 `\di`（列出索引）元命令。
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
 
-### CREATE INDEX USING 子句
+### CREATE INDEX USING clause
 
-`CREATE INDEX ... USING btree` 语法现已支持（btree 是唯一支持的方法）。这提高了与 PostgreSQL 生成的 DDL 和 ORM 的兼容性。
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
 
-### 错误修复
+### Bug fixes
 
-- `ORDER BY` 与 NULL 值：比较器在两个值都为 NULL 时现在返回 0，修复了多排序键时的非确定性排序结果
-- `ORDER BY` 别名解析：SELECT 别名（例如 `SELECT x AS y ... ORDER BY y`）现在在非分组查询中正确解析，无论是否有窗口函数
-- `Type.convert()` 空值处理：通过类型转换传递的 NULL 值（例如通过 UPDATE SET 中的预处理语句参数）现在保留为 NULL，而不是被转换为类型的文本表示。修复了 13 种类型：TEXT、VARCHAR、CHAR、UUID、TIMESTAMP、DATE、TIME、TIMETZ、INTERVAL、TIMESTAMPTZ、BYTEA、JSON、ENUM
-- ORDER BY 解析器中 nulls 子句的穷举匹配警告
-- playground 终端中同步抛出的静默错误
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- `ORDER BY` alias resolution: SELECT aliases (e.g. `SELECT x AS y ... ORDER BY y`) now resolve correctly in non-grouped queries, both with and without window functions
+- `Type.convert()` null handling: NULL values passed through type conversion (e.g. via prepared statement parameters in UPDATE SET) are now preserved as NULL instead of being converted to the type's text representation. Fixed in 13 types: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
 
-### 版本更新
+### Version bumps
 
-所有组件升级到 1.4.1：
+All components bumped to 1.4.1:
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.1 | — |
 | engine | 1.4.1 | @petradb/engine 1.4.1 |
@@ -291,17 +401,17 @@ CLI：新增 `\ds`（列出序列）和 `\di`（列出索引）元命令。
 
 ## v1.3-20260309
 
-### 事务性 DDL
+### Transactional DDL
 
-DDL 语句（CREATE TABLE、CREATE INDEX、DROP TABLE 等）现在完全支持在事务内执行，并与 DML 一起原子回滚。DDL 和 DML 可以在同一个 BEGIN/COMMIT 块中自由交错使用。MemoryDB 和 PersistentDB 都会在 BEGIN 时捕获完整的目录快照，并在 ROLLBACK 时恢复。
+DDL statements (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) are now fully supported inside transactions and roll back atomically with DML. DDL and DML can be freely interleaved within a single BEGIN/COMMIT block. Both MemoryDB and PersistentDB capture a full catalog snapshot at BEGIN time and restore it on ROLLBACK.
 
-### Drizzle 关系查询
+### Drizzle relational queries
 
-完全支持 Drizzle ORM 关系查询（`db.query.*.findMany()`、`db.query.*.findFirst()`）。添加了 `json_build_array` 和 `json_build_object` 标量函数，修复了 LATERAL 子查询中的参数替换。
+Full support for Drizzle ORM relational queries (`db.query.*.findMany()`, `db.query.*.findFirst()`). Added `json_build_array` and `json_build_object` scalar functions, and fixed parameter substitution in LATERAL subqueries.
 
-### 版本更新
+### Version bumps
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | engine | 1.3.1 | @petradb/engine 1.3.3 |
 | server | 1.3.1 | @petradb/server 1.3.1 |
@@ -311,9 +421,9 @@ DDL 语句（CREATE TABLE、CREATE INDEX、DROP TABLE 等）现在完全支持�
 
 ## v1.3-20260308
 
-### Schema 支持
+### Schema support
 
-PostgreSQL 风格的 schema 命名空间。每个数据库默认有一个 `public` schema；未限定的表名解析到 `public`。Schema 限定名称（`schema.table`）适用于所有 DDL 和 DML 语句 — CREATE TABLE、INSERT、UPDATE、DELETE、SELECT、ALTER TABLE、DROP TABLE、TRUNCATE、CREATE INDEX 和 COPY。
+PostgreSQL-style schema namespaces. Every database has a `public` schema by default; unqualified table names resolve to `public`. Schema-qualified names (`schema.table`) work in all DDL and DML statements — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, and COPY.
 
 ```sql
 CREATE SCHEMA inventory;
@@ -322,28 +432,28 @@ INSERT INTO inventory.products (name) VALUES ('Widget');
 SELECT * FROM inventory.products;
 ```
 
-### information_schema 虚拟表
+### information_schema virtual tables
 
-`information_schema.schemata`、`information_schema.tables` 和 `information_schema.columns` 现在可以查询。Schema 限定的表报告正确的 `table_schema`。这些视图从数据库元数据动态生成。
+`information_schema.schemata`, `information_schema.tables`, and `information_schema.columns` are now queryable. Schema-qualified tables report their correct `table_schema`. These views are generated dynamically from database metadata.
 
-### Drizzle ORM 迁移
+### Drizzle ORM migrations
 
-`@petradb/drizzle` 中新增 `migrate()` 函数，用于应用 Drizzle Kit 迁移文件。读取 `meta/_journal.json` 并按顺序执行 SQL 迁移文件，在 `drizzle.__drizzle_migrations` 中跟踪已应用的迁移。
+New `migrate()` function in `@petradb/drizzle` applies Drizzle Kit migration files. Reads the `meta/_journal.json` and executes SQL migration files in order, tracking applied migrations in `drizzle.__drizzle_migrations`.
 
 ```typescript
 import { migrate } from "@petradb/drizzle";
 await migrate(db, { migrationsFolder: "./drizzle" });
 ```
 
-### JDBC 元数据改进
+### JDBC metadata improvements
 
-`DatabaseMetaData.getColumns()` 现在根据列类型和精度/标度声明返回准确的 `COLUMN_SIZE`、`DECIMAL_DIGITS` 和 `CHAR_OCTET_LENGTH` 值。
+`DatabaseMetaData.getColumns()` now returns accurate `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` values based on column type and precision/scale declarations.
 
-### 版本更新
+### Version bumps
 
-所有组件升级到 1.3.0：
+All components bumped to 1.3.0:
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.3.0 | — |
 | engine | 1.3.0 | @petradb/engine 1.3.0 |
@@ -357,49 +467,49 @@ await migrate(db, { migrationsFolder: "./drizzle" });
 
 ## v1.2-20260308
 
-### Drizzle ORM 驱动重写
+### Drizzle ORM driver rewrite
 
-`@petradb/drizzle` 从 `drizzle-orm/pg-proxy` 包装器重写为自定义 PostgreSQL 方言驱动，直接扩展 `PgSession`/`PgPreparedQuery`/`PgTransaction`。这使其与 `drizzle-orm/node-postgres` 完全功能对等：
+`@petradb/drizzle` rewritten from a `drizzle-orm/pg-proxy` wrapper to a custom PostgreSQL dialect driver extending `PgSession`/`PgPreparedQuery`/`PgTransaction` directly. This gives full feature parity with `drizzle-orm/node-postgres`:
 
-- `db.transaction()`，支持自动提交/回滚
-- `tx.rollback()` 显式回滚
-- `returning()` 支持所有变更操作（包括部分列选择）
-- 关系查询支持（待引擎支持 `json_build_array`/`json_agg`）
+- `db.transaction()` with automatic commit/rollback
+- `tx.rollback()` for explicit rollback
+- `returning()` on insert/update/delete (including partial column selection)
+- Relational query support (pending engine support for `json_build_array`/`json_agg`)
 
-### 类型强制：文本参数到 NUMERIC 列
+### Type coercion: text parameters to NUMERIC columns
 
-`NumericType.convert` 现在接受 `TextValue` 并将其解析为 `BigDecimal`，与 `IntegerType`、`BigintType`、`SmallintType` 和 `DoubleType` 的现有强制行为一致。这修复了通过 ORM 进行的参数化 INSERT/UPDATE，ORM 会将数值作为文本发送（标准 PostgreSQL 线协议行为）。
+`NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
 
-### 三值 NULL 逻辑
+### Three-valued NULL logic
 
-完整的 SQL 三值 NULL 逻辑处理：
+Full SQL three-valued logic for NULL handling:
 
-- 比较运算符（`=`、`!=`、`<`、`>`、`<=`、`>=`）在任一操作数为 NULL 时返回 NULL
-- `AND`/`OR` 实现正确的三值真值表（例如 `FALSE AND NULL` → `FALSE`，`TRUE OR NULL` → `TRUE`）
-- `IN`/`NOT IN` 正确传播 NULL（例如 `3 NOT IN (1, 2, NULL)` → unknown）
-- 算术运算（`+`、`-`、`*`、`/`、`%`）和字符串连接（`||`）传播 NULL
-- `LIKE` 处理 NULL 操作数
+- Comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) return NULL when either operand is NULL
+- `AND`/`OR` implement proper three-valued truth tables (e.g., `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
+- `IN`/`NOT IN` propagate NULL correctly (e.g., `3 NOT IN (1, 2, NULL)` → unknown)
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) and string concatenation (`||`) propagate NULL
+- `LIKE` handles NULL operands
 
-### 统一表达式语法
+### Unified expression grammar
 
-SQL 解析器中分离的 `expression` 和 `booleanExpression` 层次结构已合并为单一表达式语法。布尔运算符（`AND`、`OR`、`NOT`）现在是优先级链中的常规运算符。这允许布尔表达式出现在任何表达式有效的位置（例如 `SELECT a > 5 AND b < 10`）。
+The SQL parser's separate `expression` and `booleanExpression` hierarchies have been merged into a single expression syntax. Boolean operators (`AND`, `OR`, `NOT`) are now regular operators in the precedence chain. This allows boolean expressions anywhere an expression is valid (e.g., `SELECT a > 5 AND b < 10`).
 
-### 急切列引用验证
+### Eager column reference validation
 
-`WHERE`、`GROUP BY`、`HAVING` 和 `ORDER BY` 中的列引用现在在查询计划构建时急切验证，即使在空表或单行排序上也能捕获不存在的列。之前，错误的引用只在每行求值时检测，所以对空表的查询会静默成功。
+Column references in `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` are now validated eagerly at query plan construction time, catching nonexistent columns even on empty tables or single-row sorts. Previously, bad references were only detected at eval time per-row, so queries against empty tables silently succeeded.
 
-### 错误修复
+### Bug fixes
 
-- UPDATE 时不强制执行 NOT NULL 约束
-- UNIQUE 约束拒绝多个 NULL（SQL 标准：NULL 是不同的）
-- INSERT 列列表中的重复列未检测到
-- 空表上的 `SUM`/`AVG`/`MIN`/`MAX` 返回 0 而不是 NULL
-- `LIKE '_'` 匹配空字符串
-- `LIMIT 0` 抛出错误
+- NOT NULL constraint not enforced on UPDATE
+- UNIQUE constraint rejected multiple NULLs (SQL standard: NULLs are distinct)
+- Duplicate columns in INSERT column list not detected
+- `SUM`/`AVG`/`MIN`/`MAX` on empty table returned 0 instead of NULL
+- `LIKE '_'` matched empty string
+- `LIMIT 0` threw an error
 
-### 版本更新
+### Version bumps
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.9 | @petradb/engine 1.2.16 |
@@ -413,19 +523,19 @@ SQL 解析器中分离的 `expression` 和 `booleanExpression` 层次结构已�
 
 ## v1.2-20260307
 
-### SQL：INSERT VALUES 中的 `DEFAULT` 关键字
+### SQL: `DEFAULT` keyword in INSERT VALUES
 
-`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` 现在可以工作。SQL 标准的 `DEFAULT` 关键字之前被解析器拒绝，导致 ORM 生成的 INSERT 语句在显式传递 `DEFAULT` 给 serial 或带默认值的列时无法执行。
+`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` now works. The SQL-standard `DEFAULT` keyword was previously rejected by the parser, breaking ORM-generated INSERT statements that explicitly pass `DEFAULT` for serial or defaulted columns.
 
-### Drizzle ORM 集成
+### Drizzle ORM integration
 
-新增 `@petradb/drizzle` 包，提供带有自定义 PostgreSQL 方言实现的 [Drizzle ORM](https://orm.drizzle.team) 驱动。支持使用 `pgTable` 的模式定义、insert/select/update/delete、returning 子句、`db.transaction()` 自动提交/回滚，以及类型安全查询。与 `drizzle-orm/node-postgres` 完全功能对等。
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver with a custom PostgreSQL dialect implementation. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and type-safe queries. Full feature parity with `drizzle-orm/node-postgres`.
 
-### 依赖包版本更新
+### Version bumps for dependent packages
 
-Engine、server、cli 和 jdbc 已升级以包含 DEFAULT 关键字修复。
+Engine, server, cli, and jdbc bumped to pick up the DEFAULT keyword fix.
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.7 | @petradb/engine 1.2.14 |
@@ -439,26 +549,26 @@ Engine、server、cli 和 jdbc 已升级以包含 DEFAULT 关键字修复。
 
 ## v1.2-20260306
 
-### JS API：`close()` 返回 `Promise<void>`
-`Session.close()` 现在返回 `Promise<void>` 而不是 `void`，与 client 模块的 API 匹配以便互换使用。
+### JS API: `close()` returns `Promise<void>`
+`Session.close()` now returns `Promise<void>` instead of `void`, matching the client module's API for interchangeability.
 
-### 时间戳解析
-`parseTimestamp` 现在处理 `Z` 后缀、`+/-HH:MM` 偏移量、毫秒和带时区信息的空格分隔时间戳。对于 `TIMESTAMP` 列，去除时区为 `LocalDateTime`。
+### Timestamp parsing
+`parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
 
-### JS 外观层完善
-`toJS` 和 `typeString` 现在处理 `DateValue`、`TimeValue`、`TimestampTZValue`、`TimeTZValue`、`IntervalValue` 和 `ByteaValue`。
+### JS facade completeness
+`toJS` and `typeString` now handle `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, and `ByteaValue`.
 
-### SQL：限定星号（`table.*`）
-`SELECT t.*` 语法现在可以在查询中工作，包括连接和混合表达式。
+### SQL: qualified star (`table.*`)
+`SELECT t.*` syntax now works in queries, including joins and mixed expressions.
 
-### 比较中的类型强制
-- `NumberValue` 和 `TextValue` 现在可以跨类型比较（文本参数 vs 数值列，反之亦然）
-- `TimestampValue` 现在可以通过将文本解析为时间戳来与 `TextValue` 比较
+### Type coercion in comparisons
+- `NumberValue` and `TextValue` can now compare across types (text parameters vs numeric columns and vice versa)
+- `TimestampValue` can now compare against `TextValue` by parsing the text as a timestamp
 
-### Knex 驱动：Date 绑定
-`_sanitizeBindings` 在传递给引擎之前将 JS `Date` 对象转换为 ISO 字符串，防止 `Date.toString()` 格式导致的 `DateTimeParseException`。
+### Knex driver: Date binding
+`_sanitizeBindings` converts JS `Date` objects to ISO strings before passing to the engine, preventing `DateTimeParseException` on `Date.toString()` format.
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.6 | @petradb/engine 1.2.13 |
@@ -471,25 +581,25 @@ Engine、server、cli 和 jdbc 已升级以包含 DEFAULT 关键字修复。
 
 ## v1.2-20260305
 
-### JDBC 驱动
-- Fat jar 发布 — `io.github.edadma:petradb-jdbc` 现在是 Maven Central 上的单一自包含 jar
-- 简洁的连接 URL — `jdbc:petradb:memory`、`jdbc:petradb:file:/path`、`jdbc:petradb://host:port`
-- ServiceLoader 自动发现 — `DriverManager.getConnection()` 无需 `Class.forName` 即可工作
-- 修复了硬编码的元数据版本字符串
+### JDBC driver
+- Fat jar publishing — `io.github.edadma:petradb-jdbc` is now a single self-contained jar on Maven Central
+- Clean connection URLs — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
+- ServiceLoader auto-discovery — `DriverManager.getConnection()` works without `Class.forName`
+- Fixed hardcoded metadata version strings
 
-### JS/TS 引擎（`@petradb/engine`）
-- 在 JS 外观层中添加了 `CreateViewResult`、`DropViewResult`、`ExplainResult`、`CopyResult`
-- 在 TypeScript 类型定义中添加了 `ExplainResult` 和 `CopyResult`
+### JS/TS engine (`@petradb/engine`)
+- Added `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` to JS facade
+- Added `ExplainResult` and `CopyResult` to TypeScript type definitions
 
-### 文档
-- 新增 Knex.js 指南，包含完整示例
-- JDBC 文档：添加了 Maven/Gradle/sbt 安装代码片段，修正了端口号
+### Documentation
+- New Knex.js guide with full examples
+- JDBC docs: added Maven/Gradle/sbt install snippets, fixed port number
 
-### 基础设施
-- `petradb-shared` 现在可以发布到 Maven Central
-- 发布后冒烟测试脚本，覆盖 npm、Scala 和 JDBC 制品
+### Infrastructure
+- `petradb-shared` now publishable to Maven Central
+- Post-publish smoke test script covering npm, Scala, and JDBC artifacts
 
-| 组件 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.1 | — |
 | engine | 1.2.2 | @petradb/engine 1.2.5 |
@@ -501,86 +611,86 @@ Engine、server、cli 和 jdbc 已升级以包含 DEFAULT 关键字修复。
 
 ## v1.2.2
 
-### 引擎子包重构
-- 引擎移至 `io.github.edadma.petradb.engine` 子包
-- 新增共享 `Session` trait，由 engine 和 client 共同扩展
+### Engine subpackage restructure
+- Engine moved to `io.github.edadma.petradb.engine` subpackage
+- New shared `Session` trait extended by both engine and client
 
-### CLI 客户端支持
-- 连接到远程 PetraDB 服务器：`petradb --host localhost --port 5480`
-- `--user` 和 `--password` 标志用于认证
-- 元命令通过 SQL 在网络上工作
+### CLI client support
+- Connect to a remote PetraDB server: `petradb --host localhost --port 5480`
+- `--user` and `--password` flags for authentication
+- Meta-commands work over the network via SQL
 
 ### SQL
-- `SHOW VIEWS` 命令返回视图名称和定义
+- `SHOW VIEWS` command returns view names and definitions
 
-### Knex 方言
-- `@petradb/knex` 方言适配器，用于将 Knex.js 查询构建器与 PetraDB 配合使用
+### Knex dialect
+- `@petradb/knex` dialect adapter for using Knex.js query builder with PetraDB
 
-### 修复
-- 修复客户端 npm 发布
-- 修复 CLI npm 发布
-- 修复硬编码的 JDBC 元数据版本字符串
-- 在 JVM、JS 和 Native 上通过 1013+ 测试
+### Fixes
+- Fix client npm publish
+- Fix CLI npm publish
+- Fix hardcoded JDBC metadata version strings
+- 1013+ tests passing across JVM, JS, and Native
 
 ## v1.2
 
-### JDBC 驱动
-- 作为 `petradb-jdbc` 发布到 Maven Central
-- `getGeneratedKeys()`、`addBatch()`/`executeBatch()`、用于 DBeaver 的外键/索引元数据
-- 文件模式（嵌入式）和服务器模式（网络）连接
+### JDBC driver
+- Published to Maven Central as `petradb-jdbc`
+- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/index metadata for DBeaver
+- File mode (embedded) and server mode (network) connections
 
-### SQL 引擎
-- `COPY FROM/TO` 用于 CSV 导入/导出
-- `CREATE TEMP TABLE`、`CREATE/DROP VIEW`
-- `SHOW FOREIGN KEYS`/`SHOW INDEXES` 自省
-- 等值连接的索引嵌套循环连接优化
-- 解析器迁移到 fastparse
+### SQL engine
+- `COPY FROM/TO` for CSV import/export
+- `CREATE TEMP TABLE`, `CREATE/DROP VIEW`
+- `SHOW FOREIGN KEYS`/`SHOW INDEXES` introspection
+- Index nested loop join optimization for equijoins
+- Migrated parser to fastparse
 
-### 服务器
-- CORS 支持，配合 TOML 配置
-- 可配置的 `max_sessions`，默认端口 5480
-- 使用 Node.js HTTP 后端的 JS 服务器平台
+### Server
+- CORS support with TOML configuration
+- Configurable `max_sessions`, default port 5480
+- JS server platform with Node.js HTTP backend
 
-### 客户端
-- 新增 `@petradb/client` npm 包，带 JS 外观层
-- `Session` 类，提供返回 Promise 的 `connect()`/`execute()`/`close()`
+### Client
+- New `@petradb/client` npm package with JS facade
+- `Session` class with `connect()`/`execute()`/`close()` returning Promises
 
 ### CLI
-- `\timing`、`\copy` 命令
-- Native 上的持久历史记录
+- `\timing`, `\copy` commands
+- Persistent history on Native
 
-### 构建
-- Scala 3.8.2、sbt 1.12.4
-- 在 JVM、JS 和 Native 上通过 1000 个测试
+### Build
+- Scala 3.8.2, sbt 1.12.4
+- 1000 tests passing across JVM, JS, and Native
 
 ## v1.1.0
 
-### TextDB — 人类可编辑的文本文件持久化
-一种新的存储后端，将数据库持久化为 `.ptxt` 文本文件。打开时加载到内存，每次更改后重写文件。
+### TextDB — human-editable text file persistence
+A new storage backend that persists the database as a `.ptxt` text file. Loads into memory on open and rewrites the file after every change.
 
 ### Upsert — `ON CONFLICT DO UPDATE`
-使用 `EXCLUDED` 伪表的插入或更新语义。
+Insert-or-update semantics with the `EXCLUDED` pseudo-table.
 
-### 改进的异常层次结构
-类型化异常类替代了通用的 `problem()` 调用。
+### Improved exception hierarchy
+Typed exception classes replace generic `problem()` calls.
 
-### ALTER TABLE 集中化
-`DB.alterTable()` 现在集中调度所有 ALTER TABLE 操作。
+### ALTER TABLE centralised
+`DB.alterTable()` now centralises all ALTER TABLE dispatch.
 
 ## v1.0.1
 
-- 在 `@petradb/engine` 中将 `ConnectSQL` 重命名为 `Session`
-- 异步 `execute()` API，返回 `Promise<ExecuteResult[]>`
-- 新增 `@petradb/client` 包用于网络使用
-- 统一了 engine 和 server 之间的响应格式
+- Rename `ConnectSQL` to `Session` in `@petradb/engine`
+- Async `execute()` API returning `Promise<ExecuteResult[]>`
+- New `@petradb/client` package for network usage
+- Aligned response formats between engine and server
 
 ## v1.0.0
 
-首个稳定版本。
+First stable release.
 
-- 跨平台 SQL 引擎（JVM、JavaScript、Native）
-- 兼容 PostgreSQL 语法
-- 内存和持久化（防崩溃）存储
-- DDL、DML、连接、子查询、聚合、事务
-- JSONB 运算符、数组类型、CHECK 约束
-- 879 个通过的测试
+- Cross-platform SQL engine (JVM, JavaScript, Native)
+- PostgreSQL-compatible syntax
+- In-memory and persistent (crash-safe) storage
+- DDL, DML, joins, subqueries, aggregations, transactions
+- JSONB operators, array types, CHECK constraints
+- 879 passing tests

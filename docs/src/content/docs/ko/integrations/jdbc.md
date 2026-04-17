@@ -12,18 +12,18 @@ PetraDB에는 JVM 애플리케이션용 JDBC 4 드라이버가 포함되어 있�
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.2</version>
 </dependency>
 ```
 
 **Gradle:**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.5.0'
+implementation 'io.github.edadma:petradb-jdbc:1.5.2'
 ```
 
 **sbt:**
 ```scala
-libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.0"
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.2"
 ```
 
 또는 [Maven Central](https://central.sonatype.com/artifact/io.github.edadma/petradb-jdbc)에서 직접 jar를 다운로드합니다.

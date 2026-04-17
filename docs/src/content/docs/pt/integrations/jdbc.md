@@ -12,18 +12,18 @@ O PetraDB inclui um driver JDBC 4 para aplicacoes JVM. O driver se registra auto
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.2</version>
 </dependency>
 ```
 
 **Gradle:**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.5.0'
+implementation 'io.github.edadma:petradb-jdbc:1.5.2'
 ```
 
 **sbt:**
 ```scala
-libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.0"
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.2"
 ```
 
 Ou baixe o jar diretamente do [Maven Central](https://central.sonatype.com/artifact/io.github.edadma/petradb-jdbc).

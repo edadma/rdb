@@ -2,51 +2,161 @@
 title: 변경 이력
 ---
 
+## v1.5-20260417
+
+### SQL Compatibility Fixes
+
+Four fixes to improve PostgreSQL compatibility:
+
+- **`type` as column name** — removed `type` from the reserved words list so it can be used as an unquoted column name, matching PostgreSQL behavior
+- **Self-referential foreign keys** — `CREATE TABLE` with a column that `REFERENCES` the same table no longer fails; FK validation is deferred until after the table is created
+- **Text-to-timestamp coercion** — text values (e.g., ISO-8601 strings from query parameters) can now be compared to `TIMESTAMP`, `TIMESTAMPTZ`, and `DATE` columns without explicit casts
+- **Scalar subquery expressions** — parenthesized subqueries like `(SELECT count(*) FROM ...) = 0` now work in `WHERE` clauses and other expression positions
+
+### Version Bumps
+
+| Component | Maven Central | npm |
+|-----------|---------------|-----|
+| common | 1.5.2 | — |
+| engine | 1.5.2 | @petradb/engine 1.5.2 |
+| cli | — | @petradb/cli 1.5.2 |
+| server | — | @petradb/server 1.5.2 |
+| jdbc | 1.5.2 | — |
+
+## v1.5-20260320
+
+### Quarry — API Redesign
+
+**Select API** — reads like SQL now:
+
+```typescript
+// Old
+db.select(users).columns(users.name).where(eq(users.name, "Alice"))
+
+// New
+db.select(users.name).from(users).where(eq(users.name, "Alice"))
+db.from(users).where(eq(users.name, "Alice"))  // SELECT *
+```
+
+- `db.select(...exprs)` takes column expressions, returns `FromableBuilder`
+- `.from(table)` provides the table and returns `SelectBuilder`
+- `db.from(table)` is shorthand for `db.select().from(table)` (SELECT \*)
+- Old `db.select(table).columns(...)` pattern removed
+
+**Builder-based subqueries** — no more raw AST:
+
+```typescript
+// Old — required .toExpr() to extract raw AST
+const sub = db.select(posts).columns(posts.userId).toExpr()
+inSubquery(users.id, sub)
+
+// New — pass builders directly
+inSubquery(users.id, db.select(posts.userId).from(posts))
+```
+
+- `subquery()`, `exists()`, `inSubquery()`, `notInSubquery()` accept `QueryBuilder` (SelectBuilder or SetOperationBuilder)
+- `withCTE()` accepts builders for CTE queries and main query, returns `QueryBuilder`
+- `insertFrom()` and `executeQuery()` accept builders directly
+- `toExpr()` marked `@internal` — no longer part of the public API
+- `ToCreateAST` removed from public exports
+
+### Version Bumps
+
+| Component | Version |
+|-----------|---------|
+| quarry | @petradb/quarry 1.5.2 |
+
+## v1.5-20260317
+
+### Bug Fixes
+
+- **JSON parser escape sequences** — fixed backslash escape handling (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) in JSON string values
+- **JSON top-level values** — the JSON parser now accepts all JSON value types (strings, numbers, booleans, null) at the top level, not just objects and arrays
+- **JSON path operators** — `#>` and `#>>` now correctly handle text array literals as path arguments
+- **JSON containment operators** — `@>` and `<@` now work correctly with text JSON literals (not just parsed JSON objects)
+- **Persistent DB auto-create** — `petradb_open_persistent` (C API) now auto-creates new databases instead of failing
+
+### Python Package
+
+- New `petradb` Python package with bundled native library (Linux x86_64)
+- SQLite-style API: `Database`, `Cursor`, context managers, parameterized queries
+- Persistent and in-memory modes
+- Published to PyPI
+
+### FFI Tests
+
+- Go FFI test suite for the C library
+- Python FFI test suite for the C library
+
+### Tooling
+
+- Quarry smoke test added to post-publish verification
+- Internationalization: 5 languages + Korean translations for docs site
+- `publish.sh` fix: uses `npx -p typescript tsc` to avoid wrong `tsc` package
+
+### Version Bumps
+
+All components bumped to 1.5.1 (Python to 1.5.2):
+
+| Component | Maven Central | npm | PyPI |
+|-----------|---------------|-----|------|
+| common | 1.5.1 | — | — |
+| engine | 1.5.1 | @petradb/engine 1.5.1 | — |
+| client | 1.5.1 | @petradb/client 1.5.1 | — |
+| server | — | @petradb/server 1.5.1 | — |
+| cli | — | @petradb/cli 1.5.1 | — |
+| jdbc | 1.5.1 | — | — |
+| drizzle | — | @petradb/drizzle 1.5.1 | — |
+| knex | — | @petradb/knex 1.5.1 | — |
+| lucid | — | @petradb/lucid 1.5.1 | — |
+| quarry | — | @petradb/quarry 1.5.1 | — |
+| python | — | — | petradb 1.5.2 |
+
 ## v1.5-20260315
 
-### PL/pgSQL - 저장 프로시저, 함수, 트리거
+### PL/pgSQL — Stored Procedures, Functions, and Triggers
 
-DO 블록, 저장 함수, 저장 프로시저에서의 완전한 절차적 언어 지원:
+Full procedural language support in DO blocks, stored functions, and stored procedures:
 
-- **DO 블록** - DECLARE, BEGIN...END를 사용하는 익명 PL/pgSQL 블록
-- **저장 함수** - `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, 모든 SQL 표현식에서 호출 가능
-- **저장 프로시저** - `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, `CALL`로 호출
-- **트리거** - `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
-  - BEFORE 트리거는 NULL을 반환하여 작업을 취소할 수 있습니다
-  - AFTER 트리거는 작업 이후에 실행됩니다
-  - INSERT, UPDATE, DELETE, COPY FROM에 대해 트리거가 실행됩니다
-  - TG_OP, TG_TABLE_NAME, OLD, NEW 변수 사용 가능
-- **제어 흐름** - IF/ELSIF/ELSE, WHILE LOOP, FOR 범위/쿼리 LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
-- **영속성** - 함수, 프로시저, 트리거는 PersistentDB와 TextDB에서 닫기/다시 열기 후에도 유지됩니다
-- **OR REPLACE** - 기존 함수와 프로시저를 덮어쓸 수 있습니다
+- **DO blocks** — anonymous PL/pgSQL blocks with DECLARE, BEGIN...END
+- **Stored functions** — `CREATE FUNCTION name(params) RETURNS type AS $$ ... $$ LANGUAGE plpgsql`, callable in any SQL expression
+- **Stored procedures** — `CREATE PROCEDURE name(params) AS $$ ... $$ LANGUAGE plpgsql`, invoked with `CALL`
+- **Triggers** — `CREATE TRIGGER name BEFORE|AFTER INSERT|UPDATE|DELETE ON table FOR EACH ROW EXECUTE FUNCTION func()`
+  - BEFORE triggers can cancel operations by returning NULL
+  - AFTER triggers fire after the operation
+  - Triggers fire for INSERT, UPDATE, DELETE, and COPY FROM
+  - TG_OP, TG_TABLE_NAME, OLD, NEW variables available
+- **Control flow** — IF/ELSIF/ELSE, WHILE LOOP, FOR range/query LOOP, RETURN, RAISE NOTICE/EXCEPTION, PERFORM, EXCEPTION WHEN
+- **Persistence** — functions, procedures, and triggers survive close/reopen on PersistentDB and TextDB
+- **OR REPLACE** — overwrite existing functions and procedures
 
-### 사용자 정의 네이티브 함수
+### User-Defined Native Functions
 
-호스트 언어 콜백을 SQL 함수로 등록하여 쿼리, 트리거, 프로시저에서 호출할 수 있습니다:
+Register host-language callbacks as SQL functions, callable from queries, triggers, and procedures:
 
-- **Scala** - `db.registerScalarFunction("name", { args => result })`
-- **JavaScript** - `session.registerFunction("name", (args) => result)`
-- **C** - `petradb_create_function(db, "name", nargs, user_data, callback)` (SQLite 스타일의 타입 값/컨텍스트 API 사용)
+- **Scala** — `db.registerScalarFunction("name", { args => result })`
+- **JavaScript** — `session.registerFunction("name", (args) => result)`
+- **C** — `petradb_create_function(db, "name", nargs, user_data, callback)` with SQLite-style typed value/context API
 
-### C 라이브러리 및 커서 API
+### C Library and Cursor API
 
-- **네이티브 공유 라이브러리** - `@exported` C 호출 가능 함수가 포함된 Scala Native을 통한 `libpetradb-engine.so`
-- **SQLite 스타일 C API** - `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, 타입별 컬럼 접근자
-- **사용자 정의 함수** - `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
-- **커서 API** - 지연 로우별 반복을 위한 `session.openCursor(sql)`, `step()`, 타입별 컬럼 접근자, `fetch(n)`, `move(n)`, 매개변수화된 쿼리
-- **C 헤더** - 전체 API 문서가 포함된 `petradb.h`
-- **C 테스트 스위트** - 67개 테스트
-- **Rust FFI 테스트** - 크로스 언어 상호운용성을 증명하는 38개 테스트
+- **Native shared library** — `libpetradb-engine.so` via Scala Native with `@exported` C-callable functions
+- **SQLite-style C API** — `petradb_open`, `petradb_exec`, `petradb_prepare/step/finalize`, typed column accessors
+- **User-defined functions** — `petradb_value_int/double/text`, `petradb_result_int/double/text/null/error`, `petradb_user_data`
+- **Cursor API** — `session.openCursor(sql)` for lazy row-by-row iteration with `step()`, typed column accessors, `fetch(n)`, `move(n)`, parameterized queries
+- **C header** — `petradb.h` with full API documentation
+- **C test suite** — 67 tests
+- **Rust FFI test** — 38 tests proving cross-language interop
 
-### 가상 테이블
+### Virtual Tables
 
-- **확장 가능 프레임워크** - `CREATE VIRTUAL TABLE name USING module(args)`, 읽기 전용, SHOW TABLES에 표시
-- **내장 CSV 모듈** - 헤더/구분자 옵션이 있는 `CREATE VIRTUAL TABLE t USING csv('file.csv')`
-- **커스텀 모듈** - Scala API에서 `db.registerVirtualTableModule("name", module)`
+- **Extensible framework** — `CREATE VIRTUAL TABLE name USING module(args)`, read-only, appears in SHOW TABLES
+- **Built-in CSV module** — `CREATE VIRTUAL TABLE t USING csv('file.csv')` with header/delimiter options
+- **Custom modules** — `db.registerVirtualTableModule("name", module)` in Scala API
 
-### csv_file() 테이블 함수
+### csv_file() Table Function
 
-가져오기 없이 CSV 파일을 직접 쿼리합니다:
+Query CSV files directly without importing:
 
 ```sql
 SELECT * FROM csv_file('data.csv');
@@ -54,67 +164,67 @@ SELECT e.name, d.dept FROM csv_file('employees.csv') e
   JOIN csv_file('departments.csv') d ON e.dept_id = d.id;
 ```
 
-### 고급 인덱스
+### Advanced Indexes
 
-- **부분 인덱스** - `CREATE INDEX ... WHERE condition` - 조건에 맞는 행만 인덱싱
-- **표현식 인덱스** - `CREATE INDEX ... ON table ((expr))` - `lower(email)`과 같은 계산된 값을 인덱싱
-- **결합** - 부분 인덱스 + 표현식 인덱스를 함께 사용 가능
+- **Partial indexes** — `CREATE INDEX ... WHERE condition` — only index rows matching the predicate
+- **Expression indexes** — `CREATE INDEX ... ON table ((expr))` — index computed values like `lower(email)`
+- **Combined** — partial + expression indexes work together
 
-### 윈도우 함수
+### Window Functions
 
-- **FIRST_VALUE(expr)** - 윈도우 프레임의 첫 번째 행 값
-- **LAST_VALUE(expr)** - 윈도우 프레임의 마지막 행 값
-- **NTH_VALUE(expr, n)** - 프레임의 n번째 행 값
+- **FIRST_VALUE(expr)** — value at the first row of the window frame
+- **LAST_VALUE(expr)** — value at the last row of the window frame
+- **NTH_VALUE(expr, n)** — value at the nth row of the frame
 
 ### DELETE ... USING
 
-PostgreSQL 구문과 일치하는 다중 테이블 삭제:
+Multi-table deletes matching PostgreSQL syntax:
 
 ```sql
 DELETE FROM orders USING customers
 WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 ```
 
-### Quarry - 타입 안전 AST 쿼리 빌더
+### Quarry — Type-Safe AST Query Builder
 
-새로운 `@petradb/quarry` 패키지: SQL 문자열이 아닌 AST 객체를 생성하는 타입 안전 쿼리 빌더:
+New `@petradb/quarry` package: type-safe query builder that generates AST objects (not SQL strings):
 
-- 21가지 컬럼 타입의 스키마 정의
-- 완전한 CRUD: 타입 안전 컬럼 참조가 포함된 select, insert, update, delete
-- 조인: 타입이 지정된 결과가 있는 inner, left, right, full outer, cross
-- 표현식: 50개 이상의 연산자, 집계, CASE/CAST/EXISTS, 서브쿼리
+- Schema definition with 21 column types
+- Full CRUD: select, insert, update, delete with type-safe column references
+- Joins: inner, left, right, full outer, cross with typed results
+- Expressions: 50+ operators, aggregates, CASE/CAST/EXISTS, subqueries
 - Upsert: `onConflictDoNothing()`, `onConflictDoUpdate()`
-- 셀프 조인을 위한 테이블 별칭
-- 트랜잭션, RETURNING, DISTINCT ON
-- 모든 기능에 대한 컴파일 타임 타입 테스트
-- 집합 연산: UNION, INTERSECT, EXCEPT
-- 윈도우 함수, CTE, 명명된 스칼라 헬퍼
+- Table aliases for self-joins
+- Transactions, RETURNING, DISTINCT ON
+- Compile-time type tests for all features
+- Set operations: UNION, INTERSECT, EXCEPT
+- Window functions, CTEs, named scalar helpers
 
-### 버그 수정
+### Bug Fixes
 
-- **ByteaValue** - BYTEA 컬럼에 대한 `ARRAY[...]`가 이제 `ArrayValue` 대신 `ByteaValue`를 올바르게 생성합니다
-- **JS/Client 결과 타입** - 비완전 매치 크래시를 방지하기 위해 누락된 PL/pgSQL 결과 타입 핸들러(DoBlockResult, CreateFunctionResult 등)를 추가했습니다
-- **코덱** - 클라이언트/서버 통신을 위한 모든 새로운 결과 타입의 직렬화를 추가했습니다
-- **llms.txt** - `type` 필드를 `command` 필드로 수정하고, 모든 결과 타입과 기능을 업데이트했습니다
+- **ByteaValue** — `ARRAY[...]` into BYTEA columns now correctly produces `ByteaValue` instead of `ArrayValue`
+- **JS/Client result types** — added missing PL/pgSQL result type handlers (DoBlockResult, CreateFunctionResult, etc.) to prevent non-exhaustive match crashes
+- **Codecs** — added serialization for all new result types for client/server communication
+- **llms.txt** — fixed `type` field to `command` field, updated all result types and features
 
-### 모듈 이름 변경
+### Module Rename
 
-- **shared → common** - 공유 타입 모듈의 이름을 `petradb-shared`에서 `petradb-common`으로 변경했습니다
+- **shared → common** — renamed the shared types module from `petradb-shared` to `petradb-common`
 
-### 문서
+### Documentation
 
-- 새로운 **PL/pgSQL** 레퍼런스 페이지 (트리거, 함수, 프로시저, 제어 흐름)
-- 새로운 **C API** 레퍼런스 페이지 (완전한 SQLite 스타일 인터페이스)
-- Java (JDBC)와 C를 위한 새로운 **시작하기** 가이드
-- DDL 문서 업데이트: 부분/표현식 인덱스, CHECK 제약 조건, 트리거, 저장 루틴
-- DML 문서 업데이트: DELETE...USING, csv_file(), 가상 테이블
-- JS/Scala API 문서 업데이트: registerFunction, 결과 타입
-- 랜딩 페이지: 4개의 시작하기 버튼 (JS, Java, Scala, C)
-- 모든 최신 기능이 포함된 llms.txt 재작성
+- New **PL/pgSQL** reference page (triggers, functions, procedures, control flow)
+- New **C API** reference page (full SQLite-style interface)
+- New **Getting Started** guides for Java (JDBC) and C
+- Updated DDL docs: partial/expression indexes, CHECK constraints, triggers, stored routines
+- Updated DML docs: DELETE...USING, csv_file(), virtual tables
+- Updated JS/Scala API docs: registerFunction, result types
+- Landing page: four getting-started buttons (JS, Java, Scala, C)
+- Rewritten llms.txt with all current features
 
-### 버전 업데이트
+### Version Bumps
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | common | 1.5.0 | — |
 | engine | 1.5.0 | @petradb/engine 1.5.0 |
@@ -129,19 +239,19 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260314
 
-### 버그 수정 및 개선
+### Bug fixes & improvements
 
-- **상관 IN 서브쿼리 수정** - 인덱싱된 테이블에서의 상관 `IN (SELECT ...)`가 이제 올바르게 작동합니다
-- **정규화된 컬럼 해석** - 복잡한 조인에서의 모호한 컬럼 참조 수정
-- **빈 IN/ANY 처리** - `IN ()`과 `= ANY('{}')` 에지 케이스 해결
-- **외래 키 CASCADE 정리** - `DROP TABLE ... CASCADE`가 이제 자식 테이블의 FK 제약 조건을 올바르게 제거합니다
-- **DROP TABLE IF EXISTS ... CASCADE** - `IF EXISTS`와 `CASCADE`를 결합해도 더 이상 파서 오류가 발생하지 않습니다
-- **배열 리터럴 캐스팅** - `'{1,2,3}'::integer[]` PostgreSQL 배열 리터럴 구문 지원
-- **매개변수화된 쿼리 수정** - 서브쿼리와 상관 경로에 대한 매개변수 바인딩 개선
+- **Correlated IN subquery fix** — correlated `IN (SELECT ...)` with indexed tables now works correctly
+- **Qualified column resolution** — fixes for ambiguous column references in complex joins
+- **Empty IN/ANY handling** — `IN ()` and `= ANY('{}')` edge cases resolved
+- **Foreign key CASCADE cleanup** — `DROP TABLE ... CASCADE` now properly removes FK constraints on child tables
+- **DROP TABLE IF EXISTS ... CASCADE** — combining `IF EXISTS` with `CASCADE` no longer causes a parse error
+- **Array literal casting** — support for `'{1,2,3}'::integer[]` PostgreSQL array literal syntax
+- **Parameterized query fixes** — improved parameter binding for subqueries and correlated paths
 
-### 버전 업데이트
+### Version bumps
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.2 | — |
 | engine | 1.4.9 | @petradb/engine 1.4.3 |
@@ -153,11 +263,11 @@ WHERE orders.customer_id = customers.id AND customers.status = 'inactive';
 
 ## v1.4-20260312
 
-### 공통 테이블 표현식 (CTE)
+### Common Table Expressions (CTEs)
 
-`WITH`와 `WITH RECURSIVE`를 사용한 완전한 CTE 지원.
+Full CTE support with `WITH` and `WITH RECURSIVE`.
 
-**비재귀 CTE** - 가독성과 재사용을 위한 명명된 서브쿼리:
+**Non-recursive CTEs** — named subqueries for readability and reuse:
 
 ```sql
 WITH active_orders AS (
@@ -168,9 +278,9 @@ FROM active_orders
 GROUP BY customer_id;
 ```
 
-하나의 쿼리에서 여러 CTE를 정의할 수 있으며, 뒤의 CTE는 앞의 CTE를 참조할 수 있습니다. 컬럼 별칭이 지원됩니다: `WITH t(x, y) AS (...)`. 동일한 이름의 테이블이 있으면 CTE가 이를 가립니다.
+Multiple CTEs can be defined in a single query, and later CTEs can reference earlier ones. Column aliases are supported: `WITH t(x, y) AS (...)`. CTEs shadow table names if they share the same name.
 
-**재귀 CTE** - 계층적 데이터 및 그래프 데이터를 위한 반복 쿼리:
+**Recursive CTEs** — iterative queries for hierarchical and graph data:
 
 ```sql
 WITH RECURSIVE descendants(id, name, depth) AS (
@@ -182,13 +292,13 @@ WITH RECURSIVE descendants(id, name, depth) AS (
 SELECT name, depth FROM descendants ORDER BY depth, name;
 ```
 
-`UNION ALL`(중복 유지)과 `UNION`(중복 제거) 모두 지원됩니다. 안전 제한으로 최대 1000회 반복합니다.
+Both `UNION ALL` (keep duplicates) and `UNION` (deduplicated) are supported. Maximum 1000 iterations as a safety limit.
 
-### 윈도우 함수
+### Window functions
 
-세 가지 카테고리의 완전한 윈도우 함수 지원:
+Full window function support with three categories:
 
-**순위 함수** - `PARTITION BY`와 `ORDER BY`를 사용하는 `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`:
+**Ranking functions** — `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` with `PARTITION BY` and `ORDER BY`:
 
 ```sql
 SELECT name, department, salary,
@@ -196,7 +306,7 @@ SELECT name, department, salary,
 FROM employees;
 ```
 
-**값 함수** - 설정 가능한 오프셋과 기본값이 있는 `LAG()`, `LEAD()`, `NTILE()`:
+**Value functions** — `LAG()`, `LEAD()`, `NTILE()` with configurable offset and default values:
 
 ```sql
 SELECT name, salary,
@@ -205,7 +315,7 @@ SELECT name, salary,
 FROM employees;
 ```
 
-**집계 윈도우 함수** - 프레임 사양을 포함한 모든 집계 함수(`SUM`, `COUNT`, `AVG`, `MIN`, `MAX` 등)와 `OVER()`:
+**Aggregate window functions** — any aggregate (`SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, etc.) with `OVER()`, including frame specifications:
 
 ```sql
 SELECT name, salary,
@@ -214,11 +324,11 @@ SELECT name, salary,
 FROM employees;
 ```
 
-프레임 경계: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. 프레임 절이 없으면 집계 윈도우 함수는 전체 파티션에 대해 계산합니다.
+Frame bounds: `UNBOUNDED PRECEDING`, `UNBOUNDED FOLLOWING`, `CURRENT ROW`, `N PRECEDING`, `N FOLLOWING`. Without a frame clause, aggregate window functions compute over the entire partition.
 
-### 집계 FILTER 절
+### Aggregate FILTER clause
 
-그룹화된 쿼리와 윈도우 함수 모두에서 집계 함수에 대한 `FILTER (WHERE ...)`:
+`FILTER (WHERE ...)` on aggregate functions, both in grouped queries and window functions:
 
 ```sql
 SELECT
@@ -229,13 +339,13 @@ SELECT
 FROM orders;
 ```
 
-### 해시 조인 최적화
+### Hash join optimization
 
-인덱스가 없는 등가 조인은 이제 크로스 프로덕트 대신 해시 조인 전략을 사용하여 조인 복잡도를 O(n×m)에서 O(n+m)로 줄입니다. INNER, LEFT, RIGHT, FULL 조인에 적용됩니다. 인덱스가 사용 가능한 경우 인덱스 중첩 루프 조인이 우선됩니다. 비등가 조인 조건은 여전히 크로스 프로덕트로 대체됩니다. `EXPLAIN` 출력에서 `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`으로 표시됩니다.
+Equijoins without an index now use a hash join strategy instead of a cross product, reducing join complexity from O(n×m) to O(n+m). Applies to INNER, LEFT, RIGHT, and FULL joins. Index nested loop joins remain preferred when an index is available. Non-equijoin conditions still fall back to cross product. Visible in `EXPLAIN` output as `Hash Join`, `Hash Left Join`, `Hash Right Join`, `Hash Full Join`.
 
-### 생성 컬럼
+### Generated columns
 
-`GENERATED ALWAYS AS (expr) STORED` 계산 컬럼:
+`GENERATED ALWAYS AS (expr) STORED` computed columns:
 
 ```sql
 CREATE TABLE products (
@@ -245,39 +355,39 @@ CREATE TABLE products (
 );
 ```
 
-생성 컬럼은 INSERT와 UPDATE 시 재계산됩니다. 직접 설정할 수 없습니다.
+Generated columns are recomputed on INSERT and UPDATE. They cannot be set directly.
 
-### ORDER BY NULL 정렬
+### ORDER BY null ordering
 
-`ORDER BY`는 이제 SQL 표준 NULL 정렬을 기본값으로 사용합니다: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. 명시적 `NULLS FIRST` / `NULLS LAST` 재정의가 지원됩니다.
+`ORDER BY` now defaults to SQL-standard null ordering: `ASC` → `NULLS LAST`, `DESC` → `NULLS FIRST`. Explicit `NULLS FIRST` / `NULLS LAST` overrides are supported.
 
-### 시퀀스 지원
+### Sequence support
 
-완전한 PostgreSQL 호환 시퀀스 지원. 옵션이 포함된 `CREATE SEQUENCE`와 `DROP SEQUENCE`(`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). 시퀀스 함수: `nextval()`, `currval()`, `setval()`, `lastval()`.
+Full PostgreSQL-compatible sequence support. `CREATE SEQUENCE` and `DROP SEQUENCE` with options (`INCREMENT BY`, `START WITH`, `MINVALUE`, `MAXVALUE`, `CYCLE`, `IF NOT EXISTS` / `IF EXISTS`). Sequence functions: `nextval()`, `currval()`, `setval()`, `lastval()`.
 
-`SERIAL`, `SMALLSERIAL`, `BIGSERIAL` 컬럼은 이제 PostgreSQL 동작과 일치하는 백업 시퀀스(`<table>_<column>_seq` 이름)를 생성합니다. `DROP TABLE`은 소유된 시퀀스를 연쇄적으로 삭제합니다. `TRUNCATE`는 백업 시퀀스를 재설정합니다. 시퀀스 상태는 완전히 트랜잭션 처리됩니다 — `ROLLBACK`은 시퀀스 카운터를 복원합니다. 영구 데이터베이스는 카탈로그에 시퀀스 상태를 직렬화합니다.
+`SERIAL`, `SMALLSERIAL`, and `BIGSERIAL` columns now create backing sequences (named `<table>_<column>_seq`), matching PostgreSQL behavior. `DROP TABLE` cascades to drop owned sequences. `TRUNCATE` resets backing sequences. Sequence state is fully transactional — `ROLLBACK` restores sequence counters. Persistent databases serialize sequence state to the catalog.
 
-새로운 SQL 명령: `SHOW SEQUENCES`, `SHOW INDEXES` (모든 테이블의 모든 인덱스).
+New SQL commands: `SHOW SEQUENCES`, `SHOW INDEXES` (all indexes across all tables).
 
-CLI: 새로운 `\ds` (시퀀스 목록)와 `\di` (인덱스 목록) 메타 명령.
+CLI: new `\ds` (list sequences) and `\di` (list indexes) meta-commands.
 
-### CREATE INDEX USING 절
+### CREATE INDEX USING clause
 
-`CREATE INDEX ... USING btree` 구문이 이제 허용됩니다(btree가 유일하게 지원되는 방법). 이는 PostgreSQL이 생성한 DDL 및 ORM과의 호환성을 개선합니다.
+`CREATE INDEX ... USING btree` syntax is now accepted (btree is the only supported method). This improves compatibility with PostgreSQL-generated DDL and ORMs.
 
-### 버그 수정
+### Bug fixes
 
-- `ORDER BY`와 NULL 값: 비교자가 이제 두 값이 모두 NULL일 때 0을 반환하여, 여러 정렬 키에서의 비결정적 정렬 결과를 수정합니다
-- `ORDER BY` 별칭 해석: SELECT 별칭(예: `SELECT x AS y ... ORDER BY y`)이 이제 비그룹화 쿼리에서 윈도우 함수 유무와 관계없이 올바르게 해석됩니다
-- `Type.convert()` null 처리: 타입 변환(예: UPDATE SET의 준비된 구문 매개변수)을 통해 전달되는 NULL 값이 이제 타입의 텍스트 표현으로 변환되지 않고 NULL로 보존됩니다. 13가지 타입에서 수정: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
-- ORDER BY 파서의 nulls 절에 대한 완전 매치 경고
-- 동기 throw에 대한 플레이그라운드 터미널의 조용한 오류
+- `ORDER BY` with NULL values: comparators now return 0 when both values are NULL, fixing non-deterministic sort results with multiple sort keys
+- `ORDER BY` alias resolution: SELECT aliases (e.g. `SELECT x AS y ... ORDER BY y`) now resolve correctly in non-grouped queries, both with and without window functions
+- `Type.convert()` null handling: NULL values passed through type conversion (e.g. via prepared statement parameters in UPDATE SET) are now preserved as NULL instead of being converted to the type's text representation. Fixed in 13 types: TEXT, VARCHAR, CHAR, UUID, TIMESTAMP, DATE, TIME, TIMETZ, INTERVAL, TIMESTAMPTZ, BYTEA, JSON, ENUM
+- Exhaustive match warning in ORDER BY parser for nulls clause
+- Silent errors in playground terminal for synchronous throws
 
-### 버전 업데이트
+### Version bumps
 
-모든 컴포넌트가 1.4.1로 업데이트되었습니다:
+All components bumped to 1.4.1:
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.4.1 | — |
 | engine | 1.4.1 | @petradb/engine 1.4.1 |
@@ -291,17 +401,17 @@ CLI: 새로운 `\ds` (시퀀스 목록)와 `\di` (인덱스 목록) 메타 명�
 
 ## v1.3-20260309
 
-### 트랜잭션 DDL
+### Transactional DDL
 
-DDL 문(CREATE TABLE, CREATE INDEX, DROP TABLE 등)이 이제 트랜잭션 내에서 완전히 지원되며 DML과 함께 원자적으로 롤백됩니다. DDL과 DML은 단일 BEGIN/COMMIT 블록 내에서 자유롭게 혼합할 수 있습니다. MemoryDB와 PersistentDB 모두 BEGIN 시점에 전체 카탈로그 스냅샷을 캡처하고 ROLLBACK 시 복원합니다.
+DDL statements (CREATE TABLE, CREATE INDEX, DROP TABLE, etc.) are now fully supported inside transactions and roll back atomically with DML. DDL and DML can be freely interleaved within a single BEGIN/COMMIT block. Both MemoryDB and PersistentDB capture a full catalog snapshot at BEGIN time and restore it on ROLLBACK.
 
-### Drizzle 관계형 쿼리
+### Drizzle relational queries
 
-Drizzle ORM 관계형 쿼리에 대한 완전한 지원(`db.query.*.findMany()`, `db.query.*.findFirst()`). `json_build_array`와 `json_build_object` 스칼라 함수를 추가하고, LATERAL 서브쿼리에서의 매개변수 치환을 수정했습니다.
+Full support for Drizzle ORM relational queries (`db.query.*.findMany()`, `db.query.*.findFirst()`). Added `json_build_array` and `json_build_object` scalar functions, and fixed parameter substitution in LATERAL subqueries.
 
-### 버전 업데이트
+### Version bumps
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | engine | 1.3.1 | @petradb/engine 1.3.3 |
 | server | 1.3.1 | @petradb/server 1.3.1 |
@@ -311,9 +421,9 @@ Drizzle ORM 관계형 쿼리에 대한 완전한 지원(`db.query.*.findMany()`,
 
 ## v1.3-20260308
 
-### 스키마 지원
+### Schema support
 
-PostgreSQL 스타일 스키마 네임스페이스. 모든 데이터베이스는 기본적으로 `public` 스키마를 가지며, 한정되지 않은 테이블 이름은 `public`으로 해석됩니다. 스키마 한정 이름(`schema.table`)은 모든 DDL 및 DML 문에서 작동합니다 — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, COPY.
+PostgreSQL-style schema namespaces. Every database has a `public` schema by default; unqualified table names resolve to `public`. Schema-qualified names (`schema.table`) work in all DDL and DML statements — CREATE TABLE, INSERT, UPDATE, DELETE, SELECT, ALTER TABLE, DROP TABLE, TRUNCATE, CREATE INDEX, and COPY.
 
 ```sql
 CREATE SCHEMA inventory;
@@ -322,28 +432,28 @@ INSERT INTO inventory.products (name) VALUES ('Widget');
 SELECT * FROM inventory.products;
 ```
 
-### information_schema 가상 테이블
+### information_schema virtual tables
 
-`information_schema.schemata`, `information_schema.tables`, `information_schema.columns`를 쿼리할 수 있게 되었습니다. 스키마 한정 테이블은 올바른 `table_schema`를 보고합니다. 이 뷰들은 데이터베이스 메타데이터에서 동적으로 생성됩니다.
+`information_schema.schemata`, `information_schema.tables`, and `information_schema.columns` are now queryable. Schema-qualified tables report their correct `table_schema`. These views are generated dynamically from database metadata.
 
-### Drizzle ORM 마이그레이션
+### Drizzle ORM migrations
 
-`@petradb/drizzle`의 새로운 `migrate()` 함수가 Drizzle Kit 마이그레이션 파일을 적용합니다. `meta/_journal.json`을 읽고 SQL 마이그레이션 파일을 순서대로 실행하며, 적용된 마이그레이션을 `drizzle.__drizzle_migrations`에 추적합니다.
+New `migrate()` function in `@petradb/drizzle` applies Drizzle Kit migration files. Reads the `meta/_journal.json` and executes SQL migration files in order, tracking applied migrations in `drizzle.__drizzle_migrations`.
 
 ```typescript
 import { migrate } from "@petradb/drizzle";
 await migrate(db, { migrationsFolder: "./drizzle" });
 ```
 
-### JDBC 메타데이터 개선
+### JDBC metadata improvements
 
-`DatabaseMetaData.getColumns()`가 이제 컬럼 타입과 정밀도/스케일 선언에 기반한 정확한 `COLUMN_SIZE`, `DECIMAL_DIGITS`, `CHAR_OCTET_LENGTH` 값을 반환합니다.
+`DatabaseMetaData.getColumns()` now returns accurate `COLUMN_SIZE`, `DECIMAL_DIGITS`, and `CHAR_OCTET_LENGTH` values based on column type and precision/scale declarations.
 
-### 버전 업데이트
+### Version bumps
 
-모든 컴포넌트가 1.3.0으로 업데이트되었습니다:
+All components bumped to 1.3.0:
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.3.0 | — |
 | engine | 1.3.0 | @petradb/engine 1.3.0 |
@@ -357,49 +467,49 @@ await migrate(db, { migrationsFolder: "./drizzle" });
 
 ## v1.2-20260308
 
-### Drizzle ORM 드라이버 재작성
+### Drizzle ORM driver rewrite
 
-`@petradb/drizzle`가 `drizzle-orm/pg-proxy` 래퍼에서 `PgSession`/`PgPreparedQuery`/`PgTransaction`을 직접 확장하는 커스텀 PostgreSQL 방언 드라이버로 재작성되었습니다. 이를 통해 `drizzle-orm/node-postgres`와 완전한 기능 동등성을 제공합니다:
+`@petradb/drizzle` rewritten from a `drizzle-orm/pg-proxy` wrapper to a custom PostgreSQL dialect driver extending `PgSession`/`PgPreparedQuery`/`PgTransaction` directly. This gives full feature parity with `drizzle-orm/node-postgres`:
 
-- 자동 커밋/롤백이 포함된 `db.transaction()`
-- 명시적 롤백을 위한 `tx.rollback()`
-- insert/update/delete에서의 `returning()` (부분 컬럼 선택 포함)
-- 관계형 쿼리 지원 (엔진의 `json_build_array`/`json_agg` 지원 보류 중)
+- `db.transaction()` with automatic commit/rollback
+- `tx.rollback()` for explicit rollback
+- `returning()` on insert/update/delete (including partial column selection)
+- Relational query support (pending engine support for `json_build_array`/`json_agg`)
 
-### 타입 강제 변환: 텍스트 매개변수에서 NUMERIC 컬럼으로
+### Type coercion: text parameters to NUMERIC columns
 
-`NumericType.convert`가 이제 `TextValue`를 받아 `BigDecimal`로 파싱합니다. 이는 `IntegerType`, `BigintType`, `SmallintType`, `DoubleType`의 기존 강제 변환 동작과 일치합니다. 이를 통해 숫자 값을 텍스트로 전송하는 ORM의 매개변수화된 INSERT/UPDATE가 수정됩니다(표준 PostgreSQL 와이어 프로토콜 동작).
+`NumericType.convert` now accepts `TextValue` and parses it as a `BigDecimal`, matching the existing coercion behavior of `IntegerType`, `BigintType`, `SmallintType`, and `DoubleType`. This fixes parameterized INSERT/UPDATE via ORMs that send numeric values as text (standard PostgreSQL wire protocol behavior).
 
-### 3값 NULL 로직
+### Three-valued NULL logic
 
-NULL 처리를 위한 완전한 SQL 3값 로직:
+Full SQL three-valued logic for NULL handling:
 
-- 비교 연산자(`=`, `!=`, `<`, `>`, `<=`, `>=`)는 어느 한 피연산자가 NULL이면 NULL을 반환합니다
-- `AND`/`OR`은 적절한 3값 진리표를 구현합니다 (예: `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
-- `IN`/`NOT IN`은 NULL을 올바르게 전파합니다 (예: `3 NOT IN (1, 2, NULL)` → unknown)
-- 산술(`+`, `-`, `*`, `/`, `%`)과 문자열 연결(`||`)은 NULL을 전파합니다
-- `LIKE`는 NULL 피연산자를 처리합니다
+- Comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) return NULL when either operand is NULL
+- `AND`/`OR` implement proper three-valued truth tables (e.g., `FALSE AND NULL` → `FALSE`, `TRUE OR NULL` → `TRUE`)
+- `IN`/`NOT IN` propagate NULL correctly (e.g., `3 NOT IN (1, 2, NULL)` → unknown)
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) and string concatenation (`||`) propagate NULL
+- `LIKE` handles NULL operands
 
-### 통합 표현식 문법
+### Unified expression grammar
 
-SQL 파서의 별도 `expression`과 `booleanExpression` 계층이 단일 표현식 구문으로 통합되었습니다. 부울 연산자(`AND`, `OR`, `NOT`)는 이제 우선순위 체인의 일반 연산자입니다. 이를 통해 표현식이 유효한 모든 곳에서 부울 표현식을 사용할 수 있습니다 (예: `SELECT a > 5 AND b < 10`).
+The SQL parser's separate `expression` and `booleanExpression` hierarchies have been merged into a single expression syntax. Boolean operators (`AND`, `OR`, `NOT`) are now regular operators in the precedence chain. This allows boolean expressions anywhere an expression is valid (e.g., `SELECT a > 5 AND b < 10`).
 
-### 즉시 컬럼 참조 검증
+### Eager column reference validation
 
-`WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`의 컬럼 참조가 이제 쿼리 계획 구성 시점에 즉시 검증되어, 빈 테이블이나 단일 행 정렬에서도 존재하지 않는 컬럼을 감지합니다. 이전에는 잘못된 참조가 행별 평가 시점에만 감지되어, 빈 테이블에 대한 쿼리가 조용히 성공했습니다.
+Column references in `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` are now validated eagerly at query plan construction time, catching nonexistent columns even on empty tables or single-row sorts. Previously, bad references were only detected at eval time per-row, so queries against empty tables silently succeeded.
 
-### 버그 수정
+### Bug fixes
 
-- UPDATE 시 NOT NULL 제약 조건이 적용되지 않음
-- UNIQUE 제약 조건이 여러 NULL을 거부함 (SQL 표준: NULL은 고유함)
-- INSERT 컬럼 목록의 중복 컬럼이 감지되지 않음
-- 빈 테이블에서 `SUM`/`AVG`/`MIN`/`MAX`가 NULL 대신 0을 반환함
-- `LIKE '_'`가 빈 문자열과 일치함
-- `LIMIT 0`이 오류를 발생시킴
+- NOT NULL constraint not enforced on UPDATE
+- UNIQUE constraint rejected multiple NULLs (SQL standard: NULLs are distinct)
+- Duplicate columns in INSERT column list not detected
+- `SUM`/`AVG`/`MIN`/`MAX` on empty table returned 0 instead of NULL
+- `LIKE '_'` matched empty string
+- `LIMIT 0` threw an error
 
-### 버전 업데이트
+### Version bumps
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.9 | @petradb/engine 1.2.16 |
@@ -413,19 +523,19 @@ SQL 파서의 별도 `expression`과 `booleanExpression` 계층이 단일 표현
 
 ## v1.2-20260307
 
-### SQL: INSERT VALUES에서의 `DEFAULT` 키워드
+### SQL: `DEFAULT` keyword in INSERT VALUES
 
-`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')`가 이제 작동합니다. SQL 표준 `DEFAULT` 키워드는 이전에 파서에 의해 거부되어, serial이나 기본값이 있는 컬럼에 대해 명시적으로 `DEFAULT`를 전달하는 ORM 생성 INSERT 문을 중단시켰습니다.
+`INSERT INTO t (id, name) VALUES (DEFAULT, 'Alice')` now works. The SQL-standard `DEFAULT` keyword was previously rejected by the parser, breaking ORM-generated INSERT statements that explicitly pass `DEFAULT` for serial or defaulted columns.
 
-### Drizzle ORM 통합
+### Drizzle ORM integration
 
-새로운 `@petradb/drizzle` 패키지가 커스텀 PostgreSQL 방언 구현을 가진 [Drizzle ORM](https://orm.drizzle.team) 드라이버를 제공합니다. `pgTable`을 사용한 스키마 정의, insert/select/update/delete, returning 절, 자동 커밋/롤백이 포함된 `db.transaction()`, 타입 안전 쿼리를 지원합니다. `drizzle-orm/node-postgres`와 완전한 기능 동등성을 제공합니다.
+New `@petradb/drizzle` package provides a [Drizzle ORM](https://orm.drizzle.team) driver with a custom PostgreSQL dialect implementation. Supports schema definitions with `pgTable`, insert/select/update/delete, returning clauses, `db.transaction()` with automatic commit/rollback, and type-safe queries. Full feature parity with `drizzle-orm/node-postgres`.
 
-### 종속 패키지 버전 업데이트
+### Version bumps for dependent packages
 
-Engine, server, cli, jdbc가 DEFAULT 키워드 수정을 반영하여 업데이트되었습니다.
+Engine, server, cli, and jdbc bumped to pick up the DEFAULT keyword fix.
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.7 | @petradb/engine 1.2.14 |
@@ -439,26 +549,26 @@ Engine, server, cli, jdbc가 DEFAULT 키워드 수정을 반영하여 업데이�
 
 ## v1.2-20260306
 
-### JS API: `close()`가 `Promise<void>`를 반환
-`Session.close()`가 이제 `void` 대신 `Promise<void>`를 반환하여, 상호 교환성을 위해 client 모듈의 API와 일치합니다.
+### JS API: `close()` returns `Promise<void>`
+`Session.close()` now returns `Promise<void>` instead of `void`, matching the client module's API for interchangeability.
 
-### 타임스탬프 파싱
-`parseTimestamp`가 이제 `Z` 접미사, `+/-HH:MM` 오프셋, 밀리초, 시간대 정보가 포함된 공백 구분 타임스탬프를 처리합니다. `TIMESTAMP` 컬럼을 위해 시간대를 `LocalDateTime`으로 제거합니다.
+### Timestamp parsing
+`parseTimestamp` now handles `Z` suffix, `+/-HH:MM` offsets, milliseconds, and space-separated timestamps with timezone info. Strips timezone to `LocalDateTime` for `TIMESTAMP` columns.
 
-### JS 파사드 완전성
-`toJS`와 `typeString`이 이제 `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, `ByteaValue`를 처리합니다.
+### JS facade completeness
+`toJS` and `typeString` now handle `DateValue`, `TimeValue`, `TimestampTZValue`, `TimeTZValue`, `IntervalValue`, and `ByteaValue`.
 
-### SQL: 한정된 스타 (`table.*`)
-`SELECT t.*` 구문이 이제 조인과 혼합 표현식을 포함한 쿼리에서 작동합니다.
+### SQL: qualified star (`table.*`)
+`SELECT t.*` syntax now works in queries, including joins and mixed expressions.
 
-### 비교에서의 타입 강제 변환
-- `NumberValue`와 `TextValue`가 이제 타입 간 비교를 할 수 있습니다 (텍스트 매개변수 vs 숫자 컬럼 및 그 반대)
-- `TimestampValue`가 이제 텍스트를 타임스탬프로 파싱하여 `TextValue`와 비교할 수 있습니다
+### Type coercion in comparisons
+- `NumberValue` and `TextValue` can now compare across types (text parameters vs numeric columns and vice versa)
+- `TimestampValue` can now compare against `TextValue` by parsing the text as a timestamp
 
-### Knex 드라이버: Date 바인딩
-`_sanitizeBindings`가 JS `Date` 객체를 엔진에 전달하기 전에 ISO 문자열로 변환하여, `Date.toString()` 형식에서의 `DateTimeParseException`을 방지합니다.
+### Knex driver: Date binding
+`_sanitizeBindings` converts JS `Date` objects to ISO strings before passing to the engine, preventing `DateTimeParseException` on `Date.toString()` format.
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.3 | — |
 | engine | 1.2.6 | @petradb/engine 1.2.13 |
@@ -471,25 +581,25 @@ Engine, server, cli, jdbc가 DEFAULT 키워드 수정을 반영하여 업데이�
 
 ## v1.2-20260305
 
-### JDBC 드라이버
-- Fat jar 배포 — `io.github.edadma:petradb-jdbc`가 이제 Maven Central의 단일 자체 포함 jar입니다
-- 깔끔한 연결 URL — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
-- ServiceLoader 자동 검색 — `Class.forName` 없이 `DriverManager.getConnection()`이 작동합니다
-- 하드코딩된 메타데이터 버전 문자열 수정
+### JDBC driver
+- Fat jar publishing — `io.github.edadma:petradb-jdbc` is now a single self-contained jar on Maven Central
+- Clean connection URLs — `jdbc:petradb:memory`, `jdbc:petradb:file:/path`, `jdbc:petradb://host:port`
+- ServiceLoader auto-discovery — `DriverManager.getConnection()` works without `Class.forName`
+- Fixed hardcoded metadata version strings
 
-### JS/TS 엔진 (`@petradb/engine`)
-- JS 파사드에 `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` 추가
-- TypeScript 타입 정의에 `ExplainResult`와 `CopyResult` 추가
+### JS/TS engine (`@petradb/engine`)
+- Added `CreateViewResult`, `DropViewResult`, `ExplainResult`, `CopyResult` to JS facade
+- Added `ExplainResult` and `CopyResult` to TypeScript type definitions
 
-### 문서
-- 전체 예제가 포함된 새로운 Knex.js 가이드
-- JDBC 문서: Maven/Gradle/sbt 설치 스니펫 추가, 포트 번호 수정
+### Documentation
+- New Knex.js guide with full examples
+- JDBC docs: added Maven/Gradle/sbt install snippets, fixed port number
 
-### 인프라
-- `petradb-shared`가 이제 Maven Central에 배포 가능
-- npm, Scala, JDBC 아티팩트를 포함하는 배포 후 스모크 테스트 스크립트
+### Infrastructure
+- `petradb-shared` now publishable to Maven Central
+- Post-publish smoke test script covering npm, Scala, and JDBC artifacts
 
-| 컴포넌트 | Maven Central | npm |
+| Component | Maven Central | npm |
 |-----------|---------------|-----|
 | shared | 1.2.1 | — |
 | engine | 1.2.2 | @petradb/engine 1.2.5 |
@@ -501,86 +611,86 @@ Engine, server, cli, jdbc가 DEFAULT 키워드 수정을 반영하여 업데이�
 
 ## v1.2.2
 
-### 엔진 서브패키지 재구조화
-- 엔진이 `io.github.edadma.petradb.engine` 서브패키지로 이동
-- 엔진과 클라이언트 모두가 확장하는 새로운 공유 `Session` 트레이트
+### Engine subpackage restructure
+- Engine moved to `io.github.edadma.petradb.engine` subpackage
+- New shared `Session` trait extended by both engine and client
 
-### CLI 클라이언트 지원
-- 원격 PetraDB 서버에 연결: `petradb --host localhost --port 5480`
-- 인증을 위한 `--user`와 `--password` 플래그
-- SQL을 통해 네트워크에서 메타 명령 작동
+### CLI client support
+- Connect to a remote PetraDB server: `petradb --host localhost --port 5480`
+- `--user` and `--password` flags for authentication
+- Meta-commands work over the network via SQL
 
 ### SQL
-- 뷰 이름과 정의를 반환하는 `SHOW VIEWS` 명령
+- `SHOW VIEWS` command returns view names and definitions
 
-### Knex 방언
-- PetraDB와 함께 Knex.js 쿼리 빌더를 사용하기 위한 `@petradb/knex` 방언 어댑터
+### Knex dialect
+- `@petradb/knex` dialect adapter for using Knex.js query builder with PetraDB
 
-### 수정 사항
-- 클라이언트 npm 배포 수정
-- CLI npm 배포 수정
-- 하드코딩된 JDBC 메타데이터 버전 문자열 수정
-- JVM, JS, Native에서 1013개 이상의 테스트 통과
+### Fixes
+- Fix client npm publish
+- Fix CLI npm publish
+- Fix hardcoded JDBC metadata version strings
+- 1013+ tests passing across JVM, JS, and Native
 
 ## v1.2
 
-### JDBC 드라이버
-- Maven Central에 `petradb-jdbc`로 배포
-- DBeaver를 위한 `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/인덱스 메타데이터
-- 파일 모드(임베디드)와 서버 모드(네트워크) 연결
+### JDBC driver
+- Published to Maven Central as `petradb-jdbc`
+- `getGeneratedKeys()`, `addBatch()`/`executeBatch()`, FK/index metadata for DBeaver
+- File mode (embedded) and server mode (network) connections
 
-### SQL 엔진
-- CSV 가져오기/내보내기를 위한 `COPY FROM/TO`
+### SQL engine
+- `COPY FROM/TO` for CSV import/export
 - `CREATE TEMP TABLE`, `CREATE/DROP VIEW`
-- `SHOW FOREIGN KEYS`/`SHOW INDEXES` 인트로스펙션
-- 등가 조인을 위한 인덱스 중첩 루프 조인 최적화
-- 파서를 fastparse로 마이그레이션
+- `SHOW FOREIGN KEYS`/`SHOW INDEXES` introspection
+- Index nested loop join optimization for equijoins
+- Migrated parser to fastparse
 
-### 서버
-- TOML 설정으로 CORS 지원
-- 설정 가능한 `max_sessions`, 기본 포트 5480
-- Node.js HTTP 백엔드를 사용한 JS 서버 플랫폼
+### Server
+- CORS support with TOML configuration
+- Configurable `max_sessions`, default port 5480
+- JS server platform with Node.js HTTP backend
 
-### 클라이언트
-- JS 파사드가 포함된 새로운 `@petradb/client` npm 패키지
-- Promise를 반환하는 `connect()`/`execute()`/`close()`가 있는 `Session` 클래스
+### Client
+- New `@petradb/client` npm package with JS facade
+- `Session` class with `connect()`/`execute()`/`close()` returning Promises
 
 ### CLI
-- `\timing`, `\copy` 명령
-- Native에서의 영구 히스토리
+- `\timing`, `\copy` commands
+- Persistent history on Native
 
-### 빌드
+### Build
 - Scala 3.8.2, sbt 1.12.4
-- JVM, JS, Native에서 1000개 테스트 통과
+- 1000 tests passing across JVM, JS, and Native
 
 ## v1.1.0
 
-### TextDB - 사람이 편집 가능한 텍스트 파일 영속성
-데이터베이스를 `.ptxt` 텍스트 파일로 영속하는 새로운 스토리지 백엔드. 열 때 메모리에 로드하고 변경 후마다 파일을 다시 작성합니다.
+### TextDB — human-editable text file persistence
+A new storage backend that persists the database as a `.ptxt` text file. Loads into memory on open and rewrites the file after every change.
 
-### Upsert - `ON CONFLICT DO UPDATE`
-`EXCLUDED` 의사 테이블을 사용한 삽입 또는 업데이트 의미론.
+### Upsert — `ON CONFLICT DO UPDATE`
+Insert-or-update semantics with the `EXCLUDED` pseudo-table.
 
-### 개선된 예외 계층
-타입이 지정된 예외 클래스가 일반 `problem()` 호출을 대체합니다.
+### Improved exception hierarchy
+Typed exception classes replace generic `problem()` calls.
 
-### ALTER TABLE 중앙화
-`DB.alterTable()`이 이제 모든 ALTER TABLE 디스패치를 중앙화합니다.
+### ALTER TABLE centralised
+`DB.alterTable()` now centralises all ALTER TABLE dispatch.
 
 ## v1.0.1
 
-- `@petradb/engine`에서 `ConnectSQL`을 `Session`으로 이름 변경
-- `Promise<ExecuteResult[]>`를 반환하는 비동기 `execute()` API
-- 네트워크 사용을 위한 새로운 `@petradb/client` 패키지
-- 엔진과 서버 간의 응답 형식 정렬
+- Rename `ConnectSQL` to `Session` in `@petradb/engine`
+- Async `execute()` API returning `Promise<ExecuteResult[]>`
+- New `@petradb/client` package for network usage
+- Aligned response formats between engine and server
 
 ## v1.0.0
 
-첫 번째 안정 릴리스.
+First stable release.
 
-- 크로스 플랫폼 SQL 엔진 (JVM, JavaScript, Native)
-- PostgreSQL 호환 구문
-- 인메모리 및 영구(충돌 안전) 스토리지
-- DDL, DML, 조인, 서브쿼리, 집계, 트랜잭션
-- JSONB 연산자, 배열 타입, CHECK 제약 조건
-- 879개 통과 테스트
+- Cross-platform SQL engine (JVM, JavaScript, Native)
+- PostgreSQL-compatible syntax
+- In-memory and persistent (crash-safe) storage
+- DDL, DML, joins, subqueries, aggregations, transactions
+- JSONB operators, array types, CHECK constraints
+- 879 passing tests

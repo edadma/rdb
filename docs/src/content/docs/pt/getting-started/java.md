@@ -12,13 +12,13 @@ O PetraDB fornece um driver JDBC 4 padrao, entao voce usa a API familiar `java.s
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.2</version>
 </dependency>
 ```
 
 **Gradle:**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.5.0'
+implementation 'io.github.edadma:petradb-jdbc:1.5.2'
 ```
 
 O driver se registra automaticamente — nao e necessario `Class.forName()`.

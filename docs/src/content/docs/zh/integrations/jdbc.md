@@ -12,18 +12,18 @@ PetraDB 包含一个适用于 JVM 应用程序的 JDBC 4 驱动。该驱动通�
 <dependency>
     <groupId>io.github.edadma</groupId>
     <artifactId>petradb-jdbc</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.2</version>
 </dependency>
 ```
 
 **Gradle：**
 ```groovy
-implementation 'io.github.edadma:petradb-jdbc:1.5.0'
+implementation 'io.github.edadma:petradb-jdbc:1.5.2'
 ```
 
 **sbt：**
 ```scala
-libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.0"
+libraryDependencies += "io.github.edadma" % "petradb-jdbc" % "1.5.2"
 ```
 
 或直接从 [Maven Central](https://central.sonatype.com/artifact/io.github.edadma/petradb-jdbc) 下载 jar 文件。
