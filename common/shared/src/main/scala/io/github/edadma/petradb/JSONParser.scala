@@ -39,8 +39,6 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
     private def jsonString: Parser[Token] =
       '"' ~> rep(jsonStringChar) <~ '"' ^^ (chars => StringLit(chars.mkString))
 
-    override def token: Parser[Token] = jsonString | decimalToken | super.token
-
     private def decimalToken: Parser[Token] =
       digits ~ '.' ~ digits ~ optExponent ^^ { case intPart ~ _ ~ fracPart ~ exp =>
         DecimalLit(s"$intPart.$fracPart$exp")
@@ -65,6 +63,8 @@ object JSONParser extends StandardTokenParsers with PackratParsers:
       case None    => ""
       case Some(e) => e
     }
+
+    override def token: Parser[Token] = jsonString | decimalToken | super.token
 
   override val lexical: JSONLexer = new JSONLexer
 

@@ -61,6 +61,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "org.scalatest"          %%% "scalatest"                 % "3.2.19" % Test,
     ),
     publishTo := sonatypePublishToBundle.value,
+    Compile / doc / sources := Seq.empty, // Scaladoc NPE in SignatureBuilder — upstream bug
   )
   .jsSettings(
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
@@ -102,6 +103,7 @@ lazy val engine = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     publishMavenStyle      := true,
     publishTo              := sonatypePublishToBundle.value,
     Test / publishArtifact := false,
+    Compile / doc / sources := Seq.empty, // Scaladoc NPE in SignatureBuilder — upstream bug
   )
   .jvmSettings(
     libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
