@@ -667,23 +667,32 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
           }
 
           // Validate FK references (look up via session to include temp tables)
+          // Self-referential FKs are deferred — validated after the table is created
+          val selfRefFKs = mutable.ArrayBuffer.empty[(String, String)]
           for spec <- columnSpecs do
             spec match
               case cs: ColumnSpec if cs.fk.isDefined =>
                 val (refTableName, refColName, _, _) = cs.fk.get
-                val refTable = session.getTable(refTableName).getOrElse(
-                  throw UndefinedReferenceException(id.pos, s"referenced table '$refTableName' does not exist"))
-                if !refTable.hasColumn(refColName) then
-                  throw UndefinedReferenceException(id.pos, s"referenced column '$refColName' not found in table '$refTableName'")
+                if refTableName == table then
+                  selfRefFKs += ((refTableName, refColName))
+                else
+                  val refTable = session.getTable(refTableName).getOrElse(
+                    throw UndefinedReferenceException(id.pos, s"referenced table '$refTableName' does not exist"))
+                  if !refTable.hasColumn(refColName) then
+                    throw UndefinedReferenceException(id.pos, s"referenced column '$refColName' not found in table '$refTableName'")
               case _ =>
           for spec <- constraintSpecs do
             spec match
               case fk: ForeignKeySpec =>
-                val refTable = session.getTable(fk.referencedTable).getOrElse(
-                  throw UndefinedReferenceException(id.pos, s"referenced table '${fk.referencedTable}' does not exist"))
-                for col <- fk.referencedColumns do
-                  if !refTable.hasColumn(col) then
-                    throw UndefinedReferenceException(id.pos, s"referenced column '$col' not found in table '${fk.referencedTable}'")
+                if fk.referencedTable != table then
+                  val refTable = session.getTable(fk.referencedTable).getOrElse(
+                    throw UndefinedReferenceException(id.pos, s"referenced table '${fk.referencedTable}' does not exist"))
+                  for col <- fk.referencedColumns do
+                    if !refTable.hasColumn(col) then
+                      throw UndefinedReferenceException(id.pos, s"referenced column '$col' not found in table '${fk.referencedTable}'")
+                else
+                  for col <- fk.referencedColumns do
+                    selfRefFKs += ((fk.referencedTable, col))
               case _ =>
 
           val allSpecs = columnSpecs ++ constraintSpecs ++ columnPKSpecs ++ columnCheckSpecs
@@ -697,6 +706,14 @@ private[engine] def executeCommands(cs: Seq[Command], blockEnv: Option[BlockEnv]
               val seqName = s"${table}_${spec.name}_seq"
               val seq = db.createSequence(seqName, 1, 1, Long.MaxValue / 2, Some(1), false, Some(table), Some(spec.name))
               t.backingSequences(spec.name) = seq
+
+          // Validate deferred self-referential FK columns now that the table exists
+          for (refTableName, refColName) <- selfRefFKs do
+            val refTable = session.getTable(refTableName).getOrElse(
+              throw UndefinedReferenceException(id.pos, s"referenced table '$refTableName' does not exist"))
+            if !refTable.hasColumn(refColName) then
+              throw UndefinedReferenceException(id.pos, s"referenced column '$refColName' not found in table '$refTableName'")
+
           CreateTableResult(table)
       case CreateVirtualTableCommand(id @ Ident(tableName), moduleName, args) =>
         if session.hasTable(tableName) then

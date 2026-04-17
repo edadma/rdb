@@ -211,4 +211,143 @@ class BugFixTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0).string shouldBe "2"
     }
   }
+
+  // ── Bug 6: 'type' should not be a reserved word ────────────────────
+
+  "type as column name" - {
+    "CREATE TABLE with unquoted type column" in {
+      val res = results("CREATE TABLE steps (id UUID PRIMARY KEY, type TEXT NOT NULL)")
+      res.head shouldBe a[CreateTableResult]
+    }
+
+    "INSERT and SELECT with type column" in {
+      val table = query(
+        """CREATE TABLE steps (id UUID PRIMARY KEY, type TEXT NOT NULL);
+          |INSERT INTO steps (type) VALUES ('pickup');
+          |INSERT INTO steps (type) VALUES ('dropoff');
+          |SELECT type FROM steps ORDER BY type;
+          |""".stripMargin
+      )
+      table.data should have length 2
+      table.data(0).data(0).string shouldBe "dropoff"
+      table.data(1).data(0).string shouldBe "pickup"
+    }
+
+    "CREATE TYPE still works" in {
+      val res = results("CREATE TYPE color AS ENUM ('red', 'green', 'blue')")
+      res.head shouldBe a[CreateTypeResult]
+    }
+  }
+
+  // ── Bug 7: Self-referential FK in CREATE TABLE ─────────────────────
+
+  "self-referential foreign key" - {
+    "column-level REFERENCES to own table" in {
+      val res = results(
+        "CREATE TABLE trips (id UUID PRIMARY KEY, state TEXT NOT NULL, return_trip_for_id UUID REFERENCES trips(id))"
+      )
+      res.head shouldBe a[CreateTableResult]
+    }
+
+    "self-referential FK insert works" in {
+      val table = query(
+        """CREATE TABLE categories (id SERIAL PRIMARY KEY, name TEXT NOT NULL, parent_id INT REFERENCES categories(id));
+          |INSERT INTO categories (name) VALUES ('Root');
+          |INSERT INTO categories (name, parent_id) VALUES ('Child', 1);
+          |SELECT name, parent_id FROM categories ORDER BY id;
+          |""".stripMargin
+      )
+      table.data should have length 2
+      table.data(0).data(0).string shouldBe "Root"
+      table.data(1).data(0).string shouldBe "Child"
+      table.data(1).data(1).intValue shouldBe 1
+    }
+
+    "self-referential FK rejects invalid column" in {
+      an[UndefinedReferenceException] should be thrownBy {
+        results("CREATE TABLE nodes (id SERIAL PRIMARY KEY, parent_id INT REFERENCES nodes(nonexistent))")
+      }
+    }
+
+    "non-self FK still validated" in {
+      an[UndefinedReferenceException] should be thrownBy {
+        results("CREATE TABLE child (id INT, parent_id INT REFERENCES no_such_table(id))")
+      }
+    }
+  }
+
+  // ── Bug 8: Text-to-timestamp coercion in comparisons ───────────────
+
+  "text-to-timestamp coercion" - {
+    "text param compared to TIMESTAMP column" in {
+      given session: Session = setupSession(
+        """CREATE TABLE events (id SERIAL, name TEXT, created_at TIMESTAMP);
+          |INSERT INTO events (name, created_at) VALUES ('a', '2024-06-15T10:00:00');
+          |INSERT INTO events (name, created_at) VALUES ('b', '2024-07-15T10:00:00');
+          |""".stripMargin
+      )
+      val res = executeSQL("SELECT name FROM events WHERE created_at BETWEEN $1 AND $2 ORDER BY name",
+        IndexedSeq("2024-06-01T00:00:00", "2024-06-30T23:59:59"))
+      val table = res.collect { case QueryResult(t) => t }.head
+      table.data should have length 1
+      table.data(0).data(0).string shouldBe "a"
+    }
+
+    "text param compared to DATE column" in {
+      given session: Session = setupSession(
+        """CREATE TABLE logs (id SERIAL, d DATE);
+          |INSERT INTO logs (d) VALUES ('2024-01-15');
+          |INSERT INTO logs (d) VALUES ('2024-02-15');
+          |""".stripMargin
+      )
+      val res = executeSQL("SELECT d FROM logs WHERE d > $1 ORDER BY d", IndexedSeq("2024-01-31"))
+      val table = res.collect { case QueryResult(t) => t }.head
+      table.data should have length 1
+    }
+
+    "ISO-8601 with timezone coerced to timestamp" in {
+      given session: Session = setupSession(
+        """CREATE TABLE events (id SERIAL, ts TIMESTAMP);
+          |INSERT INTO events (ts) VALUES ('2024-06-15T10:00:00');
+          |""".stripMargin
+      )
+      val res = executeSQL("SELECT * FROM events WHERE ts >= $1", IndexedSeq("2024-06-01T00:00:00Z"))
+      val table = res.collect { case QueryResult(t) => t }.head
+      table.data should have length 1
+    }
+  }
+
+  // ── Bug 9: Subquery expression in WHERE clause ─────────────────────
+
+  "subquery expression in WHERE" - {
+    "scalar subquery compared to value" in {
+      val table = query(
+        """CREATE TABLE vehicles (id SERIAL PRIMARY KEY, make TEXT);
+          |CREATE TABLE drivers (id SERIAL PRIMARY KEY, vehicle_id INT REFERENCES vehicles(id), name TEXT);
+          |INSERT INTO vehicles (make) VALUES ('Toyota');
+          |INSERT INTO vehicles (make) VALUES ('Honda');
+          |INSERT INTO drivers (vehicle_id, name) VALUES (1, 'Alice');
+          |SELECT make FROM vehicles WHERE (SELECT count(*) FROM drivers WHERE drivers.vehicle_id = vehicles.id) = 0 ORDER BY make;
+          |""".stripMargin
+      )
+      table.data should have length 1
+      table.data(0).data(0).string shouldBe "Honda"
+    }
+
+    "scalar subquery with greater-than" in {
+      val table = query(
+        """CREATE TABLE departments (id SERIAL PRIMARY KEY, name TEXT);
+          |CREATE TABLE employees (id SERIAL PRIMARY KEY, dept_id INT, name TEXT);
+          |INSERT INTO departments (name) VALUES ('Engineering');
+          |INSERT INTO departments (name) VALUES ('Sales');
+          |INSERT INTO employees (dept_id, name) VALUES (1, 'Alice');
+          |INSERT INTO employees (dept_id, name) VALUES (1, 'Bob');
+          |INSERT INTO employees (dept_id, name) VALUES (2, 'Charlie');
+          |SELECT name FROM departments WHERE (SELECT count(*) FROM employees WHERE employees.dept_id = departments.id) > 1;
+          |""".stripMargin
+      )
+      table.data should have length 1
+      table.data(0).data(0).string shouldBe "Engineering"
+    }
+  }
 }

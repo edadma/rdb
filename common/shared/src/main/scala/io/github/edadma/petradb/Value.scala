@@ -94,7 +94,10 @@ case class DateValue(d: LocalDate) extends Value(DateType):
   override def compare(that: Value): Int =
     that match
       case DateValue(u) => d.compareTo(u)
-      case _            => super.compare(that)
+      case TextValue(s) =>
+        try d.compareTo(LocalDate.parse(s))
+        catch case _: Exception => super.compare(that)
+      case _ => super.compare(that)
 
   override def render: String = s"'$d'"
 
@@ -154,7 +157,10 @@ case class TimestampTZValue(t: OffsetDateTime) extends Value(TimestampTZType):
   override def compare(that: Value): Int =
     that match
       case TimestampTZValue(u) => t.compareTo(u)
-      case _                   => super.compare(that)
+      case TextValue(s) =>
+        try t.compareTo(OffsetDateTime.parse(s))
+        catch case _: Exception => super.compare(that)
+      case _ => super.compare(that)
 
   override def render: String = s"'$t'"
 
@@ -232,6 +238,11 @@ case class TextValue(s: String) extends Value(TextType):
         t.labelsMap get s match
           case None    => throw TypeException(pos, s"'$s' is not a label of enum '${t.name}'")
           case Some(l) => l compare v
+      case _: TimestampValue | _: TimestampTZValue | _: DateValue | _: TimeValue | _: TimeTZValue =>
+        try
+          val converted = that.vtyp.convert(this)
+          converted compare that
+        catch case _: Exception => super.compare(that)
       case _ => super.compare(that)
 
 case class BooleanValue(b: Boolean) extends Value(BooleanType):
