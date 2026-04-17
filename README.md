@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/@petradb/engine)](https://www.npmjs.com/package/@petradb/engine)
 [![Last Commit](https://img.shields.io/github/last-commit/edadma/petradb)](https://github.com/edadma/petradb/commits)
 [![License](https://img.shields.io/github/license/edadma/petradb)](LICENSE)
-![Scala Version](https://img.shields.io/badge/Scala-3.8.2-blue.svg)
+![Scala Version](https://img.shields.io/badge/Scala-3.8.3-blue.svg)
 ![Scala.js Version](https://img.shields.io/badge/Scala.js-1.20.2-blue.svg)
 ![Scala Native Version](https://img.shields.io/badge/Scala_Native-0.5.10-blue.svg)
 
