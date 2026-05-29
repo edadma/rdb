@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCALA_VERSION="3.8.2"
+SCALA_VERSION="3.8.3"
 
 case "$1" in
   engine)

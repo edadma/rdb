@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCALA_VERSION="3.8.2"
+SCALA_VERSION="3.8.3"
 
 sbt engineJS/fullLinkJS
 cp engine/js/target/scala-${SCALA_VERSION}/petradb-engine-opt/main.js engine/npm/main.js
