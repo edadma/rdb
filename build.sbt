@@ -51,7 +51,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .in(file("common"))
   .settings(
     name    := "petradb-common",
-    version := "1.5.2",
+    version := "1.5.3",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma"       %%% "dal"                       % "0.0.10",

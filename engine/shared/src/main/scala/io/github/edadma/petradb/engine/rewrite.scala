@@ -375,32 +375,35 @@ def rewrite(expr: Expr)(using session: Session): Expr =
       val l = rewrite(lower)
       val r = rewrite(upper)
 
+      // Build the desugared comparisons from the rewritten operands (v/l/r), not the originals —
+      // otherwise a function call or other rewrite-requiring expression in a bound reaches eval
+      // un-lowered (e.g. a bare ApplyExpr) and crashes.
       op match
         case "BETWEEN" =>
           BinaryExpr(
-            BinaryExpr(lower, "<=", value) setType BooleanType,
+            BinaryExpr(l, "<=", v) setType BooleanType,
             "AND",
-            BinaryExpr(value, "<=", upper) setType BooleanType,
+            BinaryExpr(v, "<=", r) setType BooleanType,
           ) setType BooleanType
         case "NOT BETWEEN" =>
           BinaryExpr(
-            BinaryExpr(value, "<", lower) setType BooleanType,
+            BinaryExpr(v, "<", l) setType BooleanType,
             "OR",
-            BinaryExpr(value, ">", upper) setType BooleanType,
+            BinaryExpr(v, ">", r) setType BooleanType,
           ) setType BooleanType
         case "BETWEEN SYMMETRIC" =>
           // (value BETWEEN lower AND upper) OR (value BETWEEN upper AND lower)
           BinaryExpr(
             BinaryExpr(
-              BinaryExpr(lower, "<=", value) setType BooleanType,
+              BinaryExpr(l, "<=", v) setType BooleanType,
               "AND",
-              BinaryExpr(value, "<=", upper) setType BooleanType,
+              BinaryExpr(v, "<=", r) setType BooleanType,
             ) setType BooleanType,
             "OR",
             BinaryExpr(
-              BinaryExpr(upper, "<=", value) setType BooleanType,
+              BinaryExpr(r, "<=", v) setType BooleanType,
               "AND",
-              BinaryExpr(value, "<=", lower) setType BooleanType,
+              BinaryExpr(v, "<=", l) setType BooleanType,
             ) setType BooleanType,
           ) setType BooleanType
         case "NOT BETWEEN SYMMETRIC" =>
@@ -408,15 +411,15 @@ def rewrite(expr: Expr)(using session: Session): Expr =
           UnaryExpr("NOT",
             BinaryExpr(
               BinaryExpr(
-                BinaryExpr(lower, "<=", value) setType BooleanType,
+                BinaryExpr(l, "<=", v) setType BooleanType,
                 "AND",
-                BinaryExpr(value, "<=", upper) setType BooleanType,
+                BinaryExpr(v, "<=", r) setType BooleanType,
               ) setType BooleanType,
               "OR",
               BinaryExpr(
-                BinaryExpr(upper, "<=", value) setType BooleanType,
+                BinaryExpr(r, "<=", v) setType BooleanType,
                 "AND",
-                BinaryExpr(value, "<=", lower) setType BooleanType,
+                BinaryExpr(v, "<=", l) setType BooleanType,
               ) setType BooleanType,
             ) setType BooleanType,
           ) setType BooleanType

@@ -79,6 +79,9 @@ case class TimestampValue(t: LocalDateTime) extends Value(TimestampType):
   override def compare(that: Value): Int =
     that match
       case TimestampValue(u) => t.compareTo(u)
+      // PostgreSQL allows timestamp vs timestamptz by reading the naive wall clock in the session
+      // zone, then comparing as instants. With no session zone tracked, the naive value is UTC.
+      case TimestampTZValue(u) => t.atOffset(ZoneOffset.UTC).toInstant.compareTo(u.toInstant)
       case TextValue(s) =>
         try t.compareTo(parseTimestamp(s))
         catch case _: Exception => super.compare(that)
@@ -157,6 +160,9 @@ case class TimestampTZValue(t: OffsetDateTime) extends Value(TimestampTZType):
   override def compare(that: Value): Int =
     that match
       case TimestampTZValue(u) => t.compareTo(u)
+      // Symmetric with TimestampValue: the naive operand is interpreted as UTC and compared as an
+      // instant (PostgreSQL would use the session zone, which is not tracked here).
+      case TimestampValue(u) => t.toInstant.compareTo(u.atOffset(ZoneOffset.UTC).toInstant)
       case TextValue(s) =>
         try t.compareTo(OffsetDateTime.parse(s))
         catch case _: Exception => super.compare(that)

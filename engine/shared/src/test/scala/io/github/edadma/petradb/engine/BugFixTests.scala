@@ -350,4 +350,26 @@ class BugFixTests extends AnyFreeSpec with Matchers with Testing {
       table.data(0).data(0).string shouldBe "Engineering"
     }
   }
+
+  // BETWEEN rewrote its desugared comparisons from the original operands, so a function call (or any
+  // expression needing rewrite) in a bound reached eval as a bare ApplyExpr and threw MatchError.
+  "BETWEEN with function-call bounds" - {
+    "BETWEEN evaluates rewritten bounds" in {
+      query("SELECT 3 BETWEEN abs(-1) AND abs(-5)").data(0).data(0) shouldBe BooleanValue(true)
+      query("SELECT 9 BETWEEN abs(-1) AND abs(-5)").data(0).data(0) shouldBe BooleanValue(false)
+    }
+    "NOT BETWEEN evaluates rewritten bounds" in {
+      query("SELECT 9 NOT BETWEEN abs(-1) AND abs(-5)").data(0).data(0) shouldBe BooleanValue(true)
+    }
+    "BETWEEN SYMMETRIC evaluates rewritten bounds in either order" in {
+      query("SELECT 3 BETWEEN SYMMETRIC abs(-5) AND abs(-1)").data(0).data(0) shouldBe BooleanValue(true)
+      query("SELECT 9 BETWEEN SYMMETRIC abs(-5) AND abs(-1)").data(0).data(0) shouldBe BooleanValue(false)
+    }
+    "NOT BETWEEN SYMMETRIC evaluates rewritten bounds" in {
+      query("SELECT 9 NOT BETWEEN SYMMETRIC abs(-5) AND abs(-1)").data(0).data(0) shouldBe BooleanValue(true)
+    }
+    "function-call value with function-call bounds" in {
+      query("SELECT abs(-3) BETWEEN abs(-1) AND abs(-5)").data(0).data(0) shouldBe BooleanValue(true)
+    }
+  }
 }
