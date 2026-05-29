@@ -29,10 +29,10 @@ class BugFixTests extends AnyFreeSpec with Matchers with Testing {
   }
 
   "current_time" - {
-    "returns a time value without parentheses" in {
+    "returns a time-with-time-zone value without parentheses" in {
       val table = query("SELECT current_time")
       table.data should have length 1
-      table.data(0).data(0) shouldBe a[TimeValue]
+      table.data(0).data(0) shouldBe a[TimeTZValue]
     }
   }
 

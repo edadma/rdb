@@ -349,7 +349,7 @@ def rewrite(expr: Expr)(using session: Session): Expr =
     case VariableExpr(id @ Ident(name)) =>
       scalarVariable get name match
         case None    => throw UndefinedReferenceException(id.pos, s"unknown variable '$name'")
-        case Some(v) => VariableInstanceExpr(v.instance)
+        case Some(v) => VariableInstanceExpr(v.instance) setType v.typ
     case ExistsExpr(subquery) => ExistsExpr(rewrite(subquery)) setType BooleanType
     case UnaryExpr(op, expr)  =>
       val e = rewrite(expr)

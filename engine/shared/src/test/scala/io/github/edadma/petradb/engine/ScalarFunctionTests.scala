@@ -509,7 +509,7 @@ class ScalarFunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT clock_timestamp() FROM t;
           |""".trim.stripMargin
       )
-      table.data(0).data(0).vtyp shouldBe TimestampType
+      table.data(0).data(0).vtyp shouldBe TimestampTZType
     }
   }
 

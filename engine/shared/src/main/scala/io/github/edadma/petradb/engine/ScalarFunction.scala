@@ -272,21 +272,32 @@ val scalarFunction: Map[String, ScalarFunction] =
       { case Seq(v) => TextValue(v.string.reverse) },
       TextType,
     ),
-    // Date/time functions
+    // Date/time functions. now() and friends return `timestamp with time zone` in PostgreSQL —
+    // an instant, not a zone-naive wall clock — so they carry the system-zone offset.
     ScalarFunction(
       "now",
-      { case Seq() => TimestampValue(LocalDateTime.now(ZoneOffset.UTC)) },
-      TimestampType,
+      { case Seq() => TimestampTZValue(OffsetDateTime.now()) },
+      TimestampTZType,
+    ),
+    ScalarFunction(
+      "transaction_timestamp",
+      { case Seq() => TimestampTZValue(OffsetDateTime.now()) },
+      TimestampTZType,
+    ),
+    ScalarFunction(
+      "statement_timestamp",
+      { case Seq() => TimestampTZValue(OffsetDateTime.now()) },
+      TimestampTZType,
     ),
     ScalarFunction(
       "current_date",
-      { case Seq() => DateValue(LocalDate.now(ZoneOffset.UTC)) },
+      { case Seq() => DateValue(LocalDate.now()) },
       DateType,
     ),
     ScalarFunction(
       "current_time",
-      { case Seq() => TimeValue(LocalTime.now(ZoneOffset.UTC)) },
-      TimeType,
+      { case Seq() => TimeTZValue(OffsetTime.now()) },
+      TimeTZType,
     ),
     ScalarFunction(
       "date_part",
@@ -300,6 +311,17 @@ val scalarFunction: Map[String, ScalarFunction] =
             case "minute" => NumberValue(ts.getMinute)
             case "second" => NumberValue(ts.getSecond)
             case _        => NumberValue(0)
+        case Seq(TextValue(part), TimestampTZValue(ts)) =>
+          part.toLowerCase match
+            case "year"     => NumberValue(ts.getYear)
+            case "month"    => NumberValue(ts.getMonthValue)
+            case "day"      => NumberValue(ts.getDayOfMonth)
+            case "hour"     => NumberValue(ts.getHour)
+            case "minute"   => NumberValue(ts.getMinute)
+            case "second"   => NumberValue(ts.getSecond)
+            case "timezone" => NumberValue(ts.getOffset.getTotalSeconds)
+            case "epoch"    => NumberValue(ts.toEpochSecond.toDouble)
+            case _          => NumberValue(0)
         case Seq(TextValue(part), DateValue(d)) =>
           part.toLowerCase match
             case "year"  => NumberValue(d.getYear)
@@ -490,6 +512,23 @@ val scalarFunction: Map[String, ScalarFunction] =
             case "minute"  => ts.truncatedTo(ChronoUnit.MINUTES)
             case "second"  => ts.truncatedTo(ChronoUnit.SECONDS)
             case _         => ts)
+        case Seq(TextValue(field), TimestampTZValue(ts)) =>
+          val off = ts.getOffset
+          TimestampTZValue(field.toLowerCase match
+            case "year"    => OffsetDateTime.of(ts.getYear, 1, 1, 0, 0, 0, 0, off)
+            case "quarter" =>
+              val q = (ts.getMonthValue - 1) / 3 * 3 + 1
+              OffsetDateTime.of(ts.getYear, q, 1, 0, 0, 0, 0, off)
+            case "month"   => OffsetDateTime.of(ts.getYear, ts.getMonthValue, 1, 0, 0, 0, 0, off)
+            case "week"    =>
+              val d = ts.toLocalDate
+              val dow = d.getDayOfWeek.getValue // Monday=1
+              OffsetDateTime.of(LocalDateTime.of(d.minusDays(dow - 1), LocalTime.MIDNIGHT), off)
+            case "day"     => OffsetDateTime.of(LocalDateTime.of(ts.toLocalDate, LocalTime.MIDNIGHT), off)
+            case "hour"    => ts.truncatedTo(ChronoUnit.HOURS)
+            case "minute"  => ts.truncatedTo(ChronoUnit.MINUTES)
+            case "second"  => ts.truncatedTo(ChronoUnit.SECONDS)
+            case _         => ts)
         case Seq(TextValue(field), DateValue(d)) =>
           DateValue(field.toLowerCase match
             case "year"    => LocalDate.of(d.getYear, 1, 1)
@@ -510,11 +549,15 @@ val scalarFunction: Map[String, ScalarFunction] =
       {
         case Seq(TimestampValue(t1), TimestampValue(t2)) =>
           IntervalValue(Duration.between(t2, t1))
+        case Seq(TimestampTZValue(t1), TimestampTZValue(t2)) =>
+          IntervalValue(Duration.between(t2, t1))
         case Seq(DateValue(d1), DateValue(d2)) =>
           IntervalValue(Duration.ofDays(ChronoUnit.DAYS.between(d2, d1)))
         // age(timestamp) = age(now, timestamp)
         case Seq(TimestampValue(t)) =>
           IntervalValue(Duration.between(t, LocalDateTime.now(ZoneOffset.UTC)))
+        case Seq(TimestampTZValue(t)) =>
+          IntervalValue(Duration.between(t, OffsetDateTime.now()))
         case Seq(DateValue(d)) =>
           IntervalValue(Duration.ofDays(ChronoUnit.DAYS.between(d, LocalDate.now(ZoneOffset.UTC))))
       },
@@ -525,6 +568,8 @@ val scalarFunction: Map[String, ScalarFunction] =
       "to_char",
       {
         case Seq(TimestampValue(ts), TextValue(fmt)) =>
+          TextValue(ts.format(sqlToJavaDateFormat(fmt)))
+        case Seq(TimestampTZValue(ts), TextValue(fmt)) =>
           TextValue(ts.format(sqlToJavaDateFormat(fmt)))
         case Seq(DateValue(d), TextValue(fmt)) =>
           TextValue(d.format(sqlToJavaDateFormat(fmt)))
@@ -607,11 +652,11 @@ val scalarFunction: Map[String, ScalarFunction] =
       },
       TextType,
     ),
-    // clock_timestamp
+    // clock_timestamp — the actual current instant, as `timestamp with time zone`.
     ScalarFunction(
       "clock_timestamp",
-      { case Seq() => TimestampValue(LocalDateTime.now(ZoneOffset.UTC)) },
-      TimestampType,
+      { case Seq() => TimestampTZValue(OffsetDateTime.now()) },
+      TimestampTZType,
     ),
     // regexp_split_to_array
     ScalarFunction(

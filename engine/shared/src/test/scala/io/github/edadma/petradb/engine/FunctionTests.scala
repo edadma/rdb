@@ -204,9 +204,10 @@ class FunctionTests extends AnyFreeSpec with Matchers with Testing {
           |SELECT NOW(), CURRENT_DATE();
           |""".trim.stripMargin
       )
-      
-      // Both should return TimestampValue instances
-      result should include("TimestampValue")
+
+      // NOW() is `timestamp with time zone` in PostgreSQL; CURRENT_DATE is a date.
+      result should include("TimestampTZValue")
+      result should include("DateValue")
     }
 
     "date_part extracts correct components" in {

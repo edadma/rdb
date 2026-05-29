@@ -111,14 +111,14 @@ object SQLParser:
     "if", "ilike", "in", "index", "inner", "insert", "int", "integer",
     "indexes", "intersect", "interval", "into", "is",
     "join", "json", "jsonb",
-    "last", "lateral", "like", "limit",
+    "last", "lateral", "like", "limit", "localtime", "localtimestamp",
     "no", "not", "nothing", "null", "nulls", "numeric",
     "offset", "on", "or", "order", "outer", "overlay", "overlaps",
     "placing", "precision", "prepare", "primary", "procedure",
     "real", "references", "rename", "restrict", "returning", "rollback",
     "select", "serial", "set", "show", "smallint", "smallserial", "some", "symmetric",
     "columns",
-    "table", "text", "then", "time", "timetz", "timestamp", "to", "transaction",
+    "table", "text", "then", "time", "timetz", "timestamp", "timestamptz", "to", "transaction",
     "true", "truncate",
     "union", "unique", "unknown", "update", "uuid",
     "values", "varchar",
@@ -272,6 +272,7 @@ object SQLParser:
   private def baseTypTemporal[p: P]: P[Either[Type, Ident]] =
     P(
       (kw("timestamp") ~ kw("with") ~ kw("time") ~ kw("zone")).map(_ => Left(TimestampTZType))
+      | kw("timestamptz").map(_ => Left(TimestampTZType))
       | (kw("timestamp") ~ (kw("without") ~ kw("time") ~ kw("zone")).?).map(_ => Left(TimestampType))
       | kw("date").map(_ => Left(DateType))
       | kw("timetz").map(_ => Left(TimeTZType))
@@ -502,12 +503,16 @@ object SQLParser:
       case (loc, t, Some(c)) => pos(loc, ColumnExpr(Some(t), c))
     }
 
-  // CURRENT_TIMESTAMP, CURRENT_DATE, CURRENT_TIME — SQL standard variables (with optional parens)
+  // CURRENT_TIMESTAMP, LOCALTIMESTAMP, CURRENT_DATE, CURRENT_TIME, LOCALTIME — SQL standard variables
+  // (with optional parens). Longest keywords come first so that e.g. LOCALTIME does not shadow the
+  // LOCALTIME prefix of LOCALTIMESTAMP.
   private def variable[p: P]: P[VariableExpr] =
     P(
       (Idx ~ kw("current_timestamp") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIMESTAMP")))))
+      | (Idx ~ kw("localtimestamp") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("LOCALTIMESTAMP")))))
       | (Idx ~ kw("current_date") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_DATE")))))
       | (Idx ~ kw("current_time") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("CURRENT_TIME")))))
+      | (Idx ~ kw("localtime") ~ ("(" ~ ")").?).map(loc => pos(loc, VariableExpr(pos(loc, Ident("LOCALTIME")))))
     )
 
   private def unaryMinusPrimary[p: P]: P[Expr] =

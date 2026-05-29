@@ -120,4 +120,35 @@ class JSSessionTests extends AsyncFreeSpec with Matchers {
       fields(1).dataType.asInstanceOf[String] shouldBe "time"
       fields(2).dataType.asInstanceOf[String] shouldBe "timestamp"
   }
+
+  // A timestamptz carries an explicit offset, so its JS Date must land on the exact instant the
+  // offset names — not be reinterpreted in the runtime's local zone. '...+05:00' is 05:30:00Z.
+  "toJS preserves the instant of a timestamptz (no timezone shift)" in withSession { session =>
+    for
+      _ <- session.execute("CREATE TABLE t (ts TIMESTAMP WITH TIME ZONE)").toFuture
+      _ <- session.execute("INSERT INTO t (ts) VALUES ('2024-01-15T10:30:00+05:00')").toFuture
+      result <- query(session, "SELECT ts FROM t")
+    yield
+      val row = result.rows.asInstanceOf[js.Array[js.Dynamic]](0)
+      val ts = row.ts.asInstanceOf[js.Date]
+      ts.getTime() shouldBe js.Date.UTC(2024, 0, 15, 5, 30, 0)
+  }
+
+  // The reported bug: CURRENT_TIMESTAMP came back as a zone-naive timestamp, so new Date(str) read
+  // the UTC wall clock as local time and shifted the instant by the local offset. As a timestamptz
+  // it must round-trip to a JS Date that matches the actual wall clock.
+  "CURRENT_TIMESTAMP round-trips to a JS Date matching the wall clock" in withSession { session =>
+    val before = js.Date.now()
+    for
+      result <- query(session, "SELECT CURRENT_TIMESTAMP AS ts")
+    yield
+      val after = js.Date.now()
+      val row = result.rows.asInstanceOf[js.Array[js.Dynamic]](0)
+      val ts = row.ts.asInstanceOf[js.Date]
+      ts.isInstanceOf[js.Date] shouldBe true
+      val t = ts.getTime()
+      withClue(s"CURRENT_TIMESTAMP=$t expected within 2ms of [$before, $after]: ") {
+        (t >= before - 2 && t <= after + 2) shouldBe true
+      }
+  }
 }
