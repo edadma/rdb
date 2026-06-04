@@ -155,6 +155,41 @@ lazy val client = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
   )
 
+// ── chisel: typed access layer (codecs + repositories) ─────────────
+
+lazy val chisel = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("chisel"))
+  .dependsOn(common, engine % Test)
+  .settings(
+    name    := "petradb-chisel",
+    version := "0.1.0",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies ++= Seq(
+      "io.github.edadma" %%% "dal"       % "0.0.10",
+      "org.scalatest"    %%% "scalatest" % "3.2.19" % Test,
+    ),
+    publishMavenStyle       := true,
+    publishTo               := sonatypePublishToBundle.value,
+    Test / publishArtifact  := false,
+    Compile / doc / sources := Seq.empty, // Scaladoc NPE in SignatureBuilder — upstream bug
+  )
+  .jsSettings(
+    jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(),
+    libraryDependencies += "io.github.cquiroz" %%% "scala-java-time-tzdb" % "2.6.0",
+    Test / scalaJSUseMainModuleInitializer := false,
+    Test / scalaJSUseTestModuleInitializer := true,
+    // The engine (a Test-only dependency) statically imports Node's `fs`, so the test link needs
+    // ES module support. The published artifact depends only on `common` and keeps the default
+    // module kind.
+    Test / scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule).withSourceMap(false) },
+  )
+  .nativeSettings(
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+  )
+  .jvmSettings(
+    libraryDependencies += "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided",
+  )
+
 // ── cli: SQL interactive shell ──────────────────────────────────────
 
 lazy val cli = crossProject(JSPlatform, NativePlatform)
@@ -270,6 +305,7 @@ lazy val root = project
     common.js, common.jvm, common.native,
     engine.js, engine.jvm, engine.native,
     client.js, client.jvm, client.native,
+    chisel.js, chisel.jvm, chisel.native,
     cli.js, cli.native,
     server.jvm, server.js,
     integration.jvm, integration.js,
