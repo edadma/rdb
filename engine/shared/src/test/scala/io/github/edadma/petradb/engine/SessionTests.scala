@@ -2,6 +2,9 @@ package io.github.edadma.petradb.engine
 
 import io.github.edadma.petradb.{Session as _, *}
 
+import java.time.LocalDate
+import scala.concurrent.ExecutionContext
+
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -117,5 +120,92 @@ class SessionTests extends AnyFreeSpec with Matchers:
       val ps = s1.prepare("SELECT * FROM t WHERE id = $1")
       s1.preparedStatements.contains(ps.name) shouldBe true
       s2.preparedStatements.contains(ps.name) shouldBe false
+    }
+  }
+
+  // The engine's `execute` completes synchronously (Future.successful), so results extract via
+  // `.value.get.get` without blocking — keeping these assertions cross-platform (JS/Native have no
+  // Await). Binding correctness across DML positions is also covered by ParameterizedQueryTests at
+  // the internal executeSQL level; here we drive the public trait method with Seq[Value] directly.
+  "Parameterized execute (Seq[Value]) via the Session trait" - {
+    given ExecutionContext = ExecutionContext.parasitic
+
+    def run(s: Session, sql: String, params: Value*): Seq[Result] =
+      s.execute(sql, params).value.get.get
+
+    def query(s: Session, sql: String, params: Value*): TableValue =
+      run(s, sql, params*).collect { case QueryResult(t) => t }.last
+
+    def fresh(): Session =
+      val s = new MemoryDB().connect()
+      run(s, "CREATE TABLE t (id INTEGER, name TEXT, active BOOLEAN)")
+      run(
+        s,
+        "INSERT INTO t (id, name, active) VALUES (1, 'alice', true), (2, 'bob', false), (3, 'charlie', true)",
+      )
+      s
+
+    "binds $1 in a SELECT WHERE clause" in {
+      val t = query(fresh(), "SELECT name FROM t WHERE id = $1", NumberValue(2))
+      t.data.map(_.data(0).string) shouldBe IndexedSeq("bob")
+    }
+
+    "binds params in INSERT VALUES" in {
+      val s = fresh()
+      run(s, "INSERT INTO t (id, name, active) VALUES ($1, $2, $3)", NumberValue(4), TextValue("dave"), BooleanValue(true))
+      query(s, "SELECT name FROM t WHERE id = $1", NumberValue(4)).data.map(_.data(0).string) shouldBe IndexedSeq("dave")
+    }
+
+    "binds params in UPDATE SET and WHERE" in {
+      val s = fresh()
+      run(s, "UPDATE t SET name = $1 WHERE id = $2", TextValue("alicia"), NumberValue(1))
+      query(s, "SELECT name FROM t WHERE id = $1", NumberValue(1)).data.map(_.data(0).string) shouldBe IndexedSeq("alicia")
+    }
+
+    "binds a param in DELETE WHERE" in {
+      val s = fresh()
+      run(s, "DELETE FROM t WHERE id = $1", NumberValue(2))
+      query(s, "SELECT id FROM t ORDER BY id").data.map(_.data(0).intValue) shouldBe IndexedSeq(1, 3)
+    }
+
+    "binds a param and returns rows via RETURNING" in {
+      val s   = fresh()
+      val ins = run(s, "INSERT INTO t (id, name, active) VALUES ($1, $2, $3) RETURNING name",
+        NumberValue(5), TextValue("eve"), BooleanValue(false)).last.asInstanceOf[InsertResult]
+      ins.obj("name") shouldBe TextValue("eve")
+    }
+
+    "binds params in INSERT ... ON CONFLICT DO UPDATE" in {
+      val s = new MemoryDB().connect()
+      run(s, "CREATE TABLE u (id INTEGER PRIMARY KEY, name TEXT)")
+      run(s, "INSERT INTO u (id, name) VALUES (1, 'alice')")
+      run(s, "INSERT INTO u (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = $2",
+        NumberValue(1), TextValue("alice2"))
+      query(s, "SELECT name FROM u WHERE id = 1").data(0).data(0) shouldBe TextValue("alice2")
+    }
+
+    "binds a NULL parameter" in {
+      val s = fresh()
+      run(s, "INSERT INTO t (id, name, active) VALUES ($1, $2, $3)", NumberValue(6), NullValue(), BooleanValue(true))
+      query(s, "SELECT name FROM t WHERE id = $1", NumberValue(6)).data(0).data(0).isNull shouldBe true
+    }
+
+    "preserves the exact type of a bound Value (no parser re-inference)" in {
+      val s = new MemoryDB().connect()
+      run(s, "CREATE TABLE d (id INTEGER, at DATE)")
+      run(s, "INSERT INTO d (id, at) VALUES ($1, $2)", NumberValue(1), DateValue(LocalDate.parse("2024-01-01")))
+      val t = query(s, "SELECT at FROM d WHERE at = $1", DateValue(LocalDate.parse("2024-01-01")))
+      t.data.length shouldBe 1
+      t.data(0).data(0) shouldBe DateValue(LocalDate.parse("2024-01-01"))
+    }
+
+    "reuses the same placeholder positionally ($1 twice)" in {
+      val t = query(fresh(), "SELECT name FROM t WHERE id = $1 OR id = $1", NumberValue(2))
+      t.data.map(_.data(0).string) shouldBe IndexedSeq("bob")
+    }
+
+    "throws when a placeholder index is out of range" in {
+      val s = fresh()
+      an[ExecutionException] should be thrownBy s.execute("SELECT name FROM t WHERE id = $2", Seq(NumberValue(1)))
     }
   }

@@ -67,6 +67,9 @@ class Session(val db: DB) extends io.github.edadma.petradb.Session:
   def execute(sql: String)(using ExecutionContext): Future[Seq[Result]] =
     Future.successful(executeSQL(sql)(using this))
 
+  def execute(sql: String, params: Seq[Value])(using ExecutionContext): Future[Seq[Result]] =
+    Future.successful(executeSQL(sql, params.toIndexedSeq)(using this))
+
   def close()(using ExecutionContext): Future[Unit] =
     Future.successful(db.close())
 

@@ -44,6 +44,17 @@ class Session(options: SessionOptions = SessionOptions()) extends io.github.edad
         Future.failed(new RuntimeException(res.bodyAsString))
     }
 
+  /** Bind parameters are not yet carried by the HTTP protocol; the server only accepts a raw SQL
+    * string. Supporting `$1`-style binds over HTTP requires extending the `/sql` endpoint to accept
+    * a parameter payload. Use the embedded engine `Session` for parameterized queries for now.
+    */
+  def execute(sql: String, params: Seq[Value])(using ec: ExecutionContext): Future[Seq[Result]] =
+    Future.failed(
+      new UnsupportedOperationException(
+        "parameterized execute is not supported over the HTTP client yet; use the embedded engine Session",
+      ),
+    )
+
   def connect()(using ec: ExecutionContext): Future[String] =
     fetch(s"$baseUrl/session", "POST", headers = baseHeaders).flatMap { res =>
       if res.ok then
