@@ -92,6 +92,7 @@ export default defineConfig({
 					label: 'Integrations',
 					translations: { zh: '集成', ja: 'インテグレーション', fr: 'Intégrations', es: 'Integraciones', pt: 'Integrações', ko: '통합' },
 					items: [
+						{ label: 'Chisel', slug: 'integrations/chisel' },
 						{ label: 'Drizzle ORM', slug: 'integrations/drizzle' },
 						{ label: 'GraphQL', slug: 'integrations/graphql' },
 						{ label: 'Knex.js', slug: 'integrations/knex' },
