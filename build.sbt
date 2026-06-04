@@ -162,7 +162,7 @@ lazy val chisel = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .dependsOn(common, engine % Test)
   .settings(
     name    := "petradb-chisel",
-    version := "0.1.0",
+    version := "1.5.0",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "io.github.edadma" %%% "dal"       % "0.0.10",

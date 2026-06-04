@@ -10,7 +10,7 @@ Chisel talks to the engine's `Session` directly via bound parameters, so it need
 ## Install
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "0.1.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.0"
 ```
 
 Chisel depends on the engine for a session:
