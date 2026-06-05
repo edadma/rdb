@@ -10,13 +10,13 @@ Chisel conversa diretamente com a `Session` do engine via parametros vinculados,
 ## Instalacao
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.1"
 ```
 
 Chisel depende do engine para uma sessao:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
 ```
 
 ## Configuracao

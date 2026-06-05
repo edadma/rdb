@@ -10,13 +10,13 @@ Chisel 通过绑定参数直接与引擎的 `Session` 通信，因此不需要 J
 ## 安装
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.1"
 ```
 
 Chisel 依赖引擎来获取会话：
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
 ```
 
 ## 设置

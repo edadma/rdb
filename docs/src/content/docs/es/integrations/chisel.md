@@ -10,13 +10,13 @@ Chisel se comunica directamente con la `Session` del motor mediante parametros v
 ## Instalacion
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.1"
 ```
 
 Chisel depende del motor para obtener una sesion:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
 ```
 
 ## Configuracion

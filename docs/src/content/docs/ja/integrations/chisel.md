@@ -10,13 +10,13 @@ Chiselはバインドパラメーターを介してエンジンの`Session`と�
 ## インストール
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.0"
+libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.1"
 ```
 
 Chiselはセッションのためにエンジンに依存します。
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.4"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
 ```
 
 ## セットアップ
