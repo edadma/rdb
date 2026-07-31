@@ -35,7 +35,7 @@ console.log(rows); // [{ id: 1, name: 'Alice', email: 'alice@example.com' }]
 ### Scala
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.6"
 ```
 
 ```scala

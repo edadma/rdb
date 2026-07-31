@@ -16,7 +16,7 @@ libraryDependencies += "io.github.edadma" %%% "petradb-chisel" % "1.5.1"
 Chiselはセッションのためにエンジンに依存します。
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.5"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.6"
 ```
 
 ## セットアップ

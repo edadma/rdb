@@ -8,7 +8,7 @@ description: ScalaプロジェクトにPetraDBを追加して、最初のSQLク�
 `build.sbt`に追加します。
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.2"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.6"
 ```
 
 `%%%`演算子がプラットフォームに応じた正しいアーティファクト（JVM、Scala.js、Scala Native）を選択します。

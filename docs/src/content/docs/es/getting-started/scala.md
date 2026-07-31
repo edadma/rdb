@@ -8,7 +8,7 @@ description: Agrega PetraDB a tu proyecto Scala y ejecuta tus primeras consultas
 Agrega a tu `build.sbt`:
 
 ```scala
-libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.2"
+libraryDependencies += "io.github.edadma" %%% "petradb-engine" % "1.5.6"
 ```
 
 El operador `%%%` selecciona el artefacto correcto para tu plataforma — JVM, Scala.js o Scala Native.
