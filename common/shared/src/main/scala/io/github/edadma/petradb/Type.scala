@@ -160,9 +160,10 @@ case class CharType(length: Int) extends Type("char"):
         else TextValue(s.padTo(length, ' '))
 
 case object UUIDType extends Type("uuid"):
-  private val UUIDv4: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$".r
+  // format only, like Postgres: version and variant bits are not checked
+  private val UUID: Regex = "(?i)^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$".r
 
-  def valid(id: String): Boolean = UUIDv4 matches id
+  def valid(id: String): Boolean = UUID matches id
 
   override def convert(v: Value): Value =
     v match
@@ -170,8 +171,8 @@ case object UUIDType extends Type("uuid"):
       case id: UUIDValue => id
       case _             =>
         val textVal = v.toText
-        if !valid(textVal.s) then throw TypeException(v.pos, "invalid version 4 UUID")
-        UUIDValue(textVal.s)
+        if !valid(textVal.s) then throw TypeException(v.pos, s"invalid input syntax for type uuid: \"${textVal.s}\"")
+        UUIDValue(textVal.s.toLowerCase)
 
   override def init: Value = UUIDValue.generate
 

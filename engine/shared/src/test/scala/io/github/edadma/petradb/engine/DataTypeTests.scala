@@ -300,6 +300,86 @@ class DataTypeTests extends AnyFreeSpec with Matchers with Testing {
       table.data.length shouldBe 1
       table.data(0).data(0).isNull shouldBe false
     }
+
+    "accepts the nil UUID" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id UUID);
+          |INSERT INTO t (id) VALUES ('00000000-0000-0000-0000-000000000000');
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe UUIDValue("00000000-0000-0000-0000-000000000000")
+    }
+
+    "accepts a version 1 UUID" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id UUID);
+          |INSERT INTO t (id) VALUES ('c232ab00-9414-11ec-b3c8-9f6bdeced846');
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe UUIDValue("c232ab00-9414-11ec-b3c8-9f6bdeced846")
+    }
+
+    "accepts a version 7 UUID" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id UUID);
+          |INSERT INTO t (id) VALUES ('017f22e2-79b0-7cc3-98c4-dc0c0c07398f');
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe UUIDValue("017f22e2-79b0-7cc3-98c4-dc0c0c07398f")
+    }
+
+    "accepts an arbitrary 128-bit value in UUID format" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id UUID);
+          |INSERT INTO t (id) VALUES ('11111111-1111-1111-1111-111111111111');
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe UUIDValue("11111111-1111-1111-1111-111111111111")
+    }
+
+    "normalizes uppercase input to lowercase" in {
+      val table = query(
+        """
+          |CREATE TABLE t (id UUID);
+          |INSERT INTO t (id) VALUES ('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11');
+          |SELECT id FROM t;
+          |""".trim.stripMargin
+      )
+
+      table.data(0).data(0) shouldBe UUIDValue("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")
+    }
+
+    "rejects malformed UUID input" in {
+      an[Exception] should be thrownBy {
+        query(
+          """
+            |CREATE TABLE t (id UUID);
+            |INSERT INTO t (id) VALUES ('not-a-uuid');
+            |""".trim.stripMargin
+        )
+      }
+
+      an[Exception] should be thrownBy {
+        query(
+          """
+            |CREATE TABLE t (id UUID);
+            |INSERT INTO t (id) VALUES ('11111111-1111-1111-1111-1111111111');
+            |""".trim.stripMargin
+        )
+      }
+    }
   }
 
   "JSON" - {
